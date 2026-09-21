@@ -16,6 +16,8 @@ function onOpen() {
     .addSeparator()
     .addItem('Lulus Observation dipilih', 'approveSelectedTelegramObservationTest')
     .addItem('Tolak Observation dipilih', 'rejectSelectedTelegramObservationTest')
+    .addItem('Lulus Measurement ikut rujukan', 'approveTelegramMeasurementByReference')
+    .addItem('Tolak Measurement ikut rujukan', 'rejectTelegramMeasurementByReference')
     .addToUi();
 }
 
