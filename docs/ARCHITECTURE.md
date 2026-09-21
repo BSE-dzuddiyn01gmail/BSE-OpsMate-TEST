@@ -13,6 +13,8 @@ semasa dibenarkan menulis rekod production.
 ```text
 Telegram private chat TEST
   -> TELEGRAM_TEST_QUEUE
+  -> Site A jelas: OUT_OF_SCOPE_TEST, acknowledgement, dan berhenti
+  -> Kolam <nombor>: ASSET_OBSERVATION_UNSUPPORTED_TEST, acknowledgement, dan berhenti
   -> Gemini unified parser + guard
   -> WAITING_INFO atau NEEDS_HUMAN_REVIEW
   -> Google Tasks TEST review task
@@ -22,7 +24,12 @@ Telegram private chat TEST
 ```
 
 1. `receiveBseTelegramTest()` menerima mesej daripada chat/user TEST yang
-   dibenarkan dan menyimpannya dalam `TELEGRAM_TEST_QUEUE`.
+   dibenarkan dan menyimpannya dalam `TELEGRAM_TEST_QUEUE`. Mesej yang menyebut
+   `Site A` dengan jelas ditandakan `OUT_OF_SCOPE_TEST`, menerima acknowledgement
+   luar skop, dan tidak dihantar ke Gemini atau worker. Jika bukan Site A tetapi
+   menyebut `Kolam <nombor>` dengan jelas, mesej ditandakan
+   `ASSET_OBSERVATION_UNSUPPORTED_TEST`, menerima acknowledgement pemerhatian
+   aset belum disokong, dan juga berhenti sebelum Gemini atau worker.
 2. `processBseTelegramTestQueue()` memproses satu laporan queue pada satu masa.
    Ia menjalankan `bseUnifiedProcess_()` dan `bseUnifiedGuard_()`, kemudian
    menyimpan `candidate_json`.
@@ -55,6 +62,8 @@ reminder seterusnya, task selesai hanya direkodkan sebagai `COMPLETED` dalam
 | `RESULT_REPLY_PENDING` | Hasil telah disimpan tetapi balasan Telegram belum dihantar. |
 | `WAITING_INFO` | Medan wajib belum lengkap; bot meminta penjelasan. |
 | `NEEDS_HUMAN_REVIEW` | Hasil tersedia untuk semakan manusia dan Google Task. |
+| `OUT_OF_SCOPE_TEST` | Mesej jelas Site A; direkod untuk audit tetapi berhenti sebelum Gemini, worker, dan Google Tasks. |
+| `ASSET_OBSERVATION_UNSUPPORTED_TEST` | Mesej jelas Kolam <nombor> di luar workflow aset Fasa 1; direkod untuk audit tetapi berhenti sebelum Gemini, worker, dan Google Tasks. |
 | `MEASUREMENT_APPROVED_TEST` | Calon Measurement telah diluluskan dan ditulis ke TEST sahaja. |
 | `MEASUREMENT_REJECTED_TEST` | Calon Measurement ditolak; audit sahaja disimpan. |
 | `OBSERVATION_APPROVED` / `OBSERVATION_REJECTED` | Keputusan workflow Observation TEST sedia ada. |
@@ -133,3 +142,8 @@ Setiap target memerlukan validator kontrak sendiri, TEST log sendiri, audit
 keputusan yang idempotent, dan status queue yang tidak menyiratkan kelulusan
 target lain. Tiada generalisasi boleh menambah production writer tanpa reka
 bentuk, ujian, dan kelulusan eksplisit yang berasingan.
+
+Pemerhatian aset seperti Kolam 1 bukan `plot_id` dan bukan sebahagian daripada
+workflow Fasa 1. Ia menerima status unsupported sebelum Gemini. Fasa 2
+memerlukan target, schema, registry site/aset, validator, audit, dan TEST log
+yang berasingan.

@@ -27,11 +27,13 @@ function receiveBseTelegramTest() {
         const text=typeof m.text==='string'?m.text:'';
         const command=text.startsWith('/');
         const supported=Boolean(text.trim())&&!command&&text.length<=12000;
+        const outOfScope=bseTelegramTestSiteAOutOfScope_(text);
+        const assetUnsupported=!outOfScope&&bseTelegramTestAssetObservationUnsupported_(text);
         const replyId=m.reply_to_message?String(m.reply_to_message.message_id):'';
         const parent=replyId?saved.find(r=>String(r[15])===replyId&&String(r[1])===chat&&String(r[2])===user&&r[6]==='WAITING_INFO'):null;
         const used=parent&&saved.some(r=>String(r[14])===String(parent[0]));
         const linked=parent&&!used&&supported;
-        const status=command?'COMMAND':replyId&&!linked?'UNLINKED_REPLY':supported?'QUEUED':'UNSUPPORTED';
+        const status=outOfScope?'OUT_OF_SCOPE_TEST':assetUnsupported?'ASSET_OBSERVATION_UNSUPPORTED_TEST':command?'COMMAND':replyId&&!linked?'UNLINKED_REPLY':supported?'QUEUED':'UNSUPPORTED';
         const values=[String(update.update_id),chat,user,String(m.message_id),text,new Date().toISOString(),status,'PENDING','','',0,'','',replyId,linked?String(parent[0]):'',''];
         const row=queue.getLastRow()+1;
         if(row>queue.getMaxRows())queue.insertRowsAfter(queue.getMaxRows(),row-queue.getMaxRows());
@@ -47,9 +49,11 @@ function receiveBseTelegramTest() {
     let sent=0;
     for(let i=0;i<rows.length&&sent<10;i++) {
       const r=rows[i];if(r[7]!=='PENDING'||String(r[1])!==chat||String(r[2])!==user)continue;
-      const text=r[6]==='UNLINKED_REPLY'?'Jawapan belum dipadankan. Sila gunakan Reply pada soalan terbaru bot yang belum dijawab.':r[6]==='COMMAND'?'Bot BSE TEST sedia menerima laporan teks. Tiada rekod production akan ditulis.':r[6]==='UNSUPPORTED'?'Mod TEST ini menerima laporan teks sahaja. Sila hantar semula sebagai teks.':'Laporan diterima dan sudah disimpan untuk diproses. Rujukan: BSE-TG-'+r[0]+'. (Mod TEST)';
+      const text=r[6]==='OUT_OF_SCOPE_TEST'?'Laporan ini luar skop BSE Site B dan tidak diproses.':r[6]==='ASSET_OBSERVATION_UNSUPPORTED_TEST'?'Pemerhatian aset belum disokong dalam TEST.':r[6]==='UNLINKED_REPLY'?'Jawapan belum dipadankan. Sila gunakan Reply pada soalan terbaru bot yang belum dijawab.':r[6]==='COMMAND'?'Bot BSE TEST sedia menerima laporan teks. Tiada rekod production akan ditulis.':r[6]==='UNSUPPORTED'?'Mod TEST ini menerima laporan teks sahaja. Sila hantar semula sebagai teks.':'Laporan diterima dan sudah disimpan untuk diproses. Rujukan: BSE-TG-'+r[0]+'. (Mod TEST)';
       try {
-        const reply=bseTelegramApi_('sendMessage',{chat_id:chat,text:text});
+        const payload={chat_id:chat,text:text};
+        if(['OUT_OF_SCOPE_TEST','ASSET_OBSERVATION_UNSUPPORTED_TEST'].includes(r[6])&&/^\d+$/.test(String(r[3]||'')))payload.reply_parameters={message_id:Number(r[3]),allow_sending_without_reply:true};
+        const reply=bseTelegramApi_('sendMessage',payload);
         queue.getRange(i+2,8,1,2).setValues([['SENT',String(reply.message_id)]]);sent++;
       } catch(_) {console.log('ACK_PENDING: mesej tersimpan; balasan akan dicuba pada run berikutnya.');break;}
     }
@@ -72,3 +76,5 @@ function bseTelegramQueue_(book) {
   return sheet;
 }
 function bseTelegramCell_(v){return typeof v==='string'&&/^\s*[=+@-]/.test(v)?"'"+v:v;}
+function bseTelegramTestSiteAOutOfScope_(text){return /\bsite\s+a\b/i.test(String(text||''));}
+function bseTelegramTestAssetObservationUnsupported_(text){return /\bkolam\s+\d+\b/i.test(String(text||''));}
