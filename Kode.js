@@ -18,6 +18,8 @@ function onOpen() {
     .addItem('Tolak Observation dipilih', 'rejectSelectedTelegramObservationTest')
     .addItem('Lulus Measurement ikut rujukan', 'approveTelegramMeasurementByReference')
     .addItem('Tolak Measurement ikut rujukan', 'rejectTelegramMeasurementByReference')
+    .addItem('Lulus Crop Batch ikut rujukan', 'approveTelegramCropBatchByReference')
+    .addItem('Tolak Crop Batch ikut rujukan', 'rejectTelegramCropBatchByReference')
     .addToUi();
 }
 

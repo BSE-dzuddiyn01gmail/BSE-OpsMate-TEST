@@ -66,6 +66,8 @@ reminder seterusnya, task selesai hanya direkodkan sebagai `COMPLETED` dalam
 | `ASSET_OBSERVATION_UNSUPPORTED_TEST` | Mesej jelas Kolam <nombor> di luar workflow aset Fasa 1; direkod untuk audit tetapi berhenti sebelum Gemini, worker, dan Google Tasks. |
 | `MEASUREMENT_APPROVED_TEST` | Calon Measurement telah diluluskan dan ditulis ke TEST sahaja. |
 | `MEASUREMENT_REJECTED_TEST` | Calon Measurement ditolak; audit sahaja disimpan. |
+| `CROP_BATCH_APPROVED_TEST` | Proposal batch semaian diluluskan dan hanya rekod TEST ditulis. |
+| `CROP_BATCH_REJECTED_TEST` | Proposal batch semaian ditolak; audit TEST sahaja disimpan. |
 | `OBSERVATION_APPROVED` / `OBSERVATION_REJECTED` | Keputusan workflow Observation TEST sedia ada. |
 | `NEEDS_ATTENTION` | Had retry worker telah dicapai. |
 
@@ -110,6 +112,8 @@ Helaian operasi TEST utama ialah:
   payload audit.
 - `TEST_OBSERVATION_LOG` dan `TEST_OBSERVATION_REVIEW` - workflow Observation
   TEST sedia ada.
+- `TEST_CROP_BATCH`, `TEST_PLANTING_EVENT`, `TEST_PLOT_ALLOCATION`, dan
+  `TEST_CROP_BATCH_REVIEW` - rekod dan audit human review Crop Batch Fasa 2B.
 
 ## Workflow Git dan clasp
 
@@ -165,3 +169,25 @@ guard mengeluarkan `NEED_INFO`. Fasa 2A belum mempunyai TEST writer, dedup,
 Google Task khusus, atau human-review batch; ia tidak menambah sebarang
 penulisan production dan tidak mengubah maksud Google Task sebagai peringatan
 sahaja.
+
+### Fasa 2B: human review Crop Batch TEST
+
+Menu `Lulus Crop Batch ikut rujukan` dan `Tolak Crop Batch ikut rujukan`
+menerima hanya `BSE-TG-<update_id>` yang berstatus `NEEDS_HUMAN_REVIEW`.
+Review memerlukan proposal atomik yang sah: tepat satu `Crop_Batch_Log`
+`BATCH_START`, satu `Planting_Event_Log` `SEED_SOWING`, dan allocation
+`PLANNED` yang unik serta diisih secara kanonik. Target lain, plot tidak
+kanonik, atau output Gemini yang tidak lengkap ditolak.
+
+Identity dedup menggunakan rujukan Telegram asal dan target
+`Crop_Batch_Log`; hash stabil dibina daripada batch, event, dan allocation yang
+telah dikanonkan. Di bawah `ScriptLock`, APPROVED mencipta satu batch ID
+`BSE-SB-CB-YYYYMMDD-###`, satu row `TEST_CROP_BATCH`, satu
+`TEST_PLANTING_EVENT`, dan semua row `TEST_PLOT_ALLOCATION`, kemudian audit
+`TEST_CROP_BATCH_REVIEW`, sebelum status queue menjadi
+`CROP_BATCH_APPROVED_TEST`. REJECTED memerlukan alasan, hanya menulis audit,
+kemudian menjadi `CROP_BATCH_REJECTED_TEST`.
+
+Fasa ini kekal TEST-only: tiada production writer atau panggilan Google Tasks
+daripada reviewer/writer. Google Task, jika wujud daripada aliran queue,
+kekal peringatan dan bukan kelulusan automatik.
