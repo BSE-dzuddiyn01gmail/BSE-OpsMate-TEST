@@ -31,6 +31,13 @@ const BSE_UNIFIED_CASES=[
   {"id":"T10","input":"16/9/2026 M1P2 daun timun banyak kuning dan ada pokok layu."},
   {"id":"T11","input":"16/9/2026 M1P4 saya rasa mungkin akar kena penyakit."}
 ];
+// Sanitized, local-only regression fixture. This runner never calls Gemini or a sheet.
+const BSE_SEED_SOWING_PARSER_FIXTURES=[
+  {id:'RD-02',input:'KERJA SEMAIAN BENIH\nJenis Tanaman: Timun Lokal (CCB)\nModul: M1 P1 P2\nTarikh Semai: 10/09/2026',ok:true,plots:['M1P1','M1P2']},
+  {id:'ORDER',input:'Modul: M2 P3 P1',ok:true,plots:['M2P1','M2P3']},
+  {id:'SINGLE_COMPACT',input:'Modul: M1P1',ok:true,plots:['M1P1']},
+  {id:'AMBIGUOUS',input:'Modul: M1P1 P2',ok:false,plots:[]}
+];
 function runBseUnifiedTests() {
   boundTestBook_();
   const started=Date.now(),results=[];
@@ -52,6 +59,17 @@ function runUnifiedT08(){return bseUnifiedRun_(BSE_UNIFIED_CASES[7]);}
 function runUnifiedT09(){return bseUnifiedRun_(BSE_UNIFIED_CASES[8]);}
 function runUnifiedT10(){return bseUnifiedRun_(BSE_UNIFIED_CASES[9]);}
 function runUnifiedT11(){return bseUnifiedRun_(BSE_UNIFIED_CASES[10]);}
+function runBseSeedSowingParserRegressionTests(){
+  const results=BSE_SEED_SOWING_PARSER_FIXTURES.map(test=>{
+    const actual=bseSeedSowingModulePlots_(test.input);
+    const pass=actual.ok===test.ok&&JSON.stringify(actual.plots)===JSON.stringify(test.plots)&&!actual.plots.includes('M1 P1 P2');
+    return {id:test.id,pass:pass,actual:actual};
+  });
+  const failures=results.filter(r=>!r.pass);
+  console.log('SEED_SOWING_PARSER_REGRESSION: '+JSON.stringify(results));
+  if(failures.length)throw new Error('Seed sowing parser regression gagal: '+failures.map(r=>r.id).join(', '));
+  return results;
+}
 function bseUnifiedRun_(test) {
   boundTestBook_();
   try {
@@ -79,6 +97,8 @@ function bseUnifiedRules_(){
     'project_id=BSE_SB, system_year=2026, verification_status=PROVISIONAL. Preserve complete plot identifiers such as M followed by digits and P followed by digits. Normalize explicit day/month/year dates to YYYY-MM-DD. Never invent dates.',
     'An actual clock time becomes HH:mm. Daypart alone is sufficient context: event_time empty, preserve daypart in original_note. Never create time_session.',
     'Each candidate has target, validation, missing (bare required field names), and fields. Use only fields belonging to its log. Common fields: project_id, system_year, event_date, record_type, verification_status, original_note.',
+    'An explicit KERJA SEMAIAN BENIH is a Crop Batch start proposal, never Observation_Log or Operation_Log. For one such report return exactly one Crop_Batch_Log with batch_action BATCH_START, exactly one Planting_Event_Log with event_type SEED_SOWING, and one Plot_Allocation_Log for every explicit destination plot. This Fasa 2A proposal has no batch ID, no writer, and no automatic approval. Crop_Batch_Log and Planting_Event_Log require crop, variety, and event_date. Every Plot_Allocation_Log requires plot_id and allocation_status PLANNED.',
+    'For KERJA SEMAIAN BENIH, the only permitted destination plots are the exact set declared on one canonical Modul line: Modul: M<module> P<plot> P<plot>... or the approved single compact form Modul: M<module>P<plot>. Return canonical identifiers M<module>P<plot>, one allocation each, sorted by module then plot. Never derive a plot from another word, never combine multiple plots into one string, and never create a plot outside that explicit Modul set. If crop, variety, tarikh semai, or the canonical Modul format is absent or unclear, return NEED_INFO rather than guessing.',
     'First distinguish future proposals from completed actions. If explicitly proposed and not performed, create only Decision_Approval_Log with approval_status PROPOSED, record_type DECISION_APPROVAL. Do not create Operation_Log, Input_Usage_Log, or execution tasks for proposals. A proposed dose is not actual consumption. Preserve the plot, chemical, dose per tank, and planned daypart in proposal_text. Unknown proposer, approver and approval_date remain empty. A complete proposal can PASS without being approved.',
     'Completed chemical spraying routes to Operation_Log, record_type OPERATION, operation_type CHEMICAL_APPLICATION, plus plot_id, event_time, remarks. Required event_date and plot_id. It may PASS as PROVISIONAL even when usage or Manager approval is unknown.',
     'For completed operations only, also create an Input_Usage_Log candidate, record_type INPUT_USAGE, plus plot_id,item_name,quantity,unit. Required event_date,item_name,quantity,unit. Quantity means actual total consumption only. A dose per tank does not establish total consumption or number of tanks. Do not assume one tank was actually used. If total consumption is unknown, quantity=null in this transport JSON, unit empty, missing quantity and unit, validation NEED_INFO. Never store null as a literal word in a sheet.',
@@ -154,7 +174,10 @@ function bseUnifiedSchema_() {
     branch('Operation_Log','OPERATION',{event_time:{type:'string',pattern:'^(?:$|(?:[01][0-9]|2[0-3]):[0-5][0-9])$',description:'HH:mm only when an explicit clock time is supplied. Otherwise empty string; daypart stays in original_note.'},plot_id:str(),operation_type:str(),remarks:str()}),
     branch('Input_Usage_Log','INPUT_USAGE',{plot_id:str(),item_name:str(),quantity:{type:['number','null']},unit:str()}),
     branch('Decision_Approval_Log','DECISION_APPROVAL',{decision_subject:str(),proposal_text:str(),
-      approval_status:{type:'string',enum:['PENDING','PROPOSED']},proposed_by:str(),approved_by:str(),approval_date:str()})
+      approval_status:{type:'string',enum:['PENDING','PROPOSED']},proposed_by:str(),approved_by:str(),approval_date:str()}),
+    branch('Crop_Batch_Log','CROP_BATCH',{batch_action:{type:'string',enum:['BATCH_START']},crop:str(),variety:str(),batch_status:{type:'string',enum:['PROPOSED']}}),
+    branch('Planting_Event_Log','PLANTING_EVENT',{event_type:{type:'string',enum:['SEED_SOWING']},crop:str(),variety:str(),event_status:{type:'string',enum:['PROPOSED']}}),
+    branch('Plot_Allocation_Log','PLOT_ALLOCATION',{plot_id:str(),allocation_status:{type:'string',enum:['PLANNED']}})
   ]}}});
 }
 
@@ -394,10 +417,76 @@ function bseObservationHypothesisOnly_(fields) {
   return uncertain&&!physical&&causeOnly;
 }
 
+// This parser deliberately accepts only the narrowly documented Modul grammar.
+// It is the authority for seed-sowing destination plots; Gemini cannot add to it.
+function bseSeedSowingModulePlots_(input) {
+  const text=String(input||'');
+  const match=text.match(/(?:^|\n)\s*Modul\s*:\s*([^\r\n]*)/i);
+  if(!match)return {ok:false,plots:[],reason:'MODUL_LINE_MISSING'};
+  const value=match[1].trim();
+  let module,plotNumbers=[];
+  const compact=value.match(/^M([1-9]\d*)P([1-9]\d*)$/i);
+  if(compact){
+    module=compact[1];plotNumbers=[compact[2]];
+  }else{
+    const tokens=value.split(/\s+/);
+    if(tokens.length<2||!/^M[1-9]\d*$/i.test(tokens[0])||tokens.slice(1).some(token=>!/^P[1-9]\d*$/i.test(token)))return {ok:false,plots:[],reason:'MODUL_FORMAT_NONCANONICAL'};
+    module=tokens[0].slice(1);plotNumbers=tokens.slice(1).map(token=>token.slice(1));
+  }
+  if(new Set(plotNumbers).size!==plotNumbers.length)return {ok:false,plots:[],reason:'MODUL_PLOT_DUPLICATE'};
+  const plots=plotNumbers.map(plot=>'M'+module+'P'+plot).sort((a,b)=>{
+    const aa=a.match(/^M(\d+)P(\d+)$/),bb=b.match(/^M(\d+)P(\d+)$/);
+    return Number(aa[1])-Number(bb[1])||Number(aa[2])-Number(bb[2]);
+  });
+  return {ok:true,plots:plots,reason:''};
+}
+
+function bseSeedSowingOriginalNote_(input) {
+  const text=String(input||'');
+  const contextStart=text.indexOf('{');
+  if(contextStart>=0&&/^Process one report and its linked clarification answers/i.test(text)){
+    try{
+      const context=JSON.parse(text.slice(contextStart));
+      if(context&&typeof context.original_note==='string')return context.original_note;
+    }catch(_){}
+  }
+  return text;
+}
+
+function bseSeedSowingNeedsInfo_(r) {
+  r.validation='NEED_INFO';
+  r.candidates.forEach(c=>{
+    if(!c||typeof c!=='object')return;
+    c.validation='NEED_INFO';
+    if(Array.isArray(c.missing))c.missing=Array.from(new Set(c.missing.concat(['plot_id'])));
+  });
+}
+
+function bseUnifiedGuardSeedSowing_(r,sourceNote) {
+  const parsed=bseSeedSowingModulePlots_(sourceNote);
+  const candidates=r.candidates;
+  const batches=candidates.filter(c=>c&&c.target==='Crop_Batch_Log');
+  const events=candidates.filter(c=>c&&c.target==='Planting_Event_Log');
+  const allocations=candidates.filter(c=>c&&c.target==='Plot_Allocation_Log');
+  const allowed=new Set(['Crop_Batch_Log','Planting_Event_Log','Plot_Allocation_Log']);
+  const batch=batches[0]&&batches[0].fields,event=events[0]&&events[0].fields;
+  const hasText=(fields,key)=>fields&&typeof fields[key]==='string'&&fields[key].trim();
+  const exactPlots=parsed.ok&&batch&&allocations.length===parsed.plots.length&&allocations.every(c=>c&&c.fields&&c.fields.allocation_status==='PLANNED'&&c.fields.event_date===batch.event_date&&parsed.plots.includes(c.fields.plot_id))&&new Set(allocations.map(c=>c.fields.plot_id)).size===parsed.plots.length;
+  const valid=parsed.ok&&candidates.length===2+parsed.plots.length&&candidates.every(c=>c&&allowed.has(c.target))&&batches.length===1&&events.length===1&&
+    batch&&batch.batch_action==='BATCH_START'&&batch.batch_status==='PROPOSED'&&hasText(batch,'event_date')&&hasText(batch,'crop')&&hasText(batch,'variety')&&
+    event&&event.event_type==='SEED_SOWING'&&event.event_status==='PROPOSED'&&hasText(event,'event_date')&&hasText(event,'crop')&&hasText(event,'variety')&&
+    batch.crop===event.crop&&batch.variety===event.variety&&batch.event_date===event.event_date&&exactPlots&&candidates.every(c=>c.validation==='PASS'&&Array.isArray(c.missing)&&!c.missing.length);
+  if(!valid){bseSeedSowingNeedsInfo_(r);return;}
+  // The ordinary guard already enforces required fields and out-of-year rejection.
+  if(candidates.some(c=>c.validation==='REJECTED')){r.validation='REJECTED';return;}
+  candidates.forEach(c=>{c.missing=[];c.validation='PASS';});
+  r.validation='PASS';
+}
+
 function bseUnifiedGuard_(raw) {
   const r=JSON.parse(JSON.stringify(raw));
   if(!r || !Array.isArray(r.candidates)) return r;
-  const required={Measurement_Log:['event_date','plot_id','measurement_type','value'],Observation_Log:['event_date','plot_id','observation_facts'],Operation_Log:['event_date','plot_id'],Input_Usage_Log:['event_date','item_name','quantity','unit'],Decision_Approval_Log:['event_date','decision_subject','approval_status']};
+  const required={Measurement_Log:['event_date','plot_id','measurement_type','value'],Observation_Log:['event_date','plot_id','observation_facts'],Operation_Log:['event_date','plot_id'],Input_Usage_Log:['event_date','item_name','quantity','unit'],Decision_Approval_Log:['event_date','decision_subject','approval_status'],Crop_Batch_Log:['event_date','batch_action','crop','variety','batch_status'],Planting_Event_Log:['event_date','event_type','crop','variety','event_status'],Plot_Allocation_Log:['event_date','plot_id','allocation_status']};
   const observationHypothesisOnly=c=>c&&c.target==='Observation_Log'&&bseObservationHypothesisOnly_(c.fields);
   for(const c of r.candidates) {
     if(!c||!c.fields||typeof c.fields!=='object'||Array.isArray(c.fields)||!Object.prototype.hasOwnProperty.call(required,c.target)) continue;
@@ -420,5 +509,7 @@ function bseUnifiedGuard_(raw) {
   if(r.candidates.some(c=>c&&c.validation==='REJECTED'))r.validation='REJECTED';
   else if(r.candidates.some(c=>c&&c.validation==='NEED_INFO'))r.validation='NEED_INFO';
   else if(r.candidates.length&&r.candidates.every(c=>c&&c.validation==='PASS'))r.validation='PASS';
+  const sourceNote=bseSeedSowingOriginalNote_((r.candidates[0]&&r.candidates[0].fields||{}).original_note);
+  if(/\bkerja\s+semaian\s+benih\b/i.test(sourceNote))bseUnifiedGuardSeedSowing_(r,sourceNote);
   return r;
 }

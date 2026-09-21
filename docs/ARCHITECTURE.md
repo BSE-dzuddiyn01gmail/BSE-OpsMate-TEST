@@ -147,3 +147,21 @@ Pemerhatian aset seperti Kolam 1 bukan `plot_id` dan bukan sebahagian daripada
 workflow Fasa 1. Ia menerima status unsupported sebelum Gemini. Fasa 2
 memerlukan target, schema, registry site/aset, validator, audit, dan TEST log
 yang berasingan.
+
+### Fasa 2A: proposal Crop Batch sahaja
+
+Fasa 2A menambah kontrak Gemini dan guard TEST-only bagi laporan jelas
+`KERJA SEMAIAN BENIH`. Ia menghasilkan satu proposal atomik yang mengandungi
+tepat satu calon `Crop_Batch_Log` (`BATCH_START`), satu
+`Planting_Event_Log` (`SEED_SOWING`), dan satu atau lebih
+`Plot_Allocation_Log`. Baris `Modul:` yang kanonik ialah satu-satunya sumber
+plot: `Modul: M1 P1 P2` menjadi `M1P1` dan `M1P2`; Gemini tidak boleh mencipta
+atau menggabungkan plot di luar set itu.
+
+Allocation daripada semaian sentiasa `PLANNED`, bukan `ACTIVE`. `ACTIVE` hanya
+boleh dipertimbangkan bagi event pindah/penanaman sebenar dalam Fasa 2C. Jika
+format Modul, crop, variety, tarikh semai, atau set calon atomik tidak sah,
+guard mengeluarkan `NEED_INFO`. Fasa 2A belum mempunyai TEST writer, dedup,
+Google Task khusus, atau human-review batch; ia tidak menambah sebarang
+penulisan production dan tidak mengubah maksud Google Task sebagai peringatan
+sahaja.
