@@ -1,1 +1,4 @@
 .clasp.json
+fixtures/private/
+fixtures/*real*.csv
+!fixtures/real_data_sanitized_template.csv
