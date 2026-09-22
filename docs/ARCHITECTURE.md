@@ -114,6 +114,8 @@ berdasarkan penerima, di samping dedup rujukan harian TEST semasa.
 | `CROP_BATCH_REJECTED_TEST` | Proposal batch semaian ditolak; audit TEST sahaja disimpan. |
 | `TRANSPLANT_APPROVED_TEST` | Proposal pindah anak pokok diluluskan dan hanya event/status TEST ditulis. |
 | `TRANSPLANT_REJECTED_TEST` | Proposal pindah anak pokok ditolak; audit TEST sahaja disimpan. |
+| `PLANT_CENSUS_APPROVED_TEST` | Banci pokok bagi allocation efektif ACTIVE diluluskan dan ditulis ke TEST sahaja. |
+| `PLANT_CENSUS_REJECTED_TEST` | Banci pokok ditolak; audit TEST sahaja disimpan. |
 | `OBSERVATION_APPROVED` / `OBSERVATION_REJECTED` | Keputusan workflow Observation TEST sedia ada. |
 | `NEEDS_ATTENTION` | Had retry worker telah dicapai. |
 
@@ -166,6 +168,9 @@ Helaian operasi TEST utama ialah:
 - `TEST_TRANSPLANT_EVENT`, `TEST_ALLOCATION_STATUS_EVENT`, dan
   `TEST_TRANSPLANT_REVIEW` - event, ledger perubahan allocation, dan audit
   human review Transplant Fasa 2C-1.
+- `TEST_PLANT_CENSUS` dan `TEST_PLANT_CENSUS_REVIEW` - rekod dan audit human
+  review Banci Pokok Fasa 2C-2A; ini tidak mengubah baseline allocation atau
+  ledger transplant.
 
 ## Workflow Git dan clasp
 
@@ -270,3 +275,28 @@ hanya menulis audit. Identity dedup ialah rujukan Telegram asal +
 `Transplant_Event_Log`; hash payload kanonik bersama batch ID menolak konflik
 dan menjadikan retry idempotent. Tiada reviewer/writer Fasa 2C-1 memanggil
 Google Tasks atau menulis production.
+
+### Fasa 2C-2A: Banci Pokok TEST — implemented locally / pending runtime
+
+Laporan hanya diterima apabila mempunyai baris jelas `BANCI POKOK`, satu
+`Jenis Tanaman: <crop>`, dan satu atau lebih baris tepat
+`M<module>P<plot>: <integer> pokok`. Setiap plot mesti mempunyai kiraan sendiri;
+`0 pokok` ialah fakta sah dan tetap melalui human review. Tarikh banci diambil
+daripada `received_at` Telegram dalam zon `Asia/Kuala_Lumpur`, kerana format
+laporan 2C-2A tidak mewajibkan tarikh eksplisit.
+
+Guard dan matcher membaca sahaja `TEST_CROP_BATCH`, `TEST_PLOT_ALLOCATION`,
+`TEST_CROP_BATCH_REVIEW`, dan `TEST_ALLOCATION_STATUS_EVENT`. Crop dipadankan
+secara trim, collapse whitespace, dan case-insensitive. Semua plot mesti berada
+dalam satu batch TEST yang diluluskan dan setiap allocation mesti efektif
+`ACTIVE` menurut ledger transplant; batch tiada/berganda, crop tidak sepadan,
+allocation `PLANNED`, atau format samar menjadi `WAITING_INFO` dengan
+`batch_match`, tanpa write.
+
+Menu `Lulus Banci Pokok ikut rujukan` dan `Tolak Banci Pokok ikut rujukan`
+memerlukan `BSE-TG-<update_id>`. APPROVED menggunakan `ScriptLock`, hash payload
+stabil, dan dedup source key rujukan akar + `Plant_Census_Log`, lalu menulis
+`TEST_PLANT_CENSUS` serta `TEST_PLANT_CENSUS_REVIEW`. REJECTED memerlukan alasan
+dan menulis audit sahaja. Retry keputusan sama adalah idempotent. Baseline
+`TEST_PLOT_ALLOCATION` dan ledger transplant tidak pernah diubah; tiada Google
+Tasks atau production writer digunakan oleh workflow ini.

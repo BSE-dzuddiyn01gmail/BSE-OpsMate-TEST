@@ -46,6 +46,12 @@ const BSE_TRANSPLANT_PARSER_FIXTURES=[
   {id:'NO_TRANSPLANT',input:'Timun Lokal M1P34',ok:false,plots:[]},
   {id:'AMBIGUOUS',input:'Pindah anak pokok Timun Lokal M1P345',ok:false,plots:[]}
 ];
+const BSE_PLANT_CENSUS_PARSER_FIXTURES=[
+  {id:'ACTIVE_SINGLE',input:'BANCI POKOK\nJenis Tanaman: Timun\nM2P1: 96 pokok',ok:true,entries:[{plot_id:'M2P1',living_plant_count:96}]},
+  {id:'ACTIVE_MULTI',input:'BANCI POKOK\nJenis Tanaman: Timun\nM2P2: 0 pokok\nM2P1: 96 pokok',ok:true,entries:[{plot_id:'M2P1',living_plant_count:96},{plot_id:'M2P2',living_plant_count:0}]},
+  {id:'COUNT_MISSING',input:'BANCI POKOK\nJenis Tanaman: Timun\nM2P1: pokok',ok:false,entries:[]},
+  {id:'AMBIGUOUS',input:'BANCI POKOK\nJenis Tanaman: Timun\nM2 P1: 96 pokok',ok:false,entries:[]}
+];
 // Literal regression fixture for the observed BSE-TG-146694152 shape: valid
 // allocation fields arrived with stale model-reported missing plot_id values.
 const BSE_TG_146694152_CANDIDATE_JSON='{"validation":"NEED_INFO","production_write":false,"candidates":[{"target":"Crop_Batch_Log","validation":"NEED_INFO","missing":[],"fields":{"project_id":"BSE_SB","system_year":2026,"event_date":"2026-09-22","record_type":"CROP_BATCH","verification_status":"PROVISIONAL","original_note":"KERJA SEMAIAN BENIH\\nJenis Tanaman: Peria (Kampung)\\nModul: M2 P1 P2\\nTarikh Semai: 22/09/2026","batch_action":"BATCH_START","crop":"Peria","variety":"Kampung","batch_status":"PROPOSED"}},{"target":"Planting_Event_Log","validation":"NEED_INFO","missing":[],"fields":{"project_id":"BSE_SB","system_year":2026,"event_date":"2026-09-22","record_type":"PLANTING_EVENT","verification_status":"PROVISIONAL","original_note":"KERJA SEMAIAN BENIH\\nJenis Tanaman: Peria (Kampung)\\nModul: M2 P1 P2\\nTarikh Semai: 22/09/2026","event_type":"SEED_SOWING","crop":"Peria","variety":"Kampung","event_status":"PROPOSED"}},{"target":"Plot_Allocation_Log","validation":"NEED_INFO","missing":["plot_id"],"fields":{"project_id":"BSE_SB","system_year":2026,"event_date":"2026-09-22","record_type":"PLOT_ALLOCATION","verification_status":"PROVISIONAL","original_note":"KERJA SEMAIAN BENIH\\nJenis Tanaman: Peria (Kampung)\\nModul: M2 P1 P2\\nTarikh Semai: 22/09/2026","plot_id":"M2P1","allocation_status":"PLANNED"}},{"target":"Plot_Allocation_Log","validation":"NEED_INFO","missing":["plot_id"],"fields":{"project_id":"BSE_SB","system_year":2026,"event_date":"2026-09-22","record_type":"PLOT_ALLOCATION","verification_status":"PROVISIONAL","original_note":"KERJA SEMAIAN BENIH\\nJenis Tanaman: Peria (Kampung)\\nModul: M2 P1 P2\\nTarikh Semai: 22/09/2026","plot_id":"M2P2","allocation_status":"PLANNED"}}]}';
@@ -161,6 +167,16 @@ function runBseTransplantParserRegressionTests(){
   if(failures.length)throw new Error('Transplant parser regression gagal: '+failures.map(r=>r.id).join(', '));
   return results;
 }
+
+function runBsePlantCensusParserRegressionTests(){
+  const results=BSE_PLANT_CENSUS_PARSER_FIXTURES.map(test=>{
+    const actual=bsePlantCensusSource_(test.input);
+    return {id:test.id,pass:actual.ok===test.ok&&JSON.stringify(actual.entries)===JSON.stringify(test.entries),actual:actual};
+  });
+  console.log('PLANT_CENSUS_PARSER_REGRESSION: '+JSON.stringify(results));
+  const failures=results.filter(test=>!test.pass);if(failures.length)throw new Error('Plant Census parser regression gagal: '+failures.map(test=>test.id).join(', '));
+  return results;
+}
 function bseUnifiedRun_(test) {
   boundTestBook_();
   try {
@@ -191,6 +207,7 @@ function bseUnifiedRules_(){
     'An explicit KERJA SEMAIAN BENIH is a Crop Batch start proposal, never Observation_Log or Operation_Log. For one such report return exactly one Crop_Batch_Log with batch_action BATCH_START, exactly one Planting_Event_Log with event_type SEED_SOWING, and one Plot_Allocation_Log for every explicit destination plot. This Fasa 2A proposal has no batch ID, no writer, and no automatic approval. Crop_Batch_Log and Planting_Event_Log require crop, variety, and event_date. Every Plot_Allocation_Log requires plot_id and allocation_status PLANNED.',
     'For KERJA SEMAIAN BENIH, the only permitted destination plots are the exact set declared on one canonical Modul line: Modul: M<module> P<plot> P<plot>... or the approved single compact form Modul: M<module>P<plot>. Return canonical identifiers M<module>P<plot>, one allocation each, sorted by module then plot. Never derive a plot from another word, never combine multiple plots into one string, and never create a plot outside that explicit Modul set. If crop, variety, tarikh semai, or the canonical Modul format is absent or unclear, return NEED_INFO rather than guessing.',
     'An explicit completed phrase pindah anak pokok is a TRANSPLANT proposal, never Observation_Log, Operation_Log, or a new Crop_Batch_Log. Return exactly one Transplant_Event_Log only. It requires crop and one or more reported destination plots. variety is optional and must be empty when not explicitly reported. event_type TRANSPLANT, event_status PROPOSED, verification_status PROVISIONAL, and production_write false. Do not invent a batch ID, crop, variety, plot, or allocation status. The deterministic guard is the authority for compact plot tokens and event date.',
+    'An explicit BANCI POKOK is a Plant_Census_Log proposal only, never Measurement_Log, Observation_Log, Operation_Log, or a new batch. It requires one explicit Jenis Tanaman line and one or more explicit lines in the exact form M<module>P<plot>: <integer> pokok. Return exactly one Plant_Census_Log with crop and census_entries; each entry has plot_id and living_plant_count. A zero count is valid. Do not invent a batch ID, allocation ID, plot, count, or date. The deterministic guard derives census_date from Telegram received_at and verifies ACTIVE allocations.',
     'First distinguish future proposals from completed actions. If explicitly proposed and not performed, create only Decision_Approval_Log with approval_status PROPOSED, record_type DECISION_APPROVAL. Do not create Operation_Log, Input_Usage_Log, or execution tasks for proposals. A proposed dose is not actual consumption. Preserve the plot, chemical, dose per tank, and planned daypart in proposal_text. Unknown proposer, approver and approval_date remain empty. A complete proposal can PASS without being approved.',
     'Completed chemical spraying routes to Operation_Log, record_type OPERATION, operation_type CHEMICAL_APPLICATION, plus plot_id, event_time, remarks. Required event_date and plot_id. It may PASS as PROVISIONAL even when usage or Manager approval is unknown.',
     'For completed operations only, also create an Input_Usage_Log candidate, record_type INPUT_USAGE, plus plot_id,item_name,quantity,unit. Required event_date,item_name,quantity,unit. Quantity means actual total consumption only. A dose per tank does not establish total consumption or number of tanks. Do not assume one tank was actually used. If total consumption is unknown, quantity=null in this transport JSON, unit empty, missing quantity and unit, validation NEED_INFO. Never store null as a literal word in a sheet.',
@@ -270,7 +287,8 @@ function bseUnifiedSchema_() {
     branch('Crop_Batch_Log','CROP_BATCH',{batch_action:{type:'string',enum:['BATCH_START']},crop:str(),variety:str(),batch_status:{type:'string',enum:['PROPOSED']}}),
     branch('Planting_Event_Log','PLANTING_EVENT',{event_type:{type:'string',enum:['SEED_SOWING']},crop:str(),variety:str(),event_status:{type:'string',enum:['PROPOSED']}}),
     branch('Plot_Allocation_Log','PLOT_ALLOCATION',{plot_id:str(),allocation_status:{type:'string',enum:['PLANNED']}}),
-    branch('Transplant_Event_Log','TRANSPLANT_EVENT',{event_type:{type:'string',enum:['TRANSPLANT']},crop:str(),variety:str(),plot_ids:{type:'array',items:str()},event_status:{type:'string',enum:['PROPOSED']}})
+    branch('Transplant_Event_Log','TRANSPLANT_EVENT',{event_type:{type:'string',enum:['TRANSPLANT']},crop:str(),variety:str(),plot_ids:{type:'array',items:str()},event_status:{type:'string',enum:['PROPOSED']}}),
+    branch('Plant_Census_Log','PLANT_CENSUS',{crop:str(),census_entries:{type:'array',items:object({plot_id:str(),living_plant_count:{type:'integer',minimum:0}})}})
   ]}}});
 }
 
@@ -700,10 +718,46 @@ function bseUnifiedGuardTransplant_(r,sourceNote,receivedAt){
   fields.event_date=eventDate;fields.plot_ids=parsed.plots;candidates.forEach(c=>{c.validation='PASS';c.missing=[];});r.validation='PASS';
 }
 
+function bsePlantCensusSource_(input){
+  const lines=String(input||'').split(/\r?\n/),marker=lines.some(line=>/^\s*BANCI\s+POKOK\s*$/i.test(line));
+  const cropLines=lines.map(line=>line.match(/^\s*Jenis\s+Tanaman\s*:\s*(.*?)\s*$/i)).filter(Boolean).map(match=>match[1].trim()).filter(Boolean);
+  const entries=[],seen=new Set();let malformed=false;
+  lines.forEach(line=>{
+    if(!/^\s*M/i.test(line))return;
+    const match=line.match(/^\s*M([1-9]\d*)P([1-9]\d*)\s*:\s*(0|[1-9]\d*)\s+pokok\s*$/i);
+    if(!match){malformed=true;return;}
+    const plotId='M'+match[1]+'P'+match[2];
+    if(seen.has(plotId)){malformed=true;return;}
+    seen.add(plotId);entries.push({plot_id:plotId,living_plant_count:Number(match[3])});
+  });
+  entries.sort((left,right)=>bseCropBatchPlotCompare_(left.plot_id,right.plot_id));
+  return {ok:marker&&cropLines.length===1&&entries.length>0&&!malformed,crop:cropLines.length===1?cropLines[0]:'',entries:marker&&cropLines.length===1&&!malformed?entries:[],reason:!marker?'CENSUS_PHRASE_MISSING':cropLines.length!==1?'CENSUS_CROP_MISSING_OR_AMBIGUOUS':malformed?'CENSUS_FORMAT_NONCANONICAL':!entries.length?'CENSUS_ENTRY_MISSING':''};
+}
+
+function bsePlantCensusMalaysiaDate_(receivedAt){
+  const date=new Date(receivedAt);
+  if(Number.isNaN(date.getTime()))return '';
+  return Utilities.formatDate(date,'Asia/Kuala_Lumpur','yyyy-MM-dd');
+}
+
+function bseUnifiedGuardPlantCensus_(r,sourceNote,receivedAt){
+  const candidates=r.candidates||[],census=candidates.filter(candidate=>candidate&&candidate.target==='Plant_Census_Log'),candidate=census[0],fields=candidate&&candidate.fields;
+  const parsed=bsePlantCensusSource_(sourceNote),eventDate=bsePlantCensusMalaysiaDate_(receivedAt),hasText=key=>fields&&typeof fields[key]==='string'&&fields[key].trim();
+  const allowedMissing=candidate&&Array.isArray(candidate.missing)&&candidate.missing.every(key=>key==='event_date'||key==='crop'||key==='census_entries');
+  const sameCrop=!!(parsed.crop&&hasText('crop')&&bseTransplantNormalizeCrop_(fields.crop)===bseTransplantNormalizeCrop_(parsed.crop));
+  const valid=candidates.length===1&&census.length===1&&candidate&&['PASS','NEED_INFO'].includes(candidate.validation)&&allowedMissing&&fields&&fields.project_id==='BSE_SB'&&fields.system_year===2026&&fields.record_type==='PLANT_CENSUS'&&fields.verification_status==='PROVISIONAL'&&parsed.ok&&eventDate&&sameCrop;
+  if(!valid){
+    r.validation='NEED_INFO';
+    candidates.forEach(item=>{if(!item)return;item.validation='NEED_INFO';item.missing=Array.from(new Set((Array.isArray(item.missing)?item.missing:[]).concat(['batch_match'])));});
+    return;
+  }
+  fields.event_date=eventDate;fields.crop=parsed.crop;fields.census_entries=parsed.entries;candidates.forEach(item=>{item.validation='PASS';item.missing=[];});r.validation='PASS';
+}
+
 function bseUnifiedGuard_(raw,context) {
   const r=JSON.parse(JSON.stringify(raw));
   if(!r || !Array.isArray(r.candidates))return r;
-  const required={Measurement_Log:['event_date','plot_id','measurement_type','value'],Observation_Log:['event_date','plot_id','observation_facts'],Operation_Log:['event_date','plot_id'],Input_Usage_Log:['event_date','item_name','quantity','unit'],Decision_Approval_Log:['event_date','decision_subject','approval_status'],Crop_Batch_Log:['event_date','batch_action','crop','variety','batch_status'],Planting_Event_Log:['event_date','event_type','crop','variety','event_status'],Plot_Allocation_Log:['event_date','plot_id','allocation_status'],Transplant_Event_Log:['event_date','event_type','crop','plot_ids','event_status']};
+  const required={Measurement_Log:['event_date','plot_id','measurement_type','value'],Observation_Log:['event_date','plot_id','observation_facts'],Operation_Log:['event_date','plot_id'],Input_Usage_Log:['event_date','item_name','quantity','unit'],Decision_Approval_Log:['event_date','decision_subject','approval_status'],Crop_Batch_Log:['event_date','batch_action','crop','variety','batch_status'],Planting_Event_Log:['event_date','event_type','crop','variety','event_status'],Plot_Allocation_Log:['event_date','plot_id','allocation_status'],Transplant_Event_Log:['event_date','event_type','crop','plot_ids','event_status'],Plant_Census_Log:['event_date','crop','census_entries']};
   const observationHypothesisOnly=c=>c&&c.target==='Observation_Log'&&bseObservationHypothesisOnly_(c.fields);
   for(const c of r.candidates) {
     if(!c||!c.fields||typeof c.fields!=='object'||Array.isArray(c.fields)||!Object.prototype.hasOwnProperty.call(required,c.target)) continue;
@@ -732,5 +786,6 @@ function bseUnifiedGuard_(raw,context) {
   const source=bseUnifiedSourceContext_((r.candidates[0]&&r.candidates[0].fields||{}).original_note);
   if(/\bkerja\s+semaian\s+benih\b/i.test(source.original))bseUnifiedGuardSeedSowing_(r,source);
   if(/\bpindah\s+anak\s+pokok\b/i.test(source.original))bseUnifiedGuardTransplant_(r,source.original,context&&context.received_at);
+  if(r.candidates.some(candidate=>candidate&&candidate.target==='Plant_Census_Log')||/^\s*BANCI\s+POKOK\s*$/im.test(source.original))bseUnifiedGuardPlantCensus_(r,source.original,context&&context.received_at);
   return r;
 }

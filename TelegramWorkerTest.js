@@ -79,9 +79,10 @@ function processBseTelegramTestQueue() {
 
 // Pure result path used by the worker before candidate_json is persisted.
 function bseTelegramWorkerFinalizeResult_(book,rawResult,job){
-  const result=bseTransplantQueueGuard_(book,bseUnifiedGuard_(rawResult,{received_at:job.receivedAt,queue_reference:'BSE-TG-'+job.id,root_reference:'BSE-TG-'+(job.rootId||job.id)}));
+  const guarded=bseUnifiedGuard_(rawResult,{received_at:job.receivedAt,queue_reference:'BSE-TG-'+job.id,root_reference:'BSE-TG-'+(job.rootId||job.id)});
+  if(guarded&&Array.isArray(guarded.candidates))guarded.candidates.forEach(c=>{if(c&&c.fields)c.fields.original_note=job.provenance;});
+  const result=bseCensusQueueGuard_(book,bseTransplantQueueGuard_(book,guarded));
   if(!result||result.production_write!==false||!Array.isArray(result.candidates)||!result.candidates.length||!['PASS','NEED_INFO','REJECTED','CONFLICT'].includes(result.validation))throw new Error('Invalid output');
-  result.candidates.forEach(c=>{if(c&&c.fields)c.fields.original_note=job.provenance;});
   return result;
 }
 
@@ -174,7 +175,7 @@ function bseTelegramReportContext_(rows,current) {
 
 function bseTelegramQuestion_(result) {
   if(!result||result.validation!=='NEED_INFO'||!Array.isArray(result.candidates))return '';
-  const labels={event_date:'tarikh laporan (hari/bulan/tahun)',plot_id:'plot yang betul',measurement_type:'jenis bacaan',value:'nilai bacaan',item_name:'nama bahan',quantity:'jumlah penggunaan sebenar',unit:'unit penggunaan',decision_subject:'perkara cadangan',approval_status:'status semakan',observation_facts:'fakta gejala/pemerhatian',crop:'jenis tanaman',variety:'varieti tanaman',batch_match:'batch Crop Batch dan allocation PLANNED yang sepadan'};
+  const labels={event_date:'tarikh laporan (hari/bulan/tahun)',plot_id:'plot yang betul',measurement_type:'jenis bacaan',value:'nilai bacaan',item_name:'nama bahan',quantity:'jumlah penggunaan sebenar',unit:'unit penggunaan',decision_subject:'perkara cadangan',approval_status:'status semakan',observation_facts:'fakta gejala/pemerhatian',crop:'jenis tanaman',variety:'varieti tanaman',batch_match:'batch Crop Batch dan allocation ACTIVE yang sepadan'};
   const missing=[];
   result.candidates.forEach(c=>{if(c&&Array.isArray(c.missing))c.missing.forEach(k=>{if(labels[k])missing.push(labels[k]);});});
   if(!missing.length)return 'Maklumat laporan belum cukup atau tidak konsisten. Sila semak semula laporan dan jawab dengan maklumat yang diminta.';
