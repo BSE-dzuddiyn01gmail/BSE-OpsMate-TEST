@@ -68,15 +68,17 @@ function bseCensusProposal_(encoded,original){
   return {fields:fields,entries:entries,canonical:canonical};
 }
 
-function bseCensusEffectiveStatuses_(statusEvents){
+function bseActiveAllocationEffectiveStatuses_(statusEvents){
   const latest={};statusEvents.forEach((row,index)=>{const allocationId=String(row[5]||''),stamp=Date.parse(String(row[9]||'')),value=Number.isFinite(stamp)?stamp:-1,prior=latest[allocationId];if(allocationId&&(!prior||value>prior.value||value===prior.value&&index>prior.index))latest[allocationId]={status:String(row[8]||''),value:value,index:index};});
   return latest;
 }
-function bseCensusFindMatches_(proposal,batches,allocations,reviews,statusEvents){
-  const crop=bseTransplantNormalizeCrop_(proposal.fields.crop),approved=new Set(reviews.filter(row=>String(row[3])==='Crop_Batch_Log'&&String(row[5])==='APPROVED').map(row=>String(row[11]))),effective=bseCensusEffectiveStatuses_(statusEvents),matches=[];
-  batches.forEach(batch=>{const batchId=String(batch[2]||'');if(!batchId||!approved.has(batchId)||bseTransplantNormalizeCrop_(batch[4])!==crop)return;const selected=proposal.entries.map(entry=>{const row=allocations.find(allocation=>String(allocation[2])===batchId&&String(allocation[5])===entry.plot_id&&String(allocation[6])==='PLANNED');if(!row||!effective[String(row[3])]||effective[String(row[3])].status!=='ACTIVE')return null;return {allocation_id:String(row[3]),plot_id:entry.plot_id};});if(selected.every(Boolean))matches.push({batch_id:batchId,allocations:selected});});
+function bseActiveAllocationFindMatches_(cropValue,plotIds,batches,allocations,reviews,statusEvents){
+  const crop=bseTransplantNormalizeCrop_(cropValue),approved=new Set(reviews.filter(row=>String(row[3])==='Crop_Batch_Log'&&String(row[5])==='APPROVED').map(row=>String(row[11]))),effective=bseActiveAllocationEffectiveStatuses_(statusEvents),matches=[];
+  batches.forEach(batch=>{const batchId=String(batch[2]||'');if(!batchId||!approved.has(batchId)||bseTransplantNormalizeCrop_(batch[4])!==crop)return;const selected=plotIds.map(plotId=>{const row=allocations.find(allocation=>String(allocation[2])===batchId&&String(allocation[5])===plotId&&String(allocation[6])==='PLANNED');if(!row||!effective[String(row[3])]||effective[String(row[3])].status!=='ACTIVE')return null;return {allocation_id:String(row[3]),plot_id:plotId};});if(selected.every(Boolean))matches.push({batch_id:batchId,allocations:selected});});
   return matches.length===1?Object.assign({kind:'UNIQUE'},matches[0]):{kind:matches.length?'MULTIPLE':'NONE',matches:matches};
 }
+function bseCensusEffectiveStatuses_(statusEvents){return bseActiveAllocationEffectiveStatuses_(statusEvents);}
+function bseCensusFindMatches_(proposal,batches,allocations,reviews,statusEvents){return bseActiveAllocationFindMatches_(proposal.fields.crop,proposal.entries.map(entry=>entry.plot_id),batches,allocations,reviews,statusEvents);}
 function bseCensusMatchForBook_(book,proposal){return bseCensusFindMatches_(proposal,bseTransplantRowsByName_(book,'TEST_CROP_BATCH',BSE_CROP_BATCH_HEADERS),bseTransplantRowsByName_(book,'TEST_PLOT_ALLOCATION',BSE_PLOT_ALLOCATION_HEADERS),bseTransplantRowsByName_(book,'TEST_CROP_BATCH_REVIEW',BSE_CROP_BATCH_REVIEW_HEADERS),bseTransplantRowsByName_(book,'TEST_ALLOCATION_STATUS_EVENT',BSE_ALLOCATION_STATUS_EVENT_HEADERS));}
 function bseCensusQueueGuard_(book,result){
   if(!result||!Array.isArray(result.candidates)||result.candidates.length!==1||!result.candidates[0]||result.candidates[0].target!=='Plant_Census_Log'||result.validation!=='PASS')return result;

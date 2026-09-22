@@ -24,6 +24,8 @@ function onOpen() {
     .addItem('Tolak Transplant ikut rujukan', 'rejectTelegramTransplantByReference')
     .addItem('Lulus Banci Pokok ikut rujukan', 'approveTelegramPlantCensusByReference')
     .addItem('Tolak Banci Pokok ikut rujukan', 'rejectTelegramPlantCensusByReference')
+    .addItem('Lulus Rawatan ikut rujukan', 'approveTelegramTreatmentByReference')
+    .addItem('Tolak Rawatan ikut rujukan', 'rejectTelegramTreatmentByReference')
     .addSeparator()
     .addItem('Tetapkan Masa Peringatan TEST', 'setBseTestTelegramReminderTimeMyt')
     .addItem('Papar Masa Peringatan TEST', 'showBseTestTelegramReminderTimeMyt')

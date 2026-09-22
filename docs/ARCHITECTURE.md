@@ -116,6 +116,8 @@ berdasarkan penerima, di samping dedup rujukan harian TEST semasa.
 | `TRANSPLANT_REJECTED_TEST` | Proposal pindah anak pokok ditolak; audit TEST sahaja disimpan. |
 | `PLANT_CENSUS_APPROVED_TEST` | Banci pokok bagi allocation efektif ACTIVE diluluskan dan ditulis ke TEST sahaja. |
 | `PLANT_CENSUS_REJECTED_TEST` | Banci pokok ditolak; audit TEST sahaja disimpan. |
+| `TREATMENT_APPROVED_TEST` | Rawatan sebenar bagi allocation efektif ACTIVE diluluskan dan ditulis ke TEST sahaja. |
+| `TREATMENT_REJECTED_TEST` | Rawatan sebenar ditolak; audit TEST sahaja disimpan. |
 | `OBSERVATION_APPROVED` / `OBSERVATION_REJECTED` | Keputusan workflow Observation TEST sedia ada. |
 | `NEEDS_ATTENTION` | Had retry worker telah dicapai. |
 
@@ -171,6 +173,9 @@ Helaian operasi TEST utama ialah:
 - `TEST_PLANT_CENSUS` dan `TEST_PLANT_CENSUS_REVIEW` - rekod dan audit human
   review Banci Pokok Fasa 2C-2A; ini tidak mengubah baseline allocation atau
   ledger transplant.
+- `TEST_TREATMENT_EVENT`, `TEST_TREATMENT_ALLOCATION_LINK`, dan
+  `TEST_TREATMENT_REVIEW` - event rawatan, pautan allocation, dan audit Fasa
+  2C-2B; baseline allocation serta ledger transplant kekal tidak berubah.
 
 ## Workflow Git dan clasp
 
@@ -300,3 +305,25 @@ stabil, dan dedup source key rujukan akar + `Plant_Census_Log`, lalu menulis
 dan menulis audit sahaja. Retry keputusan sama adalah idempotent. Baseline
 `TEST_PLOT_ALLOCATION` dan ledger transplant tidak pernah diubah; tiada Google
 Tasks atau production writer digunakan oleh workflow ini.
+
+### Fasa 2C-2B: Rawatan sebenar TEST — implemented locally / pending runtime
+
+Hanya header jelas `RAWATAN DIBUAT` membentuk satu `Treatment_Event_Log`.
+Laporan mesti mempunyai `Jenis Tanaman`, satu atau lebih plot kanonik, serta
+`Rawatan` yang tidak kosong. Jika `Tarikh Rawatan` tidak ada, tarikh event
+datang daripada `received_at` Telegram di `Asia/Kuala_Lumpur`; tarikh eksplisit
+yang malformat menjadi `WAITING_INFO`, bukan fallback. `CADANGAN RAWATAN`
+kekal proposal sahaja dan tidak boleh menghasilkan rawatan sebenar.
+
+Matcher ACTIVE umum yang dikongsi dengan Census membaca batch approved, crop
+normalisasi sempit, baseline `TEST_PLOT_ALLOCATION`, dan status efektif ledger
+transplant. Semua plot mesti berada dalam satu batch unik serta efektif `ACTIVE`;
+PLANNED, batch tiada/berganda, crop tidak sepadan, atau plot tidak kanonik
+menjadi `WAITING_INFO` dengan `batch_match`, tanpa write.
+
+Menu `Lulus Rawatan ikut rujukan` dan `Tolak Rawatan ikut rujukan` menggunakan
+`ScriptLock`, hash stabil, dan dedup source key rujukan akar +
+`Treatment_Event_Log`. APPROVED menulis satu `TEST_TREATMENT_EVENT` dan satu
+`TEST_TREATMENT_ALLOCATION_LINK` bagi setiap allocation; REJECTED memerlukan
+alasan dan audit sahaja. Tiada inventori, jumlah bahan, claim, Google Tasks,
+production writer, perubahan baseline allocation, atau ledger transplant.

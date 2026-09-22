@@ -81,7 +81,7 @@ function processBseTelegramTestQueue() {
 function bseTelegramWorkerFinalizeResult_(book,rawResult,job){
   const guarded=bseUnifiedGuard_(rawResult,{received_at:job.receivedAt,queue_reference:'BSE-TG-'+job.id,root_reference:'BSE-TG-'+(job.rootId||job.id)});
   if(guarded&&Array.isArray(guarded.candidates))guarded.candidates.forEach(c=>{if(c&&c.fields)c.fields.original_note=job.provenance;});
-  const result=bseCensusQueueGuard_(book,bseTransplantQueueGuard_(book,guarded));
+  const result=bseTreatmentQueueGuard_(book,bseCensusQueueGuard_(book,bseTransplantQueueGuard_(book,guarded)));
   if(!result||result.production_write!==false||!Array.isArray(result.candidates)||!result.candidates.length||!['PASS','NEED_INFO','REJECTED','CONFLICT'].includes(result.validation))throw new Error('Invalid output');
   return result;
 }
