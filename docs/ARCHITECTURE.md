@@ -33,9 +33,14 @@ Telegram private chat TEST
 2. `processBseTelegramTestQueue()` memproses satu laporan queue pada satu masa.
    Ia menjalankan `bseUnifiedProcess_()` dan `bseUnifiedGuard_()`, kemudian
    menyimpan `candidate_json`.
-3. Hasil dengan medan hilang menjadi `WAITING_INFO`; jawapan Telegram yang
-   dipautkan diproses semula bersama laporan asal. Hasil lengkap yang memerlukan
-   semakan menjadi `NEEDS_HUMAN_REVIEW`.
+3. Final validation `NEED_INFO` sentiasa menjadi `WAITING_INFO` dan tidak layak
+   untuk Google Task review. Hanya final `PASS` dengan calon actionable menjadi
+   `NEEDS_HUMAN_REVIEW` dan layak untuk Google Task. Hasil dengan medan hilang
+   menjadi `WAITING_INFO`; jawapan Telegram yang
+   dipautkan diproses semula bersama laporan asal. Jika jawapan menyumbang fakta
+   calon, `original_note` audit menyimpan laporan asal dan semua jawapan ikut
+   turutan; konflik crop atau variety semaian menjadi `NEEDS_INFO`, bukan PASS.
+   Hasil lengkap yang memerlukan semakan menjadi `NEEDS_HUMAN_REVIEW`.
 4. `syncBseTelegramTestReviewTasks_()` mencipta atau mendeduplikasi Google Task
    dalam senarai `BSE TEST Review` untuk row `NEEDS_HUMAN_REVIEW` selepas
    cutover TEST.
@@ -68,6 +73,8 @@ reminder seterusnya, task selesai hanya direkodkan sebagai `COMPLETED` dalam
 | `MEASUREMENT_REJECTED_TEST` | Calon Measurement ditolak; audit sahaja disimpan. |
 | `CROP_BATCH_APPROVED_TEST` | Proposal batch semaian diluluskan dan hanya rekod TEST ditulis. |
 | `CROP_BATCH_REJECTED_TEST` | Proposal batch semaian ditolak; audit TEST sahaja disimpan. |
+| `TRANSPLANT_APPROVED_TEST` | Proposal pindah anak pokok diluluskan dan hanya event/status TEST ditulis. |
+| `TRANSPLANT_REJECTED_TEST` | Proposal pindah anak pokok ditolak; audit TEST sahaja disimpan. |
 | `OBSERVATION_APPROVED` / `OBSERVATION_REJECTED` | Keputusan workflow Observation TEST sedia ada. |
 | `NEEDS_ATTENTION` | Had retry worker telah dicapai. |
 
@@ -114,6 +121,9 @@ Helaian operasi TEST utama ialah:
   TEST sedia ada.
 - `TEST_CROP_BATCH`, `TEST_PLANTING_EVENT`, `TEST_PLOT_ALLOCATION`, dan
   `TEST_CROP_BATCH_REVIEW` - rekod dan audit human review Crop Batch Fasa 2B.
+- `TEST_TRANSPLANT_EVENT`, `TEST_ALLOCATION_STATUS_EVENT`, dan
+  `TEST_TRANSPLANT_REVIEW` - event, ledger perubahan allocation, dan audit
+  human review Transplant Fasa 2C-1.
 
 ## Workflow Git dan clasp
 
@@ -191,3 +201,30 @@ kemudian menjadi `CROP_BATCH_REJECTED_TEST`.
 Fasa ini kekal TEST-only: tiada production writer atau panggilan Google Tasks
 daripada reviewer/writer. Google Task, jika wujud daripada aliran queue,
 kekal peringatan dan bukan kelulusan automatik.
+
+### Fasa 2C-1: Transplant / Pindah Anak Pokok TEST
+
+Frasa jelas `pindah anak pokok` menghasilkan satu proposal
+`Transplant_Event_Log` sahaja: `TRANSPLANT`, `PROPOSED`, dan
+`PROVISIONAL`. Crop wajib, variety opsyenal. Parser deterministik menerima
+token compact `M1P34` sebagai dua plot `M1P3` dan `M1P4`; format tiga atau
+lebih digit selepas `P` ditolak sebagai samar. Jika tiada `Tarikh Pindah:`
+yang sah, `event_date` datang daripada `received_at` Telegram dalam zon
+`Asia/Kuala_Lumpur`.
+
+Sebelum menjadi `NEEDS_HUMAN_REVIEW`, worker membandingkan crop dengan trim,
+collapse whitespace, dan case-insensitive sahaja. Tepat satu batch TEST yang
+diluluskan mesti mengandungi semua plot dilaporkan sebagai allocation
+`PLANNED`. Crop tiada, padanan tiada/berganda, atau allocation bukan `PLANNED`
+menjadi `WAITING_INFO`; tiada write dibuat.
+
+Menu `Lulus Transplant ikut rujukan` dan `Tolak Transplant ikut rujukan`
+memerlukan rujukan tepat `BSE-TG-<update_id>`. APPROVED, di bawah `ScriptLock`,
+menulis satu `TEST_TRANSPLANT_EVENT` dengan `COMPLETED` dan `VERIFIED_TEST`,
+serta satu event ledger `PLANNED -> ACTIVE` untuk setiap plot yang diluluskan.
+`TEST_PLOT_ALLOCATION` asal tidak pernah diubah, jadi aktivasi sebahagian batch
+mengekalkan sejarah dan allocation PLANNED lain. REJECTED memerlukan alasan dan
+hanya menulis audit. Identity dedup ialah rujukan Telegram asal +
+`Transplant_Event_Log`; hash payload kanonik bersama batch ID menolak konflik
+dan menjadikan retry idempotent. Tiada reviewer/writer Fasa 2C-1 memanggil
+Google Tasks atau menulis production.

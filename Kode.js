@@ -20,6 +20,8 @@ function onOpen() {
     .addItem('Tolak Measurement ikut rujukan', 'rejectTelegramMeasurementByReference')
     .addItem('Lulus Crop Batch ikut rujukan', 'approveTelegramCropBatchByReference')
     .addItem('Tolak Crop Batch ikut rujukan', 'rejectTelegramCropBatchByReference')
+    .addItem('Lulus Transplant ikut rujukan', 'approveTelegramTransplantByReference')
+    .addItem('Tolak Transplant ikut rujukan', 'rejectTelegramTransplantByReference')
     .addToUi();
 }
 

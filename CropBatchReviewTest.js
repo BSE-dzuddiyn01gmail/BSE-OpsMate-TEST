@@ -44,7 +44,7 @@ function bseReviewTelegramCropBatchByReference_(decision,reference,note){
     if(matches.length!==1)throw new Error('Rujukan mesti sepadan dengan tepat satu baris TELEGRAM_TEST_QUEUE.');
     const selected=matches[0],status=String(selected.row[6]||'');
     const root=bseCropBatchRoot_(rows,selected.row);
-    const proposal=bseCropBatchProposal_(selected.row[9],root.original);
+    const proposal=bseCropBatchProposal_(selected.row[9],root.provenance);
     const sourceKey='BSE-TG-'+root.updateId+'|Crop_Batch_Log';
     const payloadHash=bseCropBatchHash_(proposal.canonical);
     const expectedStatus=decision==='APPROVED'?'CROP_BATCH_APPROVED_TEST':'CROP_BATCH_REJECTED_TEST';
@@ -78,11 +78,11 @@ function bseReviewTelegramCropBatchByReference_(decision,reference,note){
       const eventOut=eventSheet||bseCropBatchSheet_(book,'TEST_PLANTING_EVENT',BSE_PLANTING_EVENT_HEADERS);
       const allocationOut=allocationSheet||bseCropBatchSheet_(book,'TEST_PLOT_ALLOCATION',BSE_PLOT_ALLOCATION_HEADERS);
       const batch=proposal.batch.fields,event=proposal.event.fields;
-      bseCropBatchAppend_(batchOut,[sourceKey,updateId,batchId,batch.event_date,batch.crop,batch.variety,batch.batch_action,batch.batch_status,batch.verification_status,root.original,stamp,reviewer,payloadHash]);
-      bseCropBatchAppend_(eventOut,[sourceKey,updateId,batchId,Utilities.getUuid(),event.event_date,event.event_type,event.crop,event.variety,event.event_status,event.verification_status,root.original,stamp,reviewer,payloadHash]);
+      bseCropBatchAppend_(batchOut,[sourceKey,updateId,batchId,batch.event_date,batch.crop,batch.variety,batch.batch_action,batch.batch_status,batch.verification_status,root.provenance,stamp,reviewer,payloadHash]);
+      bseCropBatchAppend_(eventOut,[sourceKey,updateId,batchId,Utilities.getUuid(),event.event_date,event.event_type,event.crop,event.variety,event.event_status,event.verification_status,root.provenance,stamp,reviewer,payloadHash]);
       proposal.allocations.forEach((allocation,index)=>{
         const fields=allocation.fields;
-        bseCropBatchAppend_(allocationOut,[sourceKey,updateId,batchId,batchId+'-PA-'+String(index+1).padStart(3,'0'),fields.event_date,fields.plot_id,fields.allocation_status,fields.verification_status,root.original,stamp,reviewer,payloadHash]);
+        bseCropBatchAppend_(allocationOut,[sourceKey,updateId,batchId,batchId+'-PA-'+String(index+1).padStart(3,'0'),fields.event_date,fields.plot_id,fields.allocation_status,fields.verification_status,root.provenance,stamp,reviewer,payloadHash]);
       });
       SpreadsheetApp.flush();
     }
@@ -100,13 +100,15 @@ function bseCropBatchRequireDecision_(decision,note){
 }
 
 function bseCropBatchRoot_(rows,current){
-  let cursor=current;const seen=new Set();
+  let cursor=current;const seen=new Set(),answers=[];
   while(cursor[14]){
     const id=String(cursor[0]);if(seen.has(id))throw new Error('Rantaian penjelasan Crop Batch tidak sah.');seen.add(id);
+    answers.unshift(String(cursor[4]||''));
     const parent=rows.find(row=>String(row[0])===String(cursor[14])&&String(row[1])===String(current[1])&&String(row[2])===String(current[2]));
     if(!parent)throw new Error('Laporan asal Crop Batch tidak ditemui.');cursor=parent;
   }
-  return {updateId:String(cursor[0]),original:String(cursor[4]||'')};
+  const original=String(cursor[4]||'');
+  return {updateId:String(cursor[0]),original:original,provenance:answers.length?bseUnifiedAuditProvenance_(original,answers):original};
 }
 
 function bseCropBatchProposal_(encoded,original){
