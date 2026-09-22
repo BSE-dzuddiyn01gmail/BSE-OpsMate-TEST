@@ -1,4 +1,4 @@
-# BSE OpsMate TEST Architecture
+# OpsMate BSE site B v1.0 Final Handover — Architecture
 
 ## Tujuan dan sempadan
 
@@ -7,6 +7,30 @@ laporan Telegram, membentuk calon rekod dengan Gemini, meminta semakan manusia,
 dan menyimpan hasil yang diluluskan ke helaian TEST sahaja. Semua hasil Gemini
 dan aliran review mesti mengekalkan `production_write: false`. Tiada fungsi
 semasa dibenarkan menulis rekod production.
+
+## Scope lock v1.0 dan production gate
+
+Nama rasmi projek ialah **OpsMate BSE site B v1.0 Final Handover**. Implementasi
+semasa ialah TEST-only; ia belum production-ready dan belum merupakan final
+handover. Sebarang peralihan ke production memerlukan production gate berasingan,
+pilot kerja sebenar, dan penerimaan BSE yang didokumenkan. Google Task completion
+bukan approval, access control, atau bukti penerimaan pilot.
+
+Scope lock platform yang diluluskan untuk roadmap ialah:
+
+- satu Google Task List bagi setiap pemilik; reminder dihantar secara private
+  kepada pemilik/admin dengan dedup bagi setiap penerima;
+- retrieval text dalam group menjawab melalui DM dahulu; group hanya menerima
+  pengesahan atau arahan Start jika DM gagal;
+- reporting text-only: daily delta, Friday Report A (provisional + approved),
+  dan Report B (approved-only). Waktu scheduler belum diputuskan;
+- File Evidence: gambar/dokumen/video -> caption -> kategori dicadang ->
+  pengesahan manusia -> Google Drive + metadata + retrieval. v1.0 tidak
+  merangkumi OCR, Vision, atau transkripsi;
+- inventori/claim hanya log rujukan, bukan rekod stok atau kewangan rasmi.
+
+Butiran pelaksanaan, dependency, dan status roadmap direkodkan dalam
+`docs/DEVELOPMENT_STATUS.md`.
 
 ## Aliran kerja
 
@@ -43,7 +67,8 @@ Telegram private chat TEST
    Hasil lengkap yang memerlukan semakan menjadi `NEEDS_HUMAN_REVIEW`.
 4. `syncBseTelegramTestReviewTasks_()` mencipta atau mendeduplikasi Google Task
    dalam senarai `BSE TEST Review` untuk row `NEEDS_HUMAN_REVIEW` selepas
-   cutover TEST.
+   cutover TEST. Ini ialah implementasi TEST semasa; scope lock platform masa
+   depan memerlukan satu Task List bagi setiap pemilik.
 5. `processBseTelegramTestReminders()` hanya menyemak rujukan queue
    `NEEDS_HUMAN_REVIEW` yang masih mempunyai task belum selesai. Masa kelayakan
    `Asia/Kuala_Lumpur` dibaca daripada Script Property
@@ -65,7 +90,11 @@ Google Tasks digunakan untuk menarik perhatian reviewer kepada rujukan
 `BSE-TG-<update_id>`. Menanda task sebagai selesai tidak meluluskan calon,
 tidak mengemas kini status queue, dan tidak menulis rekod apa-apa. Pada run
 reminder seterusnya, task selesai hanya direkodkan sebagai `COMPLETED` dalam
-`TELEGRAM_TEST_REMINDER_AUDIT`.
+`TELEGRAM_TEST_REMINDER_AUDIT`. Ia bukan access control atau mekanisme approval.
+
+Dalam scope lock platform, setiap pemilik mempunyai Task List tersendiri dan
+reminder dihantar secara private kepada pemilik/admin. Dedup reminder mesti
+berdasarkan penerima, di samping dedup rujukan harian TEST semasa.
 
 ## Status penting
 
