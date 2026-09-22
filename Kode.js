@@ -22,6 +22,9 @@ function onOpen() {
     .addItem('Tolak Crop Batch ikut rujukan', 'rejectTelegramCropBatchByReference')
     .addItem('Lulus Transplant ikut rujukan', 'approveTelegramTransplantByReference')
     .addItem('Tolak Transplant ikut rujukan', 'rejectTelegramTransplantByReference')
+    .addSeparator()
+    .addItem('Tetapkan Masa Peringatan TEST', 'setBseTestTelegramReminderTimeMyt')
+    .addItem('Papar Masa Peringatan TEST', 'showBseTestTelegramReminderTimeMyt')
     .addToUi();
 }
 

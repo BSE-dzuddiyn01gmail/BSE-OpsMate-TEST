@@ -44,8 +44,18 @@ Telegram private chat TEST
 4. `syncBseTelegramTestReviewTasks_()` mencipta atau mendeduplikasi Google Task
    dalam senarai `BSE TEST Review` untuk row `NEEDS_HUMAN_REVIEW` selepas
    cutover TEST.
-5. `processBseTelegramTestReminders()` menyemak task yang belum selesai dan
-   menghantar maksimum dua peringatan sehari, dengan sela minimum empat jam.
+5. `processBseTelegramTestReminders()` hanya menyemak rujukan queue
+   `NEEDS_HUMAN_REVIEW` yang masih mempunyai task belum selesai. Masa kelayakan
+   `Asia/Kuala_Lumpur` dibaca daripada Script Property
+   `BSE_TEST_REMINDER_TIME_MYT` dalam format `HH:mm`; jika belum diset atau
+   rosak, fallback selamat ialah `12:00`. Menu BSE TEST membolehkan masa ini
+   ditetapkan atau dipaparkan, dan input tidak sah tidak mengubah nilai sedia
+   ada. Selepas masa itu, ia menghantar maksimum satu peringatan bagi setiap
+   rujukan untuk satu tarikh MYT. Marker durable
+   `TELEGRAM_TEST_REMINDER_DEDUP_AUDIT` menggunakan key
+   `BSE-TG-…|YYYY-MM-DD` dan state `ATTEMPTING`, `SENT`, atau `ERROR`; marker
+   hari sama menghalang cubaan berikutnya. Kegagalan send tidak direkod sebagai
+   `SENT`, tetapi juga tidak dicuba semula hari itu untuk mengelakkan spam.
 6. Reviewer membuat keputusan melalui menu BSE TEST. Keputusan ini, bukan
    status Google Task, mengawal penulisan ke helaian TEST.
 
@@ -113,7 +123,10 @@ Helaian operasi TEST utama ialah:
 - `TELEGRAM_TEST_QUEUE` - input, status, rantaian clarification, dan
   `candidate_json`.
 - `GOOGLE_TASKS_TEST_AUDIT` - task review yang dicipta/dideduplikasi.
-- `TELEGRAM_TEST_REMINDER_AUDIT` - penghantaran reminder dan state `COMPLETED`.
+- `TELEGRAM_TEST_REMINDER_AUDIT` - ringkasan penghantaran reminder dan state
+  `COMPLETED`; completion tidak mengubah queue atau rekod domain.
+- `TELEGRAM_TEST_REMINDER_DEDUP_AUDIT` - marker/audit tahan lama satu cubaan
+  per rujukan bagi satu tarikh MYT.
 - `TEST_MEASUREMENT_LOG` - rekod Measurement yang diluluskan dalam TEST.
 - `TEST_MEASUREMENT_REVIEW` - keputusan reviewer Measurement, alasan, hash, dan
   payload audit.
