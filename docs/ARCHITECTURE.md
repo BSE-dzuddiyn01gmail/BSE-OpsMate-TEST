@@ -32,6 +32,23 @@ Scope lock platform yang diluluskan untuk roadmap ialah:
   penuntut tepat selepas `claimant`; migrasi TEST yang dikenali menyusun data
   legacy mengikut nama header sebelum writer Claim digunakan.
 
+## Keputusan terkunci: pengesahan penghantar dan pembatalan owner
+
+- Laporan lengkap kekal dalam group. Kad `Benar` / `Betulkan` / `Buang` dihantar
+  sebagai reply dalam group dan hanya boleh ditindak oleh penghantar asal.
+- `Benar` penghantar ialah syarat sebelum rekod TEST diwujudkan. Owner/admin
+  tidak menerima kad kelulusan rutin; setiap owner aktif menerima PM ringkasan
+  bagi rekod yang telah diwujudkan.
+- Resit dan perubahan status dihantar melalui PM kepada penghantar hanya jika
+  penghantar telah menjalankan `/start`; ketiadaan opt-in tidak menghalang
+  rekod group yang telah disahkan daripada diproses.
+- `Buang` penghantar menghasilkan audit `DISCARDED_BY_REPORTER` sahaja, tanpa
+  rekod domain atau makluman owner.
+- Owner/admin aktif boleh memulakan pembatalan melalui PM dengan
+  `/delete BSE-TG-<update_id> <alasan>`. Bot mesti meminta pengesahan kedua
+  `Sahkan Delete` / `Batal`. Tindakan disimpan sebagai `VOIDED_TEST`, bukan
+  pemadaman fizikal; alasan, pelaku, masa dan rujukan asal wajib diaudit.
+
 Butiran pelaksanaan, dependency, dan status roadmap direkodkan dalam
 `docs/DEVELOPMENT_STATUS.md`.
 
