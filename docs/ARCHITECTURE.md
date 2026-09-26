@@ -38,7 +38,8 @@ Scope lock platform yang diluluskan untuk roadmap ialah:
   sebagai reply dalam group dan hanya boleh ditindak oleh penghantar asal.
 - `Benar` penghantar ialah syarat sebelum rekod TEST diwujudkan. Owner/admin
   tidak menerima kad kelulusan rutin; setiap owner aktif menerima PM ringkasan
-  bagi rekod yang telah diwujudkan.
+  bagi rekod yang telah diwujudkan, termasuk arahan `/delete` tepat untuk
+  rujukan tersebut.
 - Resit dan perubahan status dihantar melalui PM kepada penghantar hanya jika
   penghantar telah menjalankan `/start`; ketiadaan opt-in tidak menghalang
   rekod group yang telah disahkan daripada diproses.
@@ -48,6 +49,9 @@ Scope lock platform yang diluluskan untuk roadmap ialah:
   `/delete BSE-TG-<update_id> <alasan>`. Bot mesti meminta pengesahan kedua
   `Sahkan Delete` / `Batal`. Tindakan disimpan sebagai `VOIDED_TEST`, bukan
   pemadaman fizikal; alasan, pelaku, masa dan rujukan asal wajib diaudit.
+  Selepas keputusan `Sahkan Delete` atau `Batal`, kad PM ditutup dan teksnya
+  menjadi status terminal. Selepas `VOIDED_TEST`, makluman dihantar kepada
+  semua owner/admin aktif serta penghantar yang telah opt-in PM.
   Laluan awal ini hanya membolehkan writer yang telah mempunyai status TEST
   yang boleh dibatalkan dengan selamat (Inventory, Claim, dan proposal Aset).
   Target yang mempunyai ledger atau kesan rentas-rekod ditolak dengan jelas
