@@ -36,6 +36,10 @@ function receiveBseTelegramTest() {
       const inventoryClarificationPrompt=inventoryClarificationReply||(!replyId&&typeof bseInventoryFindActiveClarificationPrompt_==='function'&&bseInventoryFindActiveClarificationPrompt_(book,sourceChat,reporter));
       const correctionSession=!replyId&&typeof bseTelegramCorrectionSessionMatch_==='function'?bseTelegramCorrectionSessionMatch_(book,sourceChat,reporter,saved):{match:null,ambiguous:false};
       if(privateStart){bseTelegramPrivateOptInRegister_(book,m,me.username);}
+      else if(m&&m.chat&&m.from&&m.chat.type==='private'&&bseTelegramDeleteCommand_(m.text)){
+        const deletion=bseTelegramDeleteReceiveCommand_(book,m);
+        if(deletion.text)bseTelegramApi_('sendMessage',{chat_id:sourceChat,text:deletion.text});
+      }
       else if(rejectPromptReply){rejectReplies.push({chat_id:sourceChat,message_id:String(m.message_id),reply_to_message_id:replyId,user_id:reporter,text:typeof m.text==='string'?m.text:''});}
       else if(inventoryClarificationPrompt&&m&&m.chat&&m.from&&!m.from.is_bot&&(allowedPrivate||allowedGroup)&&!seen.has(String(update.update_id))) {
         const text=typeof m.text==='string'?m.text:'',meta=JSON.stringify({source_chat_id:sourceChat,source_chat_type:String(m.chat.type||''),reporter_telegram_user_id:reporter,reporter_username:String(m.from.username||''),reporter_name:[m.from.first_name,m.from.last_name].filter(Boolean).join(' ')});

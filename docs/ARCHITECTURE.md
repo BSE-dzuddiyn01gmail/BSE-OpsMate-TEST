@@ -48,6 +48,10 @@ Scope lock platform yang diluluskan untuk roadmap ialah:
   `/delete BSE-TG-<update_id> <alasan>`. Bot mesti meminta pengesahan kedua
   `Sahkan Delete` / `Batal`. Tindakan disimpan sebagai `VOIDED_TEST`, bukan
   pemadaman fizikal; alasan, pelaku, masa dan rujukan asal wajib diaudit.
+  Laluan awal ini hanya membolehkan writer yang telah mempunyai status TEST
+  yang boleh dibatalkan dengan selamat (Inventory, Claim, dan proposal Aset).
+  Target yang mempunyai ledger atau kesan rentas-rekod ditolak dengan jelas
+  sehingga void writer khususnya direka; ia tidak boleh dipadam secara senyap.
 
 Butiran pelaksanaan, dependency, dan status roadmap direkodkan dalam
 `docs/DEVELOPMENT_STATUS.md`.
