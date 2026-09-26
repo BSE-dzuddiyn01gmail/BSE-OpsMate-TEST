@@ -28,6 +28,9 @@ Scope lock platform yang diluluskan untuk roadmap ialah:
   pengesahan manusia -> Google Drive + metadata + retrieval. v1.0 tidak
   merangkumi OCR, Vision, atau transkripsi;
 - inventori/claim hanya log rujukan, bukan rekod stok atau kewangan rasmi.
+- `TEST_CLAIM_LOG` menggunakan header kanonik yang mengekalkan identiti Telegram
+  penuntut tepat selepas `claimant`; migrasi TEST yang dikenali menyusun data
+  legacy mengikut nama header sebelum writer Claim digunakan.
 
 Butiran pelaksanaan, dependency, dan status roadmap direkodkan dalam
 `docs/DEVELOPMENT_STATUS.md`.
@@ -62,9 +65,16 @@ Telegram private chat TEST
    `NEEDS_HUMAN_REVIEW` dan layak untuk Google Task. Hasil dengan medan hilang
    menjadi `WAITING_INFO`; jawapan Telegram yang
    dipautkan diproses semula bersama laporan asal. Jika jawapan menyumbang fakta
-   calon, `original_note` audit menyimpan laporan asal dan semua jawapan ikut
-   turutan; konflik crop atau variety semaian menjadi `NEEDS_INFO`, bukan PASS.
-   Hasil lengkap yang memerlukan semakan menjadi `NEEDS_HUMAN_REVIEW`.
+    calon, `original_note` audit menyimpan laporan asal dan semua jawapan ikut
+    turutan; konflik crop atau variety semaian menjadi `NEEDS_INFO`, bukan PASS.
+    Hasil lengkap yang memerlukan semakan menjadi `NEEDS_HUMAN_REVIEW`.
+   Untuk kad kelulusan `✏️ Betulkan`, callback owner mencipta sesi pembetulan
+   tahan lama pada `TEST_TELEGRAM_APPROVAL_UI`, kemudian prompt dihantar sebagai
+   reply kepada mesej laporan asal. Mesej biasa seterusnya diterima hanya jika
+   tepat satu sesi `CORRECTION_WAITING_INFO` sepadan dengan `reference`,
+   `source_group_chat_id`, dan `reporter_telegram_user_id`. Sesi ditutup secara
+   one-shot selepas queue child disimpan; chat, pelapor, atau sesi yang tidak
+   sepadan tidak boleh mengambil alih dan sesi ambigu menjadi `UNLINKED_REPLY`.
 4. `syncBseTelegramTestReviewTasks_()` mencipta atau mendeduplikasi Google Task
    dalam senarai `BSE TEST Review` untuk row `NEEDS_HUMAN_REVIEW` selepas
    cutover TEST. Ini ialah implementasi TEST semasa; scope lock platform masa
@@ -105,6 +115,9 @@ berdasarkan penerima, di samping dedup rujukan harian TEST semasa.
 | `RETRY_NEEDED` | Panggilan Gemini atau output perlu dicuba semula. |
 | `RESULT_REPLY_PENDING` | Hasil telah disimpan tetapi balasan Telegram belum dihantar. |
 | `WAITING_INFO` | Medan wajib belum lengkap; bot meminta penjelasan. |
+| `CORRECTION_PROMPT_PENDING` | Callback Betulkan telah dirizabkan tetapi prompt belum disahkan. |
+| `CORRECTION_WAITING_INFO` | Sesi pembetulan owner terbuka; hanya satu mesej biasa daripada pelapor/chat asal boleh dipadankan. |
+| `CORRECTION_ANSWER_RECEIVED` | Sesi pembetulan telah dituntut dan ditutup selepas jawapan disimpan. |
 | `NEEDS_HUMAN_REVIEW` | Hasil tersedia untuk semakan manusia dan Google Task. |
 | `OUT_OF_SCOPE_TEST` | Mesej jelas Site A; direkod untuk audit tetapi berhenti sebelum Gemini, worker, dan Google Tasks. |
 | `ASSET_OBSERVATION_UNSUPPORTED_TEST` | Mesej jelas Kolam <nombor> di luar workflow aset Fasa 1; direkod untuk audit tetapi berhenti sebelum Gemini, worker, dan Google Tasks. |
@@ -155,6 +168,8 @@ Helaian operasi TEST utama ialah:
 
 - `TELEGRAM_TEST_QUEUE` - input, status, rantaian clarification, dan
   `candidate_json`.
+- `TEST_TELEGRAM_APPROVAL_UI` - kad owner dan sesi pembetulan tahan lama,
+  termasuk ID prompt, ID update jawapan, serta masa penutupan sesi.
 - `GOOGLE_TASKS_TEST_AUDIT` - task review yang dicipta/dideduplikasi.
 - `TELEGRAM_TEST_REMINDER_AUDIT` - ringkasan penghantaran reminder dan state
   `COMPLETED`; completion tidak mengubah queue atau rekod domain.
