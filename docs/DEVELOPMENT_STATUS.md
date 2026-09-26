@@ -20,7 +20,7 @@
 | Fasa 2B — human review Crop Batch | `c57dac8` | Siap TEST dan committed. |
 | Fasa 2C-1 — Transplant / Pindah Anak Pokok | `4869e60` | Siap TEST, committed, dan runtime-tested. |
 | Reminder Telegram harian | `cc20f3d` | Siap TEST dan runtime-tested. |
-| Pengesahan penghantar & Delete owner | Belum committed | Kad group penghantar, notis PM, dan `/delete` dua-pengesahan (VOIDED_TEST) siap TEST; runtime-tested untuk Inventory. |
+| Pengesahan penghantar & Delete owner | `f7e97fe` | Kad group penghantar, notis PM, dan `/delete` dua-pengesahan (`VOIDED_TEST`) siap TEST; runtime-tested untuk pengesahan penghantar dan Delete berjejak bagi Inventory serta Claim. |
 | Fasa 2C-2A — Banci Pokok | Belum committed | Implemented locally / pending runtime; regression PASS. |
 | Fasa 2C-2B — Rawatan sebenar | Belum committed | Implemented locally / pending runtime; regression PASS. |
 
