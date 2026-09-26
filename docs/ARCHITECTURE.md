@@ -39,7 +39,8 @@ Scope lock platform yang diluluskan untuk roadmap ialah:
 - `Benar` penghantar ialah syarat sebelum rekod TEST diwujudkan. Owner/admin
   tidak menerima kad kelulusan rutin; setiap owner aktif menerima PM ringkasan
   bagi rekod yang telah diwujudkan, termasuk arahan `/delete` tepat untuk
-  rujukan tersebut.
+  rujukan tersebut. Makluman menyatakan nama paparan Telegram penghantar;
+  jika tiada, ia menggunakan `@username` atau ID Telegram sebagai fallback.
 - Resit dan perubahan status dihantar melalui PM kepada penghantar hanya jika
   penghantar telah menjalankan `/start`; ketiadaan opt-in tidak menghalang
   rekod group yang telah disahkan daripada diproses.
