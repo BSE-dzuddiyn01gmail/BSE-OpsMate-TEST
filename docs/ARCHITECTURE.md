@@ -78,6 +78,12 @@ merekodkan kontrak implementasi TEST dan bukan sumber ZASS yang kedua.
 - Retrieval hanya melalui PM dan hanya untuk `REGISTERED_ACTIVE`. Permintaan
   group tidak mengembalikan data, summary, bukti, atau pautan Drive. Owner/admin
   sahaja boleh menerima, menolak, menyahaktifkan, atau menukar peranan user.
+- `\/status plot M<n>P<n>` ialah retrieval PM ringkas untuk owner/admin atau
+  `REGISTERED_ACTIVE`. Ia membaca allocation ACTIVE yang telah diluluskan,
+  banci terakhir, dan rawatan terakhir daripada helaian TEST sahaja, lalu
+  merekod audit. Permintaan sama dalam group hanya menerima arahan minimum
+  untuk menggunakan PM; tiada data plot dipulangkan. Ia bukan query bebas ke
+  Sheet, Drive, atau rekod production.
 - Rekod daripada group yang berkategori standard (`FIELD_OPERATION`,
   `CROP_CONDITION`, `ASSET_EQUIPMENT`) boleh diretrieve melalui PM oleh semua
   user aktif. Rekod PM ialah `PRIVATE_SUBMISSION`; ia hanya boleh diretrieve
@@ -249,6 +255,8 @@ Helaian operasi TEST utama ialah:
 - `TEST_TELEGRAM_RETRIEVAL_AUDIT` - audit PM retrieval bagi Evidence TEST,
   termasuk user/chat peminta, rujukan, outcome, dan sebab penolakan. Ia tidak
   menyimpan atau mendedahkan pautan Drive.
+- `TEST_TELEGRAM_PLOT_STATUS_AUDIT` - audit `/status plot` TEST, termasuk
+  identiti/chat peminta, plot, outcome, dan sebab. Ia bukan rekod domain.
 - `TEST_MEASUREMENT_LOG` - rekod Measurement yang diluluskan dalam TEST.
 - `TEST_MEASUREMENT_REVIEW` - keputusan reviewer Measurement, alasan, hash, dan
   payload audit.
