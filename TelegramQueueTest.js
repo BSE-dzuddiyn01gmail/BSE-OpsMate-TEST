@@ -38,7 +38,7 @@ function receiveBseTelegramTest() {
       if(privateStart){bseTelegramPrivateOptInRegister_(book,m,me.username);}
       else if(m&&m.chat&&m.from&&m.chat.type==='private'&&bseTelegramDeleteCommand_(m.text)){
         const deletion=bseTelegramDeleteReceiveCommand_(book,m);
-        if(deletion.text)bseTelegramApi_('sendMessage',{chat_id:sourceChat,text:deletion.text});
+        if(deletion.text)bseTelegramPrivateCommandReply_(m,deletion.text);
       }
       else if(rejectPromptReply){rejectReplies.push({chat_id:sourceChat,message_id:String(m.message_id),reply_to_message_id:replyId,user_id:reporter,text:typeof m.text==='string'?m.text:''});}
       else if(inventoryClarificationPrompt&&m&&m.chat&&m.from&&!m.from.is_bot&&(allowedPrivate||allowedGroup)&&!seen.has(String(update.update_id))) {
@@ -99,6 +99,11 @@ function receiveBseTelegramTest() {
   rejectReplies.forEach(reply=>{try{bseTelegramApprovalRejectReason_(reply);}catch(error){console.log('APPROVAL_REJECT_REASON_PENDING: '+String(error.message||''));}});
   if(receiverError)throw receiverError;
 }
+
+function bseTelegramPrivateCommandReply_(message,text){
+  if(!message||!message.chat||!message.from||message.chat.type!=='private'||String(message.chat.id)!==String(message.from.id)||!/^\d+$/.test(String(message.chat.id))||!Number.isSafeInteger(Number(message.message_id))||Number(message.message_id)<=0)throw new Error('Balasan PM masuk tidak sah.');
+  return bseTelegramApi_('sendMessage',{chat_id:String(message.chat.id),text:String(text||''),reply_parameters:{message_id:Number(message.message_id),allow_sending_without_reply:false},__bse_inbound_private_reply:true});
+}
 function bseTelegramQueue_(book) {
   let sheet=book.getSheetByName('TELEGRAM_TEST_QUEUE');
   if(!sheet)sheet=book.insertSheet('TELEGRAM_TEST_QUEUE');
@@ -137,7 +142,8 @@ function runBseTelegramSetupMarkerHarnessTests(){
     {id:'offset advances after marker branch',pass:source.indexOf("m.text==='P1-C TEST setup'")<source.lastIndexOf("props.setProperty('BSE_TELEGRAM_OFFSET'")},
     {id:'non-marker reports retain queue path',pass:/const values=\[String\(update\.update_id\)/.test(source)},
     {id:'cleanup is narrow and parser-free',pass:/String\(row\[4\]\)!=='P1-C TEST setup'/.test(cleanup)&&/IGNORED_SETUP_MARKER/.test(cleanup)&&!/bseUnifiedProcess_|processBseTelegramTestQueue|bseTelegramApproval/.test(cleanup)},
-    {id:'cleanup has one lock and no Tasks',pass:(cleanup.match(/LockService\.getScriptLock/g)||[]).length===1&&!/Tasks\./.test(cleanup)}
+    {id:'cleanup has one lock and no Tasks',pass:(cleanup.match(/LockService\.getScriptLock/g)||[]).length===1&&!/Tasks\./.test(cleanup)},
+    {id:'non-owner private command reply is bound to its incoming message',pass:/bseTelegramPrivateCommandReply_\(m,deletion\.text\)/.test(source)&&/reply_parameters/.test(bseTelegramPrivateCommandReply_.toString())&&/__bse_inbound_private_reply:true/.test(bseTelegramPrivateCommandReply_.toString())}
   ];
   console.log('SETUP_MARKER_HARNESS: '+JSON.stringify(tests));const failures=tests.filter(test=>!test.pass);if(failures.length)throw new Error('Setup marker harness gagal: '+failures.map(test=>test.id).join(', '));return tests;
 }
