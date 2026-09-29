@@ -34,7 +34,7 @@ Scope lock platform yang diluluskan untuk roadmap ialah:
 
 ## Keputusan terkunci: pengesahan penghantar dan pembatalan owner
 
-- Laporan lengkap kekal dalam group. Kad `Benar` / `Betulkan` / `Buang` dihantar
+- Laporan lengkap kekal dalam group. Kad `Benar` / `Betulkan` / `Batal` dihantar
   sebagai reply dalam group dan hanya boleh ditindak oleh penghantar asal.
 - `Benar` penghantar ialah syarat sebelum rekod TEST diwujudkan. Owner/admin
   tidak menerima kad kelulusan rutin; setiap owner aktif menerima PM ringkasan
@@ -44,7 +44,7 @@ Scope lock platform yang diluluskan untuk roadmap ialah:
 - Resit dan perubahan status dihantar melalui PM kepada penghantar hanya jika
   penghantar telah menjalankan `/start`; ketiadaan opt-in tidak menghalang
   rekod group yang telah disahkan daripada diproses.
-- `Buang` penghantar menghasilkan audit `DISCARDED_BY_REPORTER` sahaja, tanpa
+- `Batal` penghantar menghasilkan audit `DISCARDED_BY_REPORTER` sahaja, tanpa
   rekod domain atau makluman owner.
 - Owner/admin aktif boleh memulakan pembatalan melalui PM dengan
   `/delete BSE-TG-<update_id> <alasan>`. Bot mesti meminta pengesahan kedua
@@ -119,6 +119,38 @@ merekodkan kontrak implementasi TEST dan bukan sumber ZASS yang kedua.
   ID Drive, status pengesahan, dan audit. Retrieval menghantar semula bukti
   melalui PM; tiada pautan Drive awam. v1.0 tidak melaksanakan OCR, Vision,
   pembacaan kandungan dokumen, atau transkripsi video.
+
+### Lock PoC 2026-09-29: owner manual, sejarah, laporan Gemini, dan EC
+
+- Bagi PoC ini, Project Owner akan menetapkan setiap user yang perlu akses penuh
+  sebagai owner/admin secara manual dalam registry TEST. Tiada bypass role atau
+  capability `POC_VIEW_ALL` ditambah. Owner/admin manual menerima semua kuasa
+  owner sedia ada, termasuk retrieval rekod restricted, pendaftaran/role, dan
+  `/delete`; user tidak aktif kekal tiada akses.
+- Telegram command registry TEST memaparkan hanya command yang telah
+  diimplementasi: `/start`, `/status`, `/summary`, `/retrieve`, dan `/delete`.
+  `/history` serta `/report` ditambah ke menu serentak dengan implementasinya.
+  Semua command tetap menguatkuasakan autorisasi pada runtime; menu bukan bukti
+  kuasa akses.
+- `\/history YYYY-MM-DD` dan `\/history YYYY-MM` ialah retrieval PM owner/admin
+  bagi rekod TEST canonical dalam sela masa tepat. Secara default ia mengecualikan
+  `VOIDED_TEST`, mengehadkan respons, menyembunyikan mesej asal/payload penuh,
+  dan mengaudit setiap permintaan. Rekod restricted termasuk Claim tersedia
+  kepada owner/admin manual sepanjang PoC ini.
+- `\/report YYYY-MM-DD` dan `\/report YYYY-MM` ialah laporan ad-hoc PM sahaja.
+  Ia menghantar fakta canonical TEST dalam sela masa tersebut bersama komen
+  Gemini yang dilabel jelas; Gemini tidak boleh mencipta fakta, approval, atau
+  domain write. Ia bukan scheduler.
+- Banci Pokok dan Rawatan sebenar khusus (2C-2A/2C-2B) ditangguh. Buat sementara,
+  laporan tersebut boleh direkodkan sebagai `Observation` yang disahkan
+  penghantar, tanpa writer Banci atau Rawatan khusus.
+- EC Leaching ialah target TEST baharu yang berasingan, `EC_Leachate_Log`.
+  Tarikh `DD/MM/YYYY` dan sesi `PAGI` atau `PETANG` adalah wajib. `x : x`
+  disimpan sebagai `NOT_MEASURED`; `AK` bermaksud `EC_IN_NEXT=0` dengan status
+  `AK_ZERO`; nombor EC ialah perpuluhan bukan-negatif. `M7 - x : x` direkod
+  sebagai scope modul `M7`, bukan diteka sebagai plot. Setiap laporan EC ialah
+  batch atomik yang memerlukan pengesahan penghantar, hash/dedup, audit, dan
+  `ScriptLock`; ia tidak menulis production.
 
 Butiran pelaksanaan, dependency, dan status roadmap direkodkan dalam
 `docs/DEVELOPMENT_STATUS.md`.
