@@ -84,6 +84,10 @@ merekodkan kontrak implementasi TEST dan bukan sumber ZASS yang kedua.
   merekod audit. Permintaan sama dalam group hanya menerima arahan minimum
   untuk menggunakan PM; tiada data plot dipulangkan. Ia bukan query bebas ke
   Sheet, Drive, atau rekod production.
+- `\/summary plot M<n>P<n>,M<n>P<n>` menerima dua hingga enam plot unik melalui
+  PM yang sama dan memberi rumusan padat setiap plot. Ia menggunakan bacaan
+  dan audit TEST yang sama; status tiada atau ambigu dipaparkan sebagai keadaan
+  selamat, bukan diteka.
 - Rekod daripada group yang berkategori standard (`FIELD_OPERATION`,
   `CROP_CONDITION`, `ASSET_EQUIPMENT`) boleh diretrieve melalui PM oleh semua
   user aktif. Rekod PM ialah `PRIVATE_SUBMISSION`; ia hanya boleh diretrieve
