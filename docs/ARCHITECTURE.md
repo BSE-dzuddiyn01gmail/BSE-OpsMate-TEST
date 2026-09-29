@@ -106,8 +106,8 @@ merekodkan kontrak implementasi TEST dan bukan sumber ZASS yang kedua.
   write atau production write.
 - File Evidence menerima hanya PHOTO, DOCUMENT, atau VIDEO bersama caption/teks.
   Kategori dicadang daripada caption/teks sahaja dan penghantar mengesahkan
-  `Benar` / `Betulkan` / `Buang` dalam chat asal. Hanya selepas `Benar`, fail
-  asal disimpan ke Drive TEST bersama metadata/audit; `Buang` tidak menghasilkan
+  `Benar` / `Betulkan` / `Batal` dalam chat asal. Hanya selepas `Benar`, fail
+  asal disimpan ke Drive TEST bersama metadata/audit; `Batal` tidak menghasilkan
   Drive write atau makluman group.
 - PM submission hanya dibenarkan untuk `REGISTERED_ACTIVE`; ia menggunakan kad
   pengesahan PM. Selepas `Benar`, owner/admin menerima butiran PM dan group
