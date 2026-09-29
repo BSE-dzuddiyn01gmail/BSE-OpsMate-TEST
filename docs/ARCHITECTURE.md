@@ -20,8 +20,8 @@ Scope lock platform yang diluluskan untuk roadmap ialah:
 
 - satu Google Task List bagi setiap pemilik; reminder dihantar secara private
   kepada pemilik/admin dengan dedup bagi setiap penerima;
-- retrieval text dalam group menjawab melalui DM dahulu; group hanya menerima
-  pengesahan atau arahan Start jika DM gagal;
+- retrieval hanya diterima dalam PM bot daripada user berdaftar dan aktif;
+  permintaan retrieval dalam group ditolak dengan arahan minimum untuk PM;
 - reporting text-only: daily delta, Friday Report A (provisional + approved),
   dan Report B (approved-only). Waktu scheduler belum diputuskan;
 - File Evidence: gambar/dokumen/video -> caption -> kategori dicadang ->
@@ -57,6 +57,49 @@ Scope lock platform yang diluluskan untuk roadmap ialah:
   yang boleh dibatalkan dengan selamat (Inventory, Claim, dan proposal Aset).
   Target yang mempunyai ledger atau kesan rentas-rekod ditolak dengan jelas
   sehingga void writer khususnya direka; ia tidak boleh dipadam secara senyap.
+
+## Keputusan terkunci: pendaftaran, PM retrieval, dan File Evidence
+
+Keputusan ini dikunci oleh Project Owner pada 2026-09-29 untuk implementasi
+TEST seterusnya. ZASS autoritatif kekal di stable repository; bahagian ini
+merekodkan kontrak implementasi TEST dan bukan sumber ZASS yang kedua.
+
+- `/start BSE_TEST` dalam PM mencipta `REGISTRATION_PENDING`, bukan akses.
+  Semua owner/admin aktif menerima kad `TERIMA` / `TOLAK`; keputusan sah
+  pertama adalah idempotent, menutup kad lain, dan menghantar tepat satu
+  makluman kepada pemohon. Identiti access control ialah Telegram numeric user
+  ID; username dan nama paparan hanyalah label.
+- `TERIMA` menghasilkan `REGISTERED_ACTIVE` dan memautkan user kepada
+  `DEFAULT_OPERATIONAL_GROUP_CHAT_ID` tunggal. Bot tidak menambah ahli ke
+  group Telegram; PM penerimaan hanya mengarahkan ahli baharu untuk join group
+  melalui owner/admin. `TOLAK` atau `REGISTRATION_PENDING` tidak boleh
+  retrieval atau menghantar data/evidence PM; respons minimum ialah meminta
+  mereka menghubungi admin.
+- Retrieval hanya melalui PM dan hanya untuk `REGISTERED_ACTIVE`. Permintaan
+  group tidak mengembalikan data, summary, bukti, atau pautan Drive. Owner/admin
+  sahaja boleh menerima, menolak, menyahaktifkan, atau menukar peranan user.
+- Rekod daripada group yang berkategori standard (`FIELD_OPERATION`,
+  `CROP_CONDITION`, `ASSET_EQUIPMENT`) boleh diretrieve melalui PM oleh semua
+  user aktif. Rekod PM ialah `PRIVATE_SUBMISSION`; ia hanya boleh diretrieve
+  oleh penghantar asal dan owner/admin. `INVENTORY_CLAIM`, `ADMIN_DOCUMENT`,
+  dan `UNCLASSIFIED_TEST` ialah restricted bagi retrieval walaupun asalnya
+  group. Sistem tidak boleh menyembunyikan mesej asal yang pengguna sendiri
+  telah hantar ke group.
+- File Evidence menerima hanya PHOTO, DOCUMENT, atau VIDEO bersama caption/teks.
+  Kategori dicadang daripada caption/teks sahaja dan penghantar mengesahkan
+  `Benar` / `Betulkan` / `Buang` dalam chat asal. Hanya selepas `Benar`, fail
+  asal disimpan ke Drive TEST bersama metadata/audit; `Buang` tidak menghasilkan
+  Drive write atau makluman group.
+- PM submission hanya dibenarkan untuk `REGISTERED_ACTIVE`; ia menggunakan kad
+  pengesahan PM. Selepas `Benar`, owner/admin menerima butiran PM dan group
+  lalai menerima makluman minimum dengan nama penghantar sahaja—tanpa caption,
+  kategori, rujukan, nama fail, pautan Drive, atau kandungan. Fail dan butiran
+  private kekal diketahui oleh penghantar serta owner/admin sahaja.
+- Metadata minimum Evidence ialah evidence ID, rujukan sumber, identiti/chat/
+  message asal, masa, caption asal, jenis/mime/nama/saiz, kategori, visibility,
+  ID Drive, status pengesahan, dan audit. Retrieval menghantar semula bukti
+  melalui PM; tiada pautan Drive awam. v1.0 tidak melaksanakan OCR, Vision,
+  pembacaan kandungan dokumen, atau transkripsi video.
 
 Butiran pelaksanaan, dependency, dan status roadmap direkodkan dalam
 `docs/DEVELOPMENT_STATUS.md`.
