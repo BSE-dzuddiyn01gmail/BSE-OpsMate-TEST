@@ -42,6 +42,7 @@ function bseTelegramTestAllowedSendChat_(chatId){
   const legacy=(PropertiesService.getScriptProperties().getProperty('TELEGRAM_TEST_CHAT_ID')||'').trim();
   if(id&&id===legacy)return true;
   if(bseTelegramTestApprovalGroupIds_().includes(id))return true;
+  try{if(typeof bseTelegramRegistrationKnownPrivateChat_==='function'&&bseTelegramRegistrationKnownPrivateChat_(id))return true;}catch(_){ }
   try{return bseTestOwnerRows_(boundTestBook_()).some(owner=>String(owner[3]||'').trim()===id);}catch(_){return false;}
 }
 function bseTelegramTestSafeInboundPrivateReply_(payload,enabled){const chatId=String(payload&&payload.chat_id||'').trim(),reply=payload&&payload.reply_parameters;return enabled&&/^\d+$/.test(chatId)&&reply&&Number.isSafeInteger(Number(reply.message_id))&&Number(reply.message_id)>0;}

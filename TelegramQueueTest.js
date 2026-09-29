@@ -24,7 +24,7 @@ function receiveBseTelegramTest() {
     let added=0;
     for(const update of updates) {
       if(!Number.isSafeInteger(update.update_id))throw new Error('Update ID tidak sah.');
-      if(update.callback_query){bseTelegramApprovalPersistCallback_(book,update);props.setProperty('BSE_TELEGRAM_OFFSET',String(update.update_id+1));continue;}
+      if(update.callback_query){if(typeof bseTelegramRegistrationIsCallback_==='function'&&bseTelegramRegistrationIsCallback_(update))bseTelegramRegistrationPersistCallback_(book,update);else bseTelegramApprovalPersistCallback_(book,update);props.setProperty('BSE_TELEGRAM_OFFSET',String(update.update_id+1));continue;}
       const m=update.message;
       const privateStart=m&&m.chat&&m.from&&m.chat.type==='private'&&String(m.chat.id)===String(m.from.id)&&bseTelegramPrivateOptInCommand_(m.text,me.username);
       const allowedPrivate=m&&m.chat&&m.from&&m.chat.type==='private'&&String(m.chat.id)===chat&&String(m.from.id)===user;
@@ -35,12 +35,13 @@ function receiveBseTelegramTest() {
       const inventoryClarificationReply=replyId&&typeof bseInventoryFindClarificationPrompt_==='function'&&bseInventoryFindClarificationPrompt_(book,sourceChat,reporter,replyId);
       const inventoryClarificationPrompt=inventoryClarificationReply||(!replyId&&typeof bseInventoryFindActiveClarificationPrompt_==='function'&&bseInventoryFindActiveClarificationPrompt_(book,sourceChat,reporter));
       const correctionSession=!replyId&&typeof bseTelegramCorrectionSessionMatch_==='function'?bseTelegramCorrectionSessionMatch_(book,sourceChat,reporter,saved):{match:null,ambiguous:false};
-      if(privateStart){bseTelegramPrivateOptInRegister_(book,m,me.username);}
+      if(privateStart){const registration=typeof bseTelegramRegistrationHandleStart_==='function'?bseTelegramRegistrationHandleStart_(book,m,me.username):bseTelegramPrivateOptInRegister_(book,m,me.username);if(registration&&registration.text)bseTelegramPrivateCommandReply_(m,registration.text);}
       else if(m&&m.chat&&m.from&&m.chat.type==='private'&&bseTelegramDeleteCommand_(m.text)){
         const deletion=bseTelegramDeleteReceiveCommand_(book,m);
         if(deletion.text)bseTelegramPrivateCommandReply_(m,deletion.text);
       }
       else if(rejectPromptReply){rejectReplies.push({chat_id:sourceChat,message_id:String(m.message_id),reply_to_message_id:replyId,user_id:reporter,text:typeof m.text==='string'?m.text:''});}
+      else if(m&&m.chat&&m.from&&m.chat.type==='private'&&!allowedPrivate&&typeof bseTelegramRegistrationPrivateAccess_==='function'){const access=bseTelegramRegistrationPrivateAccess_(book,m);if(access&&access.text)bseTelegramPrivateCommandReply_(m,access.text);}
       else if(inventoryClarificationPrompt&&m&&m.chat&&m.from&&!m.from.is_bot&&(allowedPrivate||allowedGroup)&&!seen.has(String(update.update_id))) {
         const text=typeof m.text==='string'?m.text:'',meta=JSON.stringify({source_chat_id:sourceChat,source_chat_type:String(m.chat.type||''),reporter_telegram_user_id:reporter,reporter_username:String(m.from.username||''),reporter_name:[m.from.first_name,m.from.last_name].filter(Boolean).join(' ')});
         const questionMessageId=replyId||String(inventoryClarificationPrompt.row[7]);
@@ -95,6 +96,7 @@ function receiveBseTelegramTest() {
     console.log('TELEGRAM_RECEIVE_DONE: '+JSON.stringify({stored:added,replies_sent:sent,queue:'TELEGRAM_TEST_QUEUE',production_write:false}));
   } catch(error) {receiverError=error;console.log('TELEGRAM_RECEIVE_ERROR: '+String(error.message||''));} finally {lock.releaseLock();}
   try{processBseTelegramApprovalCallbacks();}catch(error){console.log('APPROVAL_CALLBACK_PENDING: '+String(error.message||''));}
+  try{if(typeof processBseTelegramRegistrationCallbacks==='function')processBseTelegramRegistrationCallbacks();}catch(error){console.log('REGISTRATION_CALLBACK_PENDING: '+String(error.message||''));}
   try{if(typeof processBseTelegramInventoryClarificationReplies==='function')processBseTelegramInventoryClarificationReplies();}catch(error){console.log('INVENTORY_CLARIFICATION_PENDING: '+String(error.message||''));}
   rejectReplies.forEach(reply=>{try{bseTelegramApprovalRejectReason_(reply);}catch(error){console.log('APPROVAL_REJECT_REASON_PENDING: '+String(error.message||''));}});
   if(receiverError)throw receiverError;
