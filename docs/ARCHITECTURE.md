@@ -95,6 +95,15 @@ merekodkan kontrak implementasi TEST dan bukan sumber ZASS yang kedua.
   dan `UNCLASSIFIED_TEST` ialah restricted bagi retrieval walaupun asalnya
   group. Sistem tidak boleh menyembunyikan mesej asal yang pengguna sendiri
   telah hantar ke group.
+- `\/retrieve BSE-TG-<update_id>` ialah retrieval PM tepat bagi rekod Telegram
+  yang telah `REPORTER_CONFIRMED`. Ia membaca barisan queue dan kad pengesahan
+  TEST sahaja, mengesahkan hash payload, dan menolak rujukan kabur, belum
+  disahkan, atau payload yang tidak utuh. `FIELD_OPERATION` dan
+  `ASSET_EQUIPMENT` daripada group boleh dibaca oleh semua ahli aktif;
+  `INVENTORY_CLAIM`, `PRIVATE_SUBMISSION`, dan `UNCLASSIFIED_TEST` hanya untuk
+  penghantar asal atau owner/admin. Ringkasan menggunakan field calon yang
+  dibenarkan sahaja—bukan mesej asal—dan setiap cubaan diaudit tanpa domain
+  write atau production write.
 - File Evidence menerima hanya PHOTO, DOCUMENT, atau VIDEO bersama caption/teks.
   Kategori dicadang daripada caption/teks sahaja dan penghantar mengesahkan
   `Benar` / `Betulkan` / `Buang` dalam chat asal. Hanya selepas `Benar`, fail
@@ -259,6 +268,9 @@ Helaian operasi TEST utama ialah:
 - `TEST_TELEGRAM_RETRIEVAL_AUDIT` - audit PM retrieval bagi Evidence TEST,
   termasuk user/chat peminta, rujukan, outcome, dan sebab penolakan. Ia tidak
   menyimpan atau mendedahkan pautan Drive.
+- `TEST_TELEGRAM_RECORD_RETRIEVAL_AUDIT` - audit PM bagi
+  `\/retrieve BSE-TG-<update_id>`, termasuk outcome dan sebab akses; ia tidak
+  menyimpan mesej asal atau payload penuh.
 - `TEST_TELEGRAM_PLOT_STATUS_AUDIT` - audit `/status plot` TEST, termasuk
   identiti/chat peminta, plot, outcome, dan sebab. Ia bukan rekod domain.
 - `TEST_MEASUREMENT_LOG` - rekod Measurement yang diluluskan dalam TEST.
