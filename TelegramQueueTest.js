@@ -24,7 +24,7 @@ function receiveBseTelegramTest() {
     let added=0;
     for(const update of updates) {
       if(!Number.isSafeInteger(update.update_id))throw new Error('Update ID tidak sah.');
-      if(update.callback_query){if(typeof bseTelegramRegistrationIsCallback_==='function'&&bseTelegramRegistrationIsCallback_(update))bseTelegramRegistrationPersistCallback_(book,update);else bseTelegramApprovalPersistCallback_(book,update);props.setProperty('BSE_TELEGRAM_OFFSET',String(update.update_id+1));continue;}
+      if(update.callback_query){if(typeof bseTelegramEvidenceIsCallback_==='function'&&bseTelegramEvidenceIsCallback_(update))bseTelegramEvidencePersistCallback_(book,update);else if(typeof bseTelegramRegistrationIsCallback_==='function'&&bseTelegramRegistrationIsCallback_(update))bseTelegramRegistrationPersistCallback_(book,update);else bseTelegramApprovalPersistCallback_(book,update);props.setProperty('BSE_TELEGRAM_OFFSET',String(update.update_id+1));continue;}
       const m=update.message;
       const privateStart=m&&m.chat&&m.from&&m.chat.type==='private'&&String(m.chat.id)===String(m.from.id)&&bseTelegramPrivateOptInCommand_(m.text,me.username);
       const allowedPrivate=m&&m.chat&&m.from&&m.chat.type==='private'&&String(m.chat.id)===chat&&String(m.from.id)===user;
@@ -41,6 +41,8 @@ function receiveBseTelegramTest() {
         if(deletion.text)bseTelegramPrivateCommandReply_(m,deletion.text);
       }
       else if(rejectPromptReply){rejectReplies.push({chat_id:sourceChat,message_id:String(m.message_id),reply_to_message_id:replyId,user_id:reporter,text:typeof m.text==='string'?m.text:''});}
+      else if(typeof bseTelegramEvidenceCorrectionReceive_==='function'&&bseTelegramEvidenceCorrectionReceive_(book,m).handled){}
+      else if(typeof bseTelegramEvidenceReceiveMessage_==='function'){const evidence=bseTelegramEvidenceReceiveMessage_(book,m);if(evidence&&evidence.handled){if(evidence.text)bseTelegramPrivateCommandReply_(m,evidence.text);}}
       else if(m&&m.chat&&m.from&&m.chat.type==='private'&&!allowedPrivate&&typeof bseTelegramRegistrationPrivateAccess_==='function'){const access=bseTelegramRegistrationPrivateAccess_(book,m);if(access&&access.text)bseTelegramPrivateCommandReply_(m,access.text);}
       else if(inventoryClarificationPrompt&&m&&m.chat&&m.from&&!m.from.is_bot&&(allowedPrivate||allowedGroup)&&!seen.has(String(update.update_id))) {
         const text=typeof m.text==='string'?m.text:'',meta=JSON.stringify({source_chat_id:sourceChat,source_chat_type:String(m.chat.type||''),reporter_telegram_user_id:reporter,reporter_username:String(m.from.username||''),reporter_name:[m.from.first_name,m.from.last_name].filter(Boolean).join(' ')});
@@ -97,6 +99,7 @@ function receiveBseTelegramTest() {
   } catch(error) {receiverError=error;console.log('TELEGRAM_RECEIVE_ERROR: '+String(error.message||''));} finally {lock.releaseLock();}
   try{processBseTelegramApprovalCallbacks();}catch(error){console.log('APPROVAL_CALLBACK_PENDING: '+String(error.message||''));}
   try{if(typeof processBseTelegramRegistrationCallbacks==='function')processBseTelegramRegistrationCallbacks();}catch(error){console.log('REGISTRATION_CALLBACK_PENDING: '+String(error.message||''));}
+  try{const evidenceCallbacks=processBseTelegramEvidenceCallbacks();console.log('EVIDENCE_CALLBACK_DONE: '+JSON.stringify(evidenceCallbacks));}catch(error){console.log('EVIDENCE_CALLBACK_PENDING: '+String(error.message||''));}
   try{if(typeof processBseTelegramInventoryClarificationReplies==='function')processBseTelegramInventoryClarificationReplies();}catch(error){console.log('INVENTORY_CLARIFICATION_PENDING: '+String(error.message||''));}
   rejectReplies.forEach(reply=>{try{bseTelegramApprovalRejectReason_(reply);}catch(error){console.log('APPROVAL_REJECT_REASON_PENDING: '+String(error.message||''));}});
   if(receiverError)throw receiverError;
