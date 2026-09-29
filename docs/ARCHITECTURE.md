@@ -244,6 +244,11 @@ Helaian operasi TEST utama ialah:
   `COMPLETED`; completion tidak mengubah queue atau rekod domain.
 - `TELEGRAM_TEST_REMINDER_DEDUP_AUDIT` - marker/audit tahan lama satu cubaan
   per rujukan bagi satu tarikh MYT.
+- `TEST_TELEGRAM_EVIDENCE` - metadata Evidence TEST selepas pengesahan
+  penghantar; ID fail Telegram kekal sebagai sumber untuk penghantaran semula.
+- `TEST_TELEGRAM_RETRIEVAL_AUDIT` - audit PM retrieval bagi Evidence TEST,
+  termasuk user/chat peminta, rujukan, outcome, dan sebab penolakan. Ia tidak
+  menyimpan atau mendedahkan pautan Drive.
 - `TEST_MEASUREMENT_LOG` - rekod Measurement yang diluluskan dalam TEST.
 - `TEST_MEASUREMENT_REVIEW` - keputusan reviewer Measurement, alasan, hash, dan
   payload audit.

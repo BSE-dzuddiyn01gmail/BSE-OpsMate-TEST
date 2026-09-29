@@ -40,6 +40,10 @@ function receiveBseTelegramTest() {
         const deletion=bseTelegramDeleteReceiveCommand_(book,m);
         if(deletion.text)bseTelegramPrivateCommandReply_(m,deletion.text);
       }
+      else if(typeof bseTelegramEvidenceRetrieve_==='function'&&typeof bseTelegramEvidenceRetrieveCommand_==='function'&&bseTelegramEvidenceRetrieveCommand_(m&&m.text)){
+        const retrieval=bseTelegramEvidenceRetrieve_(book,m);
+        if(retrieval.handled&&retrieval.text)bseTelegramPrivateCommandReply_(m,retrieval.text);
+      }
       else if(rejectPromptReply){rejectReplies.push({chat_id:sourceChat,message_id:String(m.message_id),reply_to_message_id:replyId,user_id:reporter,text:typeof m.text==='string'?m.text:''});}
       else if(typeof bseTelegramEvidenceCorrectionReceive_==='function'&&bseTelegramEvidenceCorrectionReceive_(book,m).handled){}
       else if(typeof bseTelegramEvidenceReceiveMessage_==='function'){const evidence=bseTelegramEvidenceReceiveMessage_(book,m);if(evidence&&evidence.handled){if(evidence.text)bseTelegramPrivateCommandReply_(m,evidence.text);}}
