@@ -140,7 +140,8 @@ merekodkan kontrak implementasi TEST dan bukan sumber ZASS yang kedua.
 - `\/report YYYY-MM-DD` dan `\/report YYYY-MM` ialah laporan ad-hoc PM sahaja.
   Ia menghantar fakta canonical TEST dalam sela masa tersebut bersama komen
   Gemini yang dilabel jelas; Gemini tidak boleh mencipta fakta, approval, atau
-  domain write. Ia bukan scheduler.
+  domain write. Kegagalan Gemini tidak menghalang fakta canonical daripada
+  dipulangkan, dan alasan kegagalan diaudit tanpa credential. Ia bukan scheduler.
 - Banci Pokok dan Rawatan sebenar khusus (2C-2A/2C-2B) ditangguh. Buat sementara,
   laporan tersebut boleh direkodkan sebagai `Observation` yang disahkan
   penghantar, tanpa writer Banci atau Rawatan khusus.

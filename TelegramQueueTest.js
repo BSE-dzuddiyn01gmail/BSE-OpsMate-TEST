@@ -40,6 +40,10 @@ function receiveBseTelegramTest() {
         const deletion=bseTelegramDeleteReceiveCommand_(book,m);
         if(deletion.text)bseTelegramPrivateCommandReply_(m,deletion.text);
       }
+      else if(typeof bseTelegramReportRetrieve_==='function'&&typeof bseTelegramReportCommand_==='function'&&bseTelegramReportCommand_(m&&m.text)&&(m&&m.chat&&(m.chat.type==='private'||allowedGroup))){
+        const report=bseTelegramReportRetrieve_(book,m);
+        if(report.handled&&report.text){if(m.chat.type==='private')bseTelegramPrivateCommandReply_(m,report.text);else bseTelegramApi_('sendMessage',{chat_id:sourceChat,text:report.text,reply_parameters:{message_id:Number(m.message_id),allow_sending_without_reply:true}});}
+      }
       else if(typeof bseTelegramHistoryRetrieve_==='function'&&typeof bseTelegramHistoryCommand_==='function'&&bseTelegramHistoryCommand_(m&&m.text)&&(m&&m.chat&&(m.chat.type==='private'||allowedGroup))){
         const history=bseTelegramHistoryRetrieve_(book,m);
         if(history.handled&&history.text){if(m.chat.type==='private')bseTelegramPrivateCommandReply_(m,history.text);else bseTelegramApi_('sendMessage',{chat_id:sourceChat,text:history.text,reply_parameters:{message_id:Number(m.message_id),allow_sending_without_reply:true}});}
