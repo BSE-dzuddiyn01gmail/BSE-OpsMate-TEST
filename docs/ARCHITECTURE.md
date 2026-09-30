@@ -151,7 +151,13 @@ merekodkan kontrak implementasi TEST dan bukan sumber ZASS yang kedua.
   `AK_ZERO`; nombor EC ialah perpuluhan bukan-negatif. `M7 - x : x` direkod
   sebagai scope modul `M7`, bukan diteka sebagai plot. Setiap laporan EC ialah
   batch atomik yang memerlukan pengesahan penghantar, hash/dedup, audit, dan
-  `ScriptLock`; ia tidak menulis production.
+  `ScriptLock`; ia tidak menulis production. Jika penghantar memilih
+  `Betulkan`, mesej biasa seterusnya mesti merupakan laporan EC penuh yang
+  menggantikan laporan asal. Hanya laporan pembetulan terbaru diparse; laporan
+  asal dan pembetulan tidak pernah digabungkan sebagai set bacaan yang sama.
+  EC yang dihantar dari group ialah `FIELD_OPERATION` standard untuk retrieval
+  ahli aktif yang dibenarkan; penghantaran PM kekal `PRIVATE_SUBMISSION` dan
+  tertakluk kepada polisi asal penghantar/owner.
 
 Butiran pelaksanaan, dependency, dan status roadmap direkodkan dalam
 `docs/DEVELOPMENT_STATUS.md`.
@@ -177,7 +183,10 @@ Telegram private chat TEST
    luar skop, dan tidak dihantar ke Gemini atau worker. Jika bukan Site A tetapi
    menyebut `Kolam <nombor>` dengan jelas, mesej ditandakan
    `ASSET_OBSERVATION_UNSUPPORTED_TEST`, menerima acknowledgement pemerhatian
-   aset belum disokong, dan juga berhenti sebelum Gemini atau worker.
+   aset belum disokong, dan juga berhenti sebelum Gemini atau worker. Hanya
+   mesej yang mempunyai lampiran PHOTO, DOCUMENT, atau VIDEO boleh dituntut oleh
+   laluan File Evidence; mesej teks biasa yang bukan command atau sesi pembetulan
+   sentiasa diteruskan ke queue laporan.
 2. `processBseTelegramTestQueue()` memproses satu laporan queue pada satu masa.
    Ia menjalankan `bseUnifiedProcess_()` dan `bseUnifiedGuard_()`, kemudian
    menyimpan `candidate_json`.
@@ -304,6 +313,11 @@ Helaian operasi TEST utama ialah:
 - `TEST_TELEGRAM_RECORD_RETRIEVAL_AUDIT` - audit PM bagi
   `\/retrieve BSE-TG-<update_id>`, termasuk outcome dan sebab akses; ia tidak
   menyimpan mesej asal atau payload penuh.
+- `TEST_EC_LEACHATE` - satu row bagi setiap bacaan dalam batch EC yang telah
+  disahkan penghantar; setiap row membawa source key, batch ID, hash, status
+  pengesahan TEST, dan `production_write=false`.
+- `TEST_EC_LEACHATE_REVIEW` - satu audit idempotent bagi setiap batch EC,
+  termasuk hash kanonik, keputusan, bilangan row, dan state write.
 - `TEST_TELEGRAM_PLOT_STATUS_AUDIT` - audit `/status plot` TEST, termasuk
   identiti/chat peminta, plot, outcome, dan sebab. Ia bukan rekod domain.
 - `TEST_MEASUREMENT_LOG` - rekod Measurement yang diluluskan dalam TEST.

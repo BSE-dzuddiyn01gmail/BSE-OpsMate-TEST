@@ -47,10 +47,12 @@ function processBseTelegramTestQueue() {
   if(!job.replyOnly) {
     let encoded;
     try {
-      const rawResult=bseUnifiedProcess_(job.input,job.receivedAt);
+      // A recognised EC report is parsed locally; it never leaves TEST for Gemini.
+      const ecResult=typeof bseEcLeachateParseJob_==='function'?bseEcLeachateParseJob_(job):typeof bseEcLeachateParseMessage_==='function'?bseEcLeachateParseMessage_(job.input):null;
+      const rawResult=ecResult||bseUnifiedProcess_(job.input,job.receivedAt);
       if(typeof bseInventoryApplyReporterSnapshot_==='function')bseInventoryApplyReporterSnapshot_(rawResult,job);
       if(typeof bseInventoryApplyResponsibleSnapshot_==='function')bseInventoryApplyResponsibleSnapshot_(rawResult,job);
-      result=bseTelegramWorkerFinalizeResult_(book,rawResult,job);
+      result=ecResult?bseEcLeachateFinalizeResult_(rawResult,job):bseTelegramWorkerFinalizeResult_(book,rawResult,job);
       inventoryCheck=typeof bseInventoryValidateResult_==='function'?bseInventoryValidateResult_(result,job.receivedAt,'BSE-TG-'+job.id):null;
       encoded=JSON.stringify(result);if(encoded.length>45000)throw new Error('Output too long');
     } catch(_) {
@@ -166,6 +168,7 @@ function bseTelegramResultText_(reference,result,question) {
       const parts=[f.record_type||'',f.plot_id||''].filter(Boolean);
       if(f.measurement_type||(f.value!=null&&f.value!==''))parts.push([f.measurement_type,f.value,f.unit_or_scale].filter(v=>v||v===0).join(' ').trim());
       if(f.item_name||(f.quantity!=null&&f.quantity!==''))parts.push([f.item_name,f.quantity,f.unit].filter(v=>v||v===0).join(' ').trim());
+      if(f.record_type==='EC_LEACHATE')parts.push(['EC Leaching',f.event_date,f.session,Array.isArray(f.readings)?f.readings.length+' bacaan':''].filter(Boolean).join(' '));
       if(parts.length)lines.push(parts.join(' | '));
     });
   }
@@ -206,7 +209,7 @@ function bseTelegramReportContext_(rows,current) {
 
 function bseTelegramQuestion_(result) {
   if(!result||result.validation!=='NEED_INFO'||!Array.isArray(result.candidates))return '';
-  const labels={event_date:'tarikh laporan (hari/bulan/tahun)',plot_id:'plot yang betul',measurement_type:'jenis bacaan',value:'nilai bacaan',item_name:'nama bahan',quantity:'jumlah penggunaan sebenar',unit:'unit penggunaan',decision_subject:'perkara cadangan',approval_status:'status semakan',observation_facts:'fakta gejala/pemerhatian',crop:'jenis tanaman',variety:'varieti tanaman',batch_match:'batch Crop Batch dan allocation ACTIVE yang sepadan'};
+  const labels={event_date:'tarikh laporan (hari/bulan/tahun)',plot_id:'plot yang betul',measurement_type:'jenis bacaan',value:'nilai bacaan',item_name:'nama bahan',quantity:'jumlah penggunaan sebenar',unit:'unit penggunaan',decision_subject:'perkara cadangan',approval_status:'status semakan',observation_facts:'fakta gejala/pemerhatian',crop:'jenis tanaman',variety:'varieti tanaman',batch_match:'batch Crop Batch dan allocation ACTIVE yang sepadan',session:'sesi Pagi atau Petang',ec_readings:'baris bacaan EC yang sah',ec_full_report:'laporan EC penuh untuk pembetulan',duplicate_scope:'scope modul/plot yang tidak berganda',module_scope:'baris scope modul hanya boleh menggunakan x : x'};
   const missing=[];
   result.candidates.forEach(c=>{if(c&&Array.isArray(c.missing))c.missing.forEach(k=>{if(labels[k])missing.push(labels[k]);});});
   if(!missing.length)return 'Maklumat laporan belum cukup atau tidak konsisten. Sila semak semula laporan dan jawab dengan maklumat yang diminta.';

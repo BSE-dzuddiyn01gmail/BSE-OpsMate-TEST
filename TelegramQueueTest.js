@@ -35,6 +35,7 @@ function receiveBseTelegramTest() {
       const inventoryClarificationReply=replyId&&typeof bseInventoryFindClarificationPrompt_==='function'&&bseInventoryFindClarificationPrompt_(book,sourceChat,reporter,replyId);
       const inventoryClarificationPrompt=inventoryClarificationReply||(!replyId&&typeof bseInventoryFindActiveClarificationPrompt_==='function'&&bseInventoryFindActiveClarificationPrompt_(book,sourceChat,reporter));
       const correctionSession=!replyId&&typeof bseTelegramCorrectionSessionMatch_==='function'?bseTelegramCorrectionSessionMatch_(book,sourceChat,reporter,saved):{match:null,ambiguous:false};
+      let evidence=null;
       if(privateStart){const registration=typeof bseTelegramRegistrationHandleStart_==='function'?bseTelegramRegistrationHandleStart_(book,m,me.username):bseTelegramPrivateOptInRegister_(book,m,me.username);if(registration&&registration.text)bseTelegramPrivateCommandReply_(m,registration.text);}
       else if(m&&m.chat&&m.from&&m.chat.type==='private'&&bseTelegramDeleteCommand_(m.text)){
         const deletion=bseTelegramDeleteReceiveCommand_(book,m);
@@ -62,7 +63,7 @@ function receiveBseTelegramTest() {
       }
       else if(rejectPromptReply){rejectReplies.push({chat_id:sourceChat,message_id:String(m.message_id),reply_to_message_id:replyId,user_id:reporter,text:typeof m.text==='string'?m.text:''});}
       else if(typeof bseTelegramEvidenceCorrectionReceive_==='function'&&bseTelegramEvidenceCorrectionReceive_(book,m).handled){}
-      else if(typeof bseTelegramEvidenceReceiveMessage_==='function'){const evidence=bseTelegramEvidenceReceiveMessage_(book,m);if(evidence&&evidence.handled){if(evidence.text)bseTelegramPrivateCommandReply_(m,evidence.text);}}
+      else if((evidence=typeof bseTelegramEvidenceReceiveMessage_==='function'?bseTelegramEvidenceReceiveMessage_(book,m):null)&&evidence.handled){if(evidence.text)bseTelegramPrivateCommandReply_(m,evidence.text);}
       else if(m&&m.chat&&m.from&&m.chat.type==='private'&&!allowedPrivate&&typeof bseTelegramRegistrationPrivateAccess_==='function'){const access=bseTelegramRegistrationPrivateAccess_(book,m);if(access&&access.text)bseTelegramPrivateCommandReply_(m,access.text);}
       else if(inventoryClarificationPrompt&&m&&m.chat&&m.from&&!m.from.is_bot&&(allowedPrivate||allowedGroup)&&!seen.has(String(update.update_id))) {
         const text=typeof m.text==='string'?m.text:'',meta=JSON.stringify({source_chat_id:sourceChat,source_chat_type:String(m.chat.type||''),reporter_telegram_user_id:reporter,reporter_username:String(m.from.username||''),reporter_name:[m.from.first_name,m.from.last_name].filter(Boolean).join(' ')});
@@ -168,7 +169,8 @@ function runBseTelegramSetupMarkerHarnessTests(){
     {id:'non-marker reports retain queue path',pass:/const values=\[String\(update\.update_id\)/.test(source)},
     {id:'cleanup is narrow and parser-free',pass:/String\(row\[4\]\)!=='P1-C TEST setup'/.test(cleanup)&&/IGNORED_SETUP_MARKER/.test(cleanup)&&!/bseUnifiedProcess_|processBseTelegramTestQueue|bseTelegramApproval/.test(cleanup)},
     {id:'cleanup has one lock and no Tasks',pass:(cleanup.match(/LockService\.getScriptLock/g)||[]).length===1&&!/Tasks\./.test(cleanup)},
-    {id:'non-owner private command reply is bound to its incoming message',pass:/bseTelegramPrivateCommandReply_\(m,deletion\.text\)/.test(source)&&/reply_parameters/.test(bseTelegramPrivateCommandReply_.toString())&&/__bse_inbound_private_reply:true/.test(bseTelegramPrivateCommandReply_.toString())}
+    {id:'non-owner private command reply is bound to its incoming message',pass:/bseTelegramPrivateCommandReply_\(m,deletion\.text\)/.test(source)&&/reply_parameters/.test(bseTelegramPrivateCommandReply_.toString())&&/__bse_inbound_private_reply:true/.test(bseTelegramPrivateCommandReply_.toString())},
+    {id:'text without evidence attachment continues to the report queue',pass:/let evidence=null;/.test(source)&&/evidence=typeof bseTelegramEvidenceReceiveMessage_/.test(source)&&/&&evidence\.handled/.test(source)}
   ];
   console.log('SETUP_MARKER_HARNESS: '+JSON.stringify(tests));const failures=tests.filter(test=>!test.pass);if(failures.length)throw new Error('Setup marker harness gagal: '+failures.map(test=>test.id).join(', '));return tests;
 }
