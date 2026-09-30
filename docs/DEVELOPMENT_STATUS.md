@@ -27,8 +27,8 @@
 | PM retrieval — `/retrieve BSE-TG-<update_id>` | Runtime TEST PASS | Retrieval PM default-deny untuk rekod yang sudah `REPORTER_CONFIRMED`, dengan hash integrity, audit berasingan, dan ringkasan field terkawal. Runtime owner/admin membuktikan Claim `BSE-TG-146694289` dipulangkan sebagai `INVENTORY_CLAIM` tanpa domain/production write. Rekod group `FIELD_OPERATION` / `ASSET_EQUIPMENT` tersedia kepada ahli aktif; Claim, private, dan rekod tidak dikelas kekal restricted kepada penghantar asal atau owner/admin. |
 | PM history — `/history YYYY-MM-DD` atau `/history YYYY-MM` | TEST runtime PASS (`1490167`) | PM owner/admin sahaja. Membaca rekod canonical `REPORTER_CONFIRMED` yang hash-integritinya sah dan Evidence `CONFIRMED_TEST`; mengecualikan `VOIDED_TEST`, menyembunyikan mesej asal/payload penuh, mengehadkan paparan, dan merekod audit retrieval berasingan. |
 | PM report — `/report YYYY-MM-DD` atau `/report YYYY-MM` | TEST runtime PASS | PM owner/admin sahaja. Memulangkan fakta canonical TEST yang terkawal, diikuti komen Gemini yang dilabel bukan fakta dan tidak boleh mengubah rekod. Kegagalan Gemini kekal fail-selamat: fakta dipulangkan, manakala audit menyimpan status tanpa credential. |
-| PoC retrieval sejarah / laporan Gemini / EC Leaching | TEST runtime PASS | Owner/admin ditetapkan manual untuk PoC; `/history` dan `/report` kekal PM owner-only. EC Leaching menerima tarikh/sesi/bacaan deterministik, kad penghantar `Benar`/`Betulkan`/`Batal`, batch atomik, audit/hash/idempotence, serta PM `/retrieve BSE-TG-...` dan `/history`. Banci/Rawatan khusus kekal ditangguh sebagai Observation sementara. |
-| Fasa 2C-2A — Banci Pokok | Belum committed | Implemented locally / pending runtime; regression PASS. |
+| PoC retrieval sejarah / laporan Gemini / EC Leaching | TEST runtime PASS | Owner/admin ditetapkan manual untuk PoC; `/history` dan `/report` kekal PM owner-only. EC Leaching menerima tarikh/sesi/bacaan deterministik, kad penghantar `Benar`/`Betulkan`/`Batal`, batch atomik, audit/hash/idempotence, serta PM `/retrieve BSE-TG-...` dan `/history`. Rawatan khusus kekal ditangguh sebagai Observation sementara. |
+| Fasa 2C-2A — Banci Pokok | TEST runtime PASS, belum committed | Regression/harness PASS; runtime membuktikan laporan satu plot, `Batal` audit sahaja, `Betulkan` one-shot, pengaktifan allocation melalui Transplant, serta Banci dua plot. `BSE-TG-146694362` diretrieve sebagai `M2P1: 93 pokok`; `BSE-TG-146694372` diretrieve sebagai `M2P1: 92 pokok, M2P2: 88 pokok`. Semua bukti kekal `production_write:false`. |
 | Fasa 2C-2B — Rawatan sebenar | Belum committed | Implemented locally / pending runtime; regression PASS. |
 
 Fasa 2C-2A ialah sebahagian kecil 2C-2. Baki 2C-2 dan Fasa 2C-3 belum mula.
@@ -40,7 +40,7 @@ dicapai.
 
 | Trek | Urutan kerja bergantung | Status semasa |
 |---|---|---|
-| A. Domain | 2C-2A -> 2C-2B -> baki 2C-2 -> 2C-3 -> Fasa 3–8 | 2C-2A dan 2C-2B implemented locally / pending runtime; baki 2C-2, 2C-3, dan Fasa 3–8 belum dimulakan. |
+| A. Domain | 2C-2A -> 2C-2B -> baki 2C-2 -> 2C-3 -> Fasa 3–8 | 2C-2A runtime PASS tetapi belum committed; 2C-2B implemented locally / pending runtime; baki 2C-2, 2C-3, dan Fasa 3–8 belum dimulakan. |
 | B. Platform | File Evidence architecture -> registration gate -> File Evidence TEST -> PM retrieval -> Task List mengikut pemilik -> text reporting | Registration gate, intake/Drive Evidence, dan PM retrieval telah diimplementasi serta runtime-tested dalam TEST. Setiap langkah kekal bergantung pada kontrak keselamatan, schema, dan acceptance test yang jelas. |
 
 Tiada waktu scheduler laporan ditetapkan dalam dokumen ini. Ia mesti diputuskan

@@ -19,10 +19,13 @@ function bsePromptPlantCensusReference_(title){
 }
 
 function bseReviewTelegramPlantCensusByReference_(decision,reference,note){
-  bseCensusRequireDecision_(decision,note);if(!/^BSE-TG-\d+$/.test(reference))throw new Error('Rujukan mesti tepat dalam format BSE-TG-<update_id>.');
-  const lock=LockService.getScriptLock();if(!lock.tryLock(10000))throw new Error('Barisan sedang dikemas kini. Cuba semula.');
-  try{
-    const book=boundTestBook_(),queue=bseTelegramQueue_(book),rows=bseCropBatchRows_(queue,BSE_TG_QUEUE_HEADERS.length),updateId=reference.slice(7);
+  const actor=bseCropBatchReviewer_();
+  return bseReviewWithLock_({reference:reference,action:decision,actor_type:'APPS_SCRIPT',actor_id:actor,actor_name:actor,reason:String(note||''),source_channel:'APPS_SCRIPT'},bsePlantCensusReviewCore_);
+}
+
+function bsePlantCensusReviewCore_(book,reviewContext){
+    bseReviewContextValidate_(reviewContext);const decision=reviewContext.action,reference=reviewContext.reference,note=reviewContext.reason;
+    bseCensusRequireDecision_(decision,note);const queue=bseTelegramQueue_(book),rows=bseCropBatchRows_(queue,BSE_TG_QUEUE_HEADERS.length),updateId=reference.slice(7);
     const matches=rows.map((row,index)=>({row:row,sheetRow:index+2})).filter(item=>String(item.row[0])===updateId);
     if(matches.length!==1)throw new Error('Rujukan mesti sepadan dengan tepat satu baris TELEGRAM_TEST_QUEUE.');
     const selected=matches[0],status=String(selected.row[6]||''),root=bseCropBatchRoot_(rows,selected.row),proposal=bseCensusProposal_(selected.row[9],root.provenance);
@@ -43,7 +46,7 @@ function bseReviewTelegramPlantCensusByReference_(decision,reference,note){
     if(status!=='NEEDS_HUMAN_REVIEW')throw new Error('Baris queue bukan NEEDS_HUMAN_REVIEW.');
     if(censusRows.some(row=>String(row[0])===sourceKey))throw new Error('Konflik rekod Banci Pokok TEST sedia ada.');
     const match=bseCensusMatchForBook_(book,proposal);if(decision==='APPROVED'&&match.kind!=='UNIQUE')throw new Error('Batch Crop Batch atau allocation ACTIVE tidak sepadan; tiada write dibuat.');
-    const reviewer=bseCropBatchReviewer_(),stamp=new Date().toISOString(),reviewOut=reviewSheet||bseCropBatchSheet_(book,'TEST_PLANT_CENSUS_REVIEW',BSE_PLANT_CENSUS_REVIEW_HEADERS);let censusIds=[],batchId='';
+    const reviewer=bseReviewContextActorLabel_(reviewContext),stamp=new Date().toISOString(),reviewOut=reviewSheet||bseCropBatchSheet_(book,'TEST_PLANT_CENSUS_REVIEW',BSE_PLANT_CENSUS_REVIEW_HEADERS);let censusIds=[],batchId='';
     if(decision==='APPROVED'){
       const censusOut=censusSheet||bseCropBatchSheet_(book,'TEST_PLANT_CENSUS',BSE_PLANT_CENSUS_HEADERS);batchId=match.batch_id;censusIds=bseCensusNextIds_(censusRows,proposal.fields.event_date,proposal.entries.length);
       proposal.entries.forEach((entry,index)=>{const allocation=match.allocations.find(item=>item.plot_id===entry.plot_id);bseCropBatchAppend_(censusOut,[sourceKey,root.updateId,censusIds[index],batchId,allocation.allocation_id,entry.plot_id,proposal.fields.event_date,proposal.fields.crop,entry.living_plant_count,'VERIFIED_TEST',root.provenance,stamp,reviewer,payloadHash]);});
@@ -53,14 +56,13 @@ function bseReviewTelegramPlantCensusByReference_(decision,reference,note){
     SpreadsheetApp.flush();queue.getRange(selected.sheetRow,7).setValue(expectedStatus);SpreadsheetApp.flush();
     console.log('PLANT_CENSUS_REVIEW_SAVED: '+JSON.stringify({source_key:sourceKey,decision:decision,production_write:false}));
     return {source_key:sourceKey,decision:decision,duplicate:false,production_write:false};
-  }finally{lock.releaseLock();}
 }
 
 function bseCensusRequireDecision_(decision,note){if(!['APPROVED','REJECTED'].includes(decision))throw new Error('Keputusan semakan tidak sah.');if(decision==='REJECTED'&&!String(note||'').trim())throw new Error('Sebab penolakan wajib diisi.');}
 function bseCensusProposal_(encoded,original){
   let result;try{result=JSON.parse(String(encoded||''));}catch(_){throw new Error('candidate_json tidak sah.');}
   if(!result||typeof result!=='object'||Array.isArray(result)||Object.keys(result).some(key=>!['validation','production_write','candidates'].includes(key))||result.validation!=='PASS'||result.production_write!==false||!Array.isArray(result.candidates)||result.candidates.length!==1)throw new Error('Hasil Banci Pokok TEST tidak sah.');
-  const candidate=result.candidates[0],fields=candidate&&candidate.fields,allowed=['project_id','system_year','event_date','record_type','verification_status','original_note','crop','census_entries'];
+  const candidate=result.candidates[0],fields=candidate&&candidate.fields,allowed=['project_id','system_year','event_date','record_type','verification_status','original_note','crop','census_entries','responsible_name','responsible_source','responsible_telegram_user_id'];
   if(!candidate||candidate.target!=='Plant_Census_Log'||candidate.validation!=='PASS'||!Array.isArray(candidate.missing)||candidate.missing.length||!fields||typeof fields!=='object'||Array.isArray(fields)||Object.keys(fields).some(key=>!allowed.includes(key))||fields.project_id!=='BSE_SB'||fields.system_year!==2026||fields.record_type!=='PLANT_CENSUS'||fields.verification_status!=='PROVISIONAL'||fields.original_note!==original||typeof fields.crop!=='string'||!fields.crop.trim()||!bseCropBatchDate_(fields.event_date)||!Array.isArray(fields.census_entries)||!fields.census_entries.length)throw new Error('Calon Banci Pokok gagal semakan kontrak TEST.');
   const entries=fields.census_entries.map(entry=>({plot_id:String(entry&&entry.plot_id||''),living_plant_count:entry&&entry.living_plant_count})).sort((left,right)=>bseCropBatchPlotCompare_(left.plot_id,right.plot_id));
   if(entries.some(entry=>!/^M[1-9]\d*P[1-9]\d*$/.test(entry.plot_id)||!Number.isInteger(entry.living_plant_count)||entry.living_plant_count<0)||new Set(entries.map(entry=>entry.plot_id)).size!==entries.length||JSON.stringify(entries)!==JSON.stringify(fields.census_entries))throw new Error('Entry Banci Pokok mesti unik, diisih kanonik, dan mempunyai integer sifar atau lebih.');
@@ -98,9 +100,11 @@ function runBsePlantCensusReviewHarnessTests(){
   const tests=[],pass=(id,fn)=>{try{fn();tests.push({id:id,pass:true});}catch(error){tests.push({id:id,pass:false,error:error.message});}};
   pass('ACTIVE single and multi-plot PASS',()=>{const single={fields:Object.assign({},proposal.fields,{census_entries:[proposal.entries[0]]}),entries:[proposal.entries[0]]};if(guarded.validation!=='PASS'||guarded.candidates[0].validation!=='PASS'||bseCensusFindMatches_(single,[batch],allocations,reviews,active).kind!=='UNIQUE'||bseCensusFindMatches_(proposal,[batch],allocations,reviews,active).kind!=='UNIQUE')throw new Error('ACTIVE match gagal');});
   pass('zero count remains valid for human review',()=>{if(proposal.entries[1].living_plant_count!==0||proposal.canonical.production_write!==false)throw new Error('count sifar tidak sah');});
+  pass('reporter metadata does not invalidate a canonical Census candidate',()=>{const withReporter=JSON.parse(JSON.stringify(guarded));Object.assign(withReporter.candidates[0].fields,{responsible_name:'tester',responsible_source:'REPORTER_DEFAULT',responsible_telegram_user_id:'123'});if(bseCensusProposal_(JSON.stringify(withReporter),note).entries.length!==2)throw new Error('metadata penghantar ditolak');});
   pass('PLANNED, none, multiple, crop mismatch become NEED_INFO',()=>{const planned=bseCensusFindMatches_(proposal,[batch],allocations,reviews,[]).kind,none=bseCensusFindMatches_(proposal,[],allocations,reviews,active).kind,multiple=bseCensusFindMatches_(proposal,[batch,batch.slice()],allocations,reviews,active).kind,crop=bseCensusFindMatches_({fields:Object.assign({},proposal.fields,{crop:'Peria'}),entries:proposal.entries},[batch],allocations,reviews,active).kind,needInfo=bseCensusApplyMatch_(JSON.parse(JSON.stringify(guarded)),{kind:planned});if(planned!=='NONE'||none!=='NONE'||multiple!=='MULTIPLE'||crop!=='NONE'||needInfo.validation!=='NEED_INFO'||needInfo.candidates[0].missing.indexOf('batch_match')<0)throw new Error('guard batch tidak ketat');});
   pass('missing or ambiguous count is rejected',()=>{const missing=bsePlantCensusSource_('BANCI POKOK\nJenis Tanaman: Timun\nM2P1: pokok'),ambiguous=bsePlantCensusSource_('BANCI POKOK\nJenis Tanaman: Timun\nM2 P1: 96 pokok');if(missing.ok||ambiguous.ok)throw new Error('format samar diterima');});
   pass('approve retry is idempotent and baseline unchanged',()=>{const hash='h',ids=['BSE-SB-PC-20260922-001','BSE-SB-PC-20260922-002'],rows=proposal.entries.map((entry,index)=>['sk','2',ids[index],batch[2],allocations[index][3],entry.plot_id,'2026-09-22','Timun',entry.living_plant_count,'VERIFIED_TEST','','','','h']),before=JSON.stringify({rows:rows,allocations:allocations});bseCensusAssertApprovedRows_(rows,'sk',hash,proposal.entries,ids,batch[2]);if(before!==JSON.stringify({rows:rows,allocations:allocations}))throw new Error('retry atau baseline berubah');});
   pass('reject requires reason and audit-only contract',()=>{let failed=false;try{bseCensusRequireDecision_('REJECTED','');}catch(_){failed=true;}if(!failed||/Tasks\./.test(bseReviewTelegramPlantCensusByReference_.toString()))throw new Error('reject atau Google Tasks tidak selamat');});
+  pass('legacy wrapper delegates and core has no UI Session or lock',()=>{const wrapper=bseReviewTelegramPlantCensusByReference_.toString(),core=bsePlantCensusReviewCore_.toString();if(!/bseReviewWithLock_/.test(wrapper)||/SpreadsheetApp\.getUi|Session\.|LockService/.test(core))throw new Error('pemisahan wrapper/core tidak selamat');});
   console.log('PLANT_CENSUS_REVIEW_HARNESS: '+JSON.stringify(tests));const failures=tests.filter(test=>!test.pass);if(failures.length)throw new Error('Plant Census review harness gagal: '+failures.map(test=>test.id).join(', '));return tests;
 }

@@ -20,10 +20,12 @@ function bsePromptTransplantReference_(title){
 }
 
 function bseReviewTelegramTransplantByReference_(decision,reference,note){
-  bseTransplantRequireDecision_(decision,note);if(!/^BSE-TG-\d+$/.test(reference))throw new Error('Rujukan mesti tepat dalam format BSE-TG-<update_id>.');
-  const lock=LockService.getScriptLock();if(!lock.tryLock(10000))throw new Error('Barisan sedang dikemas kini. Cuba semula.');
-  try{
-    const book=boundTestBook_(),queue=bseTelegramQueue_(book),rows=bseCropBatchRows_(queue,BSE_TG_QUEUE_HEADERS.length),updateId=reference.slice(7);
+  const actor=bseCropBatchReviewer_();
+  return bseReviewWithLock_({reference:reference,action:decision,actor_type:'APPS_SCRIPT',actor_id:actor,actor_name:actor,reason:String(note||''),source_channel:'APPS_SCRIPT'},bseTransplantReviewCore_);
+}
+function bseTransplantReviewCore_(book,reviewContext){
+    bseReviewContextValidate_(reviewContext);const decision=reviewContext.action,reference=reviewContext.reference,note=reviewContext.reason;
+    bseTransplantRequireDecision_(decision,note);const queue=bseTelegramQueue_(book),rows=bseCropBatchRows_(queue,BSE_TG_QUEUE_HEADERS.length),updateId=reference.slice(7);
     const matches=rows.map((row,index)=>({row:row,sheetRow:index+2})).filter(item=>String(item.row[0])===updateId);
     if(matches.length!==1)throw new Error('Rujukan mesti sepadan dengan tepat satu baris TELEGRAM_TEST_QUEUE.');
     const selected=matches[0],status=String(selected.row[6]||''),root=bseCropBatchRoot_(rows,selected.row),proposal=bseTransplantProposal_(selected.row[9],root.provenance);
@@ -48,7 +50,7 @@ function bseReviewTelegramTransplantByReference_(decision,reference,note){
     const payloadHash=bseCropBatchHash_({proposal:proposal.canonical,batch_id:match.batch_id});
     if(status!=='NEEDS_HUMAN_REVIEW')throw new Error('Baris queue bukan NEEDS_HUMAN_REVIEW.');
     if(events.some(row=>String(row[0])===sourceKey)||statusEvents.some(row=>String(row[0])===sourceKey))throw new Error('Konflik rekod Transplant TEST sedia ada.');
-    const reviewer=bseCropBatchReviewer_(),stamp=new Date().toISOString(),reviewOut=reviewSheet||bseCropBatchSheet_(book,'TEST_TRANSPLANT_REVIEW',BSE_TRANSPLANT_REVIEW_HEADERS);let eventId='';
+    const reviewer=bseReviewContextActorLabel_(reviewContext),stamp=new Date().toISOString(),reviewOut=reviewSheet||bseCropBatchSheet_(book,'TEST_TRANSPLANT_REVIEW',BSE_TRANSPLANT_REVIEW_HEADERS);let eventId='';
     if(decision==='APPROVED'){
       const eventOut=eventSheet||bseCropBatchSheet_(book,'TEST_TRANSPLANT_EVENT',BSE_TRANSPLANT_EVENT_HEADERS),statusOut=statusSheet||bseCropBatchSheet_(book,'TEST_ALLOCATION_STATUS_EVENT',BSE_ALLOCATION_STATUS_EVENT_HEADERS);
       eventId=bseTransplantNextId_(events,proposal.fields.event_date);
@@ -60,7 +62,6 @@ function bseReviewTelegramTransplantByReference_(decision,reference,note){
     SpreadsheetApp.flush();queue.getRange(selected.sheetRow,7).setValue(expectedStatus);SpreadsheetApp.flush();
     console.log('TRANSPLANT_REVIEW_SAVED: '+JSON.stringify({source_key:sourceKey,decision:decision,production_write:false}));
     return {source_key:sourceKey,batch_id:match.batch_id,transplant_event_id:eventId,decision:decision,duplicate:false,production_write:false};
-  }finally{lock.releaseLock();}
 }
 
 function bseTransplantRequireDecision_(decision,note){if(!['APPROVED','REJECTED'].includes(decision))throw new Error('Keputusan semakan tidak sah.');if(decision==='REJECTED'&&!String(note||'').trim())throw new Error('Sebab penolakan wajib diisi.');}
@@ -68,7 +69,7 @@ function bseTransplantNormalizeCrop_(value){return String(value==null?'':value).
 function bseTransplantProposal_(encoded,original){
   let result;try{result=JSON.parse(String(encoded||''));}catch(_){throw new Error('candidate_json tidak sah.');}
   if(!result||typeof result!=='object'||Array.isArray(result)||Object.keys(result).some(key=>!['validation','production_write','candidates'].includes(key))||result.validation!=='PASS'||result.production_write!==false||!Array.isArray(result.candidates)||result.candidates.length!==1)throw new Error('Hasil Transplant TEST tidak sah.');
-  const candidate=result.candidates[0],f=candidate&&candidate.fields,allowed=['project_id','system_year','event_date','record_type','verification_status','original_note','event_type','crop','variety','plot_ids','event_status'];
+  const candidate=result.candidates[0],f=candidate&&candidate.fields,allowed=['project_id','system_year','event_date','record_type','verification_status','original_note','event_type','crop','variety','plot_ids','event_status','responsible_name','responsible_source','responsible_telegram_user_id'];
   if(!candidate||candidate.target!=='Transplant_Event_Log'||candidate.validation!=='PASS'||!Array.isArray(candidate.missing)||candidate.missing.length||!f||typeof f!=='object'||Array.isArray(f)||Object.keys(f).some(key=>!allowed.includes(key))||f.project_id!=='BSE_SB'||f.system_year!==2026||f.record_type!=='TRANSPLANT_EVENT'||f.verification_status!=='PROVISIONAL'||f.original_note!==original||f.event_type!=='TRANSPLANT'||f.event_status!=='PROPOSED'||typeof f.crop!=='string'||!f.crop.trim()||typeof f.variety!=='string'||!bseCropBatchDate_(f.event_date)||!Array.isArray(f.plot_ids)||!f.plot_ids.length)throw new Error('Calon Transplant gagal semakan kontrak TEST.');
   const plots=f.plot_ids.slice().map(String).sort(bseTransplantPlotCompare_);
   if(new Set(plots).size!==plots.length||plots.some(plot=>!/^M[1-9]\d*P[1-9]\d*$/.test(plot))||JSON.stringify(plots)!==JSON.stringify(f.plot_ids))throw new Error('Plot Transplant mesti unik dan diisih secara kanonik.');
@@ -111,11 +112,13 @@ function runBseTransplantReviewHarnessTests(){
   const tests=[],pass=(id,fn)=>{try{fn();tests.push({id:id,pass:true});}catch(error){tests.push({id:id,pass:false,error:error.message});}};
   pass('compact M1P34 expands',()=>{if(proposal.plots.join('|')!=='M1P3|M1P4')throw new Error('plot salah');});
   pass('crop required',()=>{const bad=JSON.parse(JSON.stringify(candidate));bad.candidates[0].fields.crop='';let failed=false;try{bseTransplantProposal_(JSON.stringify(bad),note);}catch(_){failed=true;}if(!failed)throw new Error('crop kosong diterima');});
+  pass('reporter metadata does not invalidate a canonical Transplant candidate',()=>{const withReporter=JSON.parse(JSON.stringify(candidate));Object.assign(withReporter.candidates[0].fields,{responsible_name:'tester',responsible_source:'REPORTER_DEFAULT',responsible_telegram_user_id:'123'});if(bseTransplantProposal_(JSON.stringify(withReporter),note).plots.join('|')!=='M1P3|M1P4')throw new Error('metadata penghantar ditolak');});
   pass('Telegram Malaysia date fallback',()=>{if(bseTransplantMalaysiaDate_('2026-09-11T17:00:00.000Z')!=='2026-09-12')throw new Error('fallback tarikh Malaysia salah');});
   pass('unique batch match',()=>{if(bseTransplantFindMatches_(proposal,[batch],allocations,[review],[]).kind!=='UNIQUE')throw new Error('padanan unik gagal');});
   pass('no and multiple batch match',()=>{if(bseTransplantFindMatches_(proposal,[],allocations,[review],[]).kind!=='NONE'||bseTransplantFindMatches_(proposal,[batch,batch.slice()],allocations,[review],[]).kind!=='MULTIPLE')throw new Error('padanan tiada/berganda gagal');});
   pass('planned baseline is not mutated',()=>{const before=JSON.stringify(allocations);const match=bseTransplantFindMatches_(proposal,[batch],allocations,[review],[]);const statusRows=match.allocations.map(a=>[proposal.plots.indexOf(a.plot_id),a.allocation_id,a.plot_id,'PLANNED','ACTIVE']);if(statusRows.length!==2||before!==JSON.stringify(allocations))throw new Error('baseline berubah');});
   pass('reject reason and audit-only contract',()=>{let failed=false;try{bseTransplantRequireDecision_('REJECTED','');}catch(_){failed=true;}if(!failed)throw new Error('reject tanpa alasan diterima');if(proposal.canonical.production_write!==false||/Tasks\./.test(bseReviewTelegramTransplantByReference_.toString()))throw new Error('production atau Google Task approval');});
+  pass('legacy wrapper delegates and core has no UI Session or lock',()=>{const wrapper=bseReviewTelegramTransplantByReference_.toString(),core=bseTransplantReviewCore_.toString();if(!/bseReviewWithLock_/.test(wrapper)||/SpreadsheetApp\.getUi|Session\.|LockService/.test(core))throw new Error('pemisahan wrapper/core tidak selamat');});
   pass('retry approve idempotent shape',()=>{const hash='h',eventId='BSE-SB-TR-20260912-001',events=[['sk','2',eventId,batch[2],'2026-09-12','TRANSPLANT','Timun Lokal','','M1P3|M1P4','COMPLETED','VERIFIED_TEST','','','','h']],statuses=[['sk','2','a',eventId,batch[2],batch[2]+'-PA-001','M1P3','PLANNED','ACTIVE','','','h'],['sk','2','b',eventId,batch[2],batch[2]+'-PA-002','M1P4','PLANNED','ACTIVE','','','h']],before=JSON.stringify({events:events,statuses:statuses});bseTransplantAssertApprovedRows_(events,statuses,'sk',hash,proposal.plots,eventId,batch[2]);if(before!==JSON.stringify({events:events,statuses:statuses}))throw new Error('retry menambah row');});
   console.log('TRANSPLANT_REVIEW_HARNESS: '+JSON.stringify(tests));const failures=tests.filter(test=>!test.pass);if(failures.length)throw new Error('Transplant review harness gagal: '+failures.map(test=>test.id).join(', '));return tests;
 }

@@ -142,9 +142,9 @@ merekodkan kontrak implementasi TEST dan bukan sumber ZASS yang kedua.
   Gemini yang dilabel jelas; Gemini tidak boleh mencipta fakta, approval, atau
   domain write. Kegagalan Gemini tidak menghalang fakta canonical daripada
   dipulangkan, dan alasan kegagalan diaudit tanpa credential. Ia bukan scheduler.
-- Banci Pokok dan Rawatan sebenar khusus (2C-2A/2C-2B) ditangguh. Buat sementara,
-  laporan tersebut boleh direkodkan sebagai `Observation` yang disahkan
-  penghantar, tanpa writer Banci atau Rawatan khusus.
+- Banci Pokok khusus (2C-2A) telah runtime-tested dalam TEST. Rawatan sebenar
+  khusus (2C-2B) masih ditangguh; buat sementara, laporan Rawatan boleh direkodkan
+  sebagai `Observation` yang disahkan penghantar, tanpa writer Rawatan khusus.
 - EC Leaching ialah target TEST baharu yang berasingan, `EC_Leachate_Log`.
   Tarikh `DD/MM/YYYY` dan sesi `PAGI` atau `PETANG` adalah wajib. `x : x`
   disimpan sebagai `NOT_MEASURED`; `AK` bermaksud `EC_IN_NEXT=0` dengan status
@@ -441,7 +441,7 @@ hanya menulis audit. Identity dedup ialah rujukan Telegram asal +
 dan menjadikan retry idempotent. Tiada reviewer/writer Fasa 2C-1 memanggil
 Google Tasks atau menulis production.
 
-### Fasa 2C-2A: Banci Pokok TEST — implemented locally / pending runtime
+### Fasa 2C-2A: Banci Pokok TEST — regression dan runtime PASS
 
 Laporan hanya diterima apabila mempunyai baris jelas `BANCI POKOK`, satu
 `Jenis Tanaman: <crop>`, dan satu atau lebih baris tepat
