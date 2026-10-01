@@ -16,6 +16,12 @@ handover. Sebarang peralihan ke production memerlukan production gate berasingan
 pilot kerja sebenar, dan penerimaan BSE yang didokumenkan. Google Task completion
 bukan approval, access control, atau bukti penerimaan pilot.
 
+Keputusan terkunci bagi shadow pilot MVP selepas checkpoint TEST ialah di
+[`SHADOW_PILOT_MVP_HANDOVER.md`](SHADOW_PILOT_MVP_HANDOVER.md). Ia menetapkan
+tiga environment (`TEST`, `PILOT_TEST`, `PILOT_OPERATION`), questionnaire
+penilaian admin/team operasi, dan handover kepada BSE/team IT tanpa penulisan
+atau integrasi terus ke sistem rasmi BSE.
+
 Scope lock platform yang diluluskan untuk roadmap ialah:
 
 - satu Google Task List bagi setiap pemilik; reminder dihantar secara private
