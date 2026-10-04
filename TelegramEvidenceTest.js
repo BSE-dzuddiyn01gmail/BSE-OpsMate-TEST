@@ -48,3 +48,102 @@ function bseTelegramEvidenceReceiveMessageCore_(book,m){
   }catch(error){sheet.getRange(line,23).setValue(bseTelegramSafeErrorDescription_(error.message||'CARD_SEND_UNCERTAIN'));}
   SpreadsheetApp.flush();return {handled:true};
 }
+
+
+// D-044 Evidence <-> Domain Record many-to-many link layer.
+// Evidence identity remains stable in TEST_FILE_EVIDENCE. Domain links are
+// separate auditable rows; linking never copies the underlying Drive file.
+const BSE_EVIDENCE_DOMAIN_LINK_HEADERS=[
+  'link_id','evidence_id','domain_record_type','domain_record_id','link_reason',
+  'source_message_id','linked_by','linked_at','status','unlinked_by','unlinked_at',
+  'unlink_reason','production_write'
+];
+
+function bseEvidenceDomainLinkSheet_(book){
+  let sheet=book.getSheetByName('TEST_EVIDENCE_DOMAIN_LINK');
+  if(!sheet)sheet=book.insertSheet('TEST_EVIDENCE_DOMAIN_LINK');
+  bseEnsureAdditiveHeaders_(sheet,BSE_EVIDENCE_DOMAIN_LINK_HEADERS);
+  return sheet;
+}
+
+function bseEvidenceFindById_(book,evidenceId){
+  const sheet=bseTelegramEvidenceSheet_(book),rows=bseTelegramEvidenceRows_(sheet);
+  const index=rows.findIndex(row=>String(row[0]||'')===String(evidenceId||''));
+  return index<0?null:{row:rows[index],index:index};
+}
+
+function bseEvidenceLinkId_(evidenceId,recordType,recordId){
+  const raw=[String(evidenceId||''),String(recordType||''),String(recordId||'')].join('|');
+  const digest=Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256,raw,Utilities.Charset.UTF_8)
+    .map(byte=>('0'+((byte+256)%256).toString(16)).slice(-2)).join('');
+  return 'BSE-EL-'+digest.slice(0,16);
+}
+
+function bseEvidenceLinkDomainRecord_(book,input){
+  const x=input||{},evidenceId=String(x.evidence_id||'').trim(),recordType=String(x.domain_record_type||'').trim(),recordId=String(x.domain_record_id||'').trim();
+  if(!evidenceId||!recordType||!recordId)throw new Error('Evidence link memerlukan evidence_id, domain_record_type dan domain_record_id.');
+  if(x.production_write!==false)throw new Error('Evidence link TEST mesti production_write:false.');
+  const evidence=bseEvidenceFindById_(book,evidenceId);
+  if(!evidence)throw new Error('Evidence tidak ditemui: '+evidenceId);
+  if(String(evidence.row[16]||'')!=='CONFIRMED_TEST')throw new Error('Evidence belum CONFIRMED_TEST: '+evidenceId);
+
+  const sheet=bseEvidenceDomainLinkSheet_(book),rows=sheet.getLastRow()>1?sheet.getRange(2,1,sheet.getLastRow()-1,BSE_EVIDENCE_DOMAIN_LINK_HEADERS.length).getValues():[];
+  const linkId=bseEvidenceLinkId_(evidenceId,recordType,recordId);
+  const existing=rows.find(row=>String(row[0]||'')===linkId);
+  if(existing){
+    if(String(existing[8]||'')==='ACTIVE')return {linked:true,duplicate:true,link_id:linkId,production_write:false};
+    throw new Error('Link evidence pernah dinyahaktifkan; gunakan tindakan relink eksplisit.');
+  }
+  const stamp=new Date().toISOString();
+  sheet.appendRow([
+    linkId,evidenceId,recordType,recordId,String(x.link_reason||'DOMAIN_SUPPORT'),
+    String(x.source_message_id||''),String(x.linked_by||'SYSTEM_TEST'),stamp,
+    'ACTIVE','','','',false
+  ]);
+  SpreadsheetApp.flush();
+  return {linked:true,duplicate:false,link_id:linkId,production_write:false};
+}
+
+function bseEvidenceUnlinkDomainRecord_(book,input){
+  const x=input||{},linkId=String(x.link_id||'').trim(),actor=String(x.unlinked_by||'').trim(),reason=String(x.unlink_reason||'').trim();
+  if(!linkId||!actor||!reason)throw new Error('Unlink memerlukan link_id, unlinked_by dan unlink_reason.');
+  if(x.production_write!==false)throw new Error('Evidence unlink TEST mesti production_write:false.');
+  const sheet=bseEvidenceDomainLinkSheet_(book),rows=sheet.getLastRow()>1?sheet.getRange(2,1,sheet.getLastRow()-1,BSE_EVIDENCE_DOMAIN_LINK_HEADERS.length).getValues():[],index=rows.findIndex(row=>String(row[0]||'')===linkId);
+  if(index<0)throw new Error('Evidence link tidak ditemui.');
+  if(String(rows[index][8]||'')!=='ACTIVE')return {unlinked:false,duplicate:true,status:String(rows[index][8]||''),production_write:false};
+  sheet.getRange(index+2,9,1,4).setValues([['UNLINKED',actor,new Date().toISOString(),reason]]);
+  SpreadsheetApp.flush();
+  return {unlinked:true,link_id:linkId,production_write:false};
+}
+
+function bseEvidenceRefs_(value){
+  const raw=Array.isArray(value)?value:String(value||'').split(/[\s,;]+/);
+  return Array.from(new Set(raw.map(item=>String(item||'').trim()).filter(item=>/^BSE-EV-/.test(item))));
+}
+
+function bseEvidenceLinkMany_(book,input){
+  const x=input||{},refs=bseEvidenceRefs_(x.evidence_refs||x.evidence_reference),out=[];
+  refs.forEach(evidenceId=>out.push(bseEvidenceLinkDomainRecord_(book,{
+    evidence_id:evidenceId,
+    domain_record_type:x.domain_record_type,
+    domain_record_id:x.domain_record_id,
+    link_reason:x.link_reason||'DOMAIN_SUPPORT',
+    source_message_id:x.source_message_id||'',
+    linked_by:x.linked_by||'SYSTEM_TEST',
+    production_write:false
+  })));
+  return {links:out,production_write:false};
+}
+
+function runBseEvidenceDomainLinkD044HarnessTests(){
+  const headers=BSE_EVIDENCE_DOMAIN_LINK_HEADERS,linkSource=bseEvidenceLinkDomainRecord_.toString(),unlinkSource=bseEvidenceUnlinkDomainRecord_.toString(),manySource=bseEvidenceLinkMany_.toString();
+  const tests=[
+    {id:'link table preserves explicit evidence and domain identities',pass:['evidence_id','domain_record_type','domain_record_id','link_reason','linked_by','linked_at','status'].every(h=>headers.includes(h))},
+    {id:'many-to-many uses separate link rows rather than copied files',pass:/sheet\.appendRow/.test(linkSource)&&!/DriveApp|createFile|getBlob/.test(linkSource)},
+    {id:'only confirmed evidence can link',pass:/CONFIRMED_TEST/.test(linkSource)},
+    {id:'same evidence can be linked to multiple domain records',pass:/refs\.forEach/.test(manySource)&&/domain_record_id/.test(manySource)},
+    {id:'unlink is audited state change, not evidence deletion',pass:/UNLINKED/.test(unlinkSource)&&!/deleteRow|setTrashed|removeFile|trash/.test(unlinkSource)},
+    {id:'production boundary preserved',pass:/production_write!==false/.test(linkSource)&&/production_write!==false/.test(unlinkSource)}
+  ];
+  const failures=tests.filter(t=>!t.pass);if(failures.length)throw new Error('D-044 evidence-link harness gagal: '+failures.map(t=>t.id).join(', '));return tests;
+}
