@@ -47,9 +47,12 @@ function processBseTelegramTestQueue() {
   if(!job.replyOnly) {
     let encoded;
     try {
-      // A recognised EC report is parsed locally; it never leaves TEST for Gemini.
+      // Deterministic-first router: recognised EC and Inventory/Claim traffic is
+      // resolved locally before any Gemini fallback. Confidence controls UX only;
+      // deterministic validation and reporter confirmation remain authoritative.
       const ecResult=typeof bseEcLeachateParseJob_==='function'?bseEcLeachateParseJob_(job):typeof bseEcLeachateParseMessage_==='function'?bseEcLeachateParseMessage_(job.input):null;
-      const rawResult=ecResult||bseUnifiedProcess_(job.input,job.receivedAt);
+      const inventoryResult=!ecResult&&typeof bseInventoryParseMessage_==='function'?bseInventoryParseMessage_(job.input,job.receivedAt):null;
+      const rawResult=ecResult||inventoryResult||bseUnifiedProcess_(job.input,job.receivedAt);
       if(typeof bseInventoryApplyReporterSnapshot_==='function')bseInventoryApplyReporterSnapshot_(rawResult,job);
       if(typeof bseInventoryApplyResponsibleSnapshot_==='function')bseInventoryApplyResponsibleSnapshot_(rawResult,job);
       result=ecResult?bseEcLeachateFinalizeResult_(rawResult,job):bseTelegramWorkerFinalizeResult_(book,rawResult,job);
@@ -280,4 +283,34 @@ function runBseTelegramCanonicalInventoryPersistenceHarnessTests(){
   ];
   const failures=tests.filter(test=>!test.pass);if(failures.length)throw new Error('Canonical inventory persistence harness gagal: '+failures.map(test=>test.id).join(', '));
   return {passed:tests.length,failed:0};
+}
+
+
+
+function bseTelegramRouterTrace_(input,receivedAt) {
+  const inventory=typeof bseInventoryParseMessage_==='function'?bseInventoryParseMessage_(input,receivedAt):null;
+  if(!inventory)return {route:'GEMINI_FALLBACK',confidence:'',validation:'',production_write:false};
+  const candidates=Array.isArray(inventory.candidates)?inventory.candidates:[];
+  const confidences=candidates.map(c=>String(c&&c.fields&&c.fields.router_confidence||'')).filter(Boolean);
+  const confidence=confidences.includes('LOW')?'LOW':confidences.includes('MEDIUM')?'MEDIUM':confidences.includes('HIGH')?'HIGH':'';
+  return {route:'DETERMINISTIC_INVENTORY',confidence:confidence,validation:String(inventory.validation||''),production_write:inventory.production_write===false};
+}
+
+function runBseRouterD047HarnessTests() {
+  const high=bseTelegramRouterTrace_('Baja In 5 Set F','2026-10-04T04:00:00.000Z');
+  const medium=bseTelegramRouterTrace_('M3 P1 P2 11/9/2026 F','2026-10-04T04:00:00.000Z');
+  const low=bseTelegramRouterTrace_('Baja 3 beg','2026-10-04T04:00:00.000Z');
+  const unrelated=bseTelegramRouterTrace_('EC masuk M1P1 2.8 pada 16/09/2026','2026-10-04T04:00:00.000Z');
+  const worker=processBseTelegramTestQueue.toString();
+  const tests=[
+    {id:'HIGH routes deterministic candidate to normal confirmation',pass:high.route==='DETERMINISTIC_INVENTORY'&&high.confidence==='HIGH'&&high.validation==='PASS'},
+    {id:'MEDIUM keeps explicit interpretation for reporter confirmation',pass:medium.route==='DETERMINISTIC_INVENTORY'&&medium.confidence==='MEDIUM'&&medium.validation==='PASS'},
+    {id:'LOW ambiguity stops at clarification',pass:low.route==='DETERMINISTIC_INVENTORY'&&low.confidence==='LOW'&&low.validation==='NEED_INFO'},
+    {id:'unrelated traffic falls back instead of forced inventory intent',pass:unrelated.route==='GEMINI_FALLBACK'},
+    {id:'deterministic inventory precedes Gemini fallback',pass:worker.indexOf("bseInventoryParseMessage_(job.input,job.receivedAt)")>=0&&worker.indexOf("bseInventoryParseMessage_(job.input,job.receivedAt)")<worker.indexOf("bseUnifiedProcess_(job.input,job.receivedAt)")},
+    {id:'router never authorizes production write',pass:[high,medium,low,unrelated].every(x=>x.production_write===false)}
+  ];
+  const failures=tests.filter(test=>!test.pass);
+  if(failures.length)throw new Error('D-047 router harness gagal: '+failures.map(test=>test.id).join(', '));
+  return tests;
 }
