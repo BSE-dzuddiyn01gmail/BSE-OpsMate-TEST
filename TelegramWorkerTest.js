@@ -54,12 +54,13 @@ function processBseTelegramTestQueue() {
       const inventoryResult=!ecResult&&typeof bseInventoryParseMessage_==='function'?bseInventoryParseMessage_(job.input,job.receivedAt):null;
       const leaveResult=!ecResult&&!inventoryResult&&typeof bseLeaveParseMessage_==='function'?bseLeaveParseMessage_(job.input,job.receivedAt):null;
       const maintenanceResult=!ecResult&&!inventoryResult&&!leaveResult&&typeof bseMaintenanceParseMessage_==='function'?bseMaintenanceParseMessage_(job.input,job.receivedAt):null;
-      const rawResult=ecResult||inventoryResult||leaveResult||maintenanceResult||bseUnifiedProcess_(job.input,job.receivedAt);
+      const treatmentResult=!ecResult&&!inventoryResult&&!leaveResult&&!maintenanceResult&&typeof bseTreatmentListParseMessage_==='function'?bseTreatmentListParseMessage_(job.input,job.receivedAt):null;
+      const rawResult=ecResult||inventoryResult||leaveResult||maintenanceResult||treatmentResult||bseUnifiedProcess_(job.input,job.receivedAt);
       if(typeof bseLeaveApplyReporterSnapshot_==='function')bseLeaveApplyReporterSnapshot_(rawResult,job);
       if(typeof bseMaintenanceApplyReporterSnapshot_==='function')bseMaintenanceApplyReporterSnapshot_(rawResult,job);
       if(typeof bseInventoryApplyReporterSnapshot_==='function')bseInventoryApplyReporterSnapshot_(rawResult,job);
       if(typeof bseInventoryApplyResponsibleSnapshot_==='function')bseInventoryApplyResponsibleSnapshot_(rawResult,job);
-      result=ecResult?bseEcLeachateFinalizeResult_(rawResult,job):bseTelegramWorkerFinalizeResult_(book,rawResult,job);
+      result=ecResult?bseEcLeachateFinalizeResult_(rawResult,job):treatmentResult&&typeof bseTreatmentFinalizeResult_==='function'?bseTreatmentFinalizeResult_(book,rawResult,job):bseTelegramWorkerFinalizeResult_(book,rawResult,job);
       inventoryCheck=typeof bseInventoryValidateResult_==='function'?bseInventoryValidateResult_(result,job.receivedAt,'BSE-TG-'+job.id):null;
       encoded=JSON.stringify(result);if(encoded.length>45000)throw new Error('Output too long');
     } catch(_) {
@@ -317,4 +318,16 @@ function runBseRouterD047HarnessTests() {
   const failures=tests.filter(test=>!test.pass);
   if(failures.length)throw new Error('D-047 router harness gagal: '+failures.map(test=>test.id).join(', '));
   return tests;
+}
+
+
+
+function runBseTreatmentRouterD043HarnessTests(){
+  const worker=processBseTelegramTestQueue.toString();
+  const tests=[
+    {id:'treatment list parser runs before Gemini fallback',pass:worker.indexOf("bseTreatmentListParseMessage_(job.input,job.receivedAt)")>=0&&worker.indexOf("bseTreatmentListParseMessage_(job.input,job.receivedAt)")<worker.indexOf("bseUnifiedProcess_(job.input,job.receivedAt)")},
+    {id:'deterministic treatment bypasses legacy unified PROPOSED guard',pass:/treatmentResult&&typeof bseTreatmentFinalizeResult_/.test(worker)},
+    {id:'production write never enabled',pass:!/production_write\s*:\s*true/.test(worker)}
+  ];
+  const failures=tests.filter(t=>!t.pass);if(failures.length)throw new Error('D-043 treatment router harness gagal: '+failures.map(t=>t.id).join(', '));return tests;
 }
