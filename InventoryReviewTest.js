@@ -90,16 +90,20 @@ function bseInventoryValidateQuantity_(quantity, unit) {
 
 function bseInventoryValidateClaim_(claim) {
   const c = claim || {};
-  const quantity = bseInventoryValidateQuantity_(c.quantity, c.unit);
-  const amount = typeof c.amount_myr === 'number' ? c.amount_myr : Number(String(c.amount_myr == null ? '' : c.amount_myr).trim());
+  const amount = typeof c.amount_myr === 'number' ? c.amount_myr : Number(String(c.amount_myr == null ? '' : c.amount_myr).replace(/,/g,'').trim());
   const missing = [];
   if (!String(c.claimant || '').trim()) missing.push('claimant');
-  if (!String(c.item_name || '').trim()) missing.push('item_name');
-  if (!quantity.ok) missing.push('quantity/unit');
+  if (!String(c.item_name || c.description || '').trim()) missing.push('item_name');
   if (!Number.isFinite(amount) || amount <= 0) missing.push('amount_myr');
+  if (!String(c.event_date || '').trim() || c.event_date_valid === false) missing.push('event_date');
   return missing.length ? { ok: false, missing, reason: 'medan claim wajib tidak lengkap' } :
-    { ok: true, quantity: quantity.quantity, unit: quantity.unit, amount_myr: amount,
-      reason: String(c.reason || ('Claim item: ' + String(c.item_name || '').trim())).trim() };
+    {
+      ok: true,
+      amount_myr: amount,
+      quantity: c.quantity == null || c.quantity === '' ? '' : c.quantity,
+      unit: String(c.unit || '').trim(),
+      reason: String(c.reason || ('Claim item: ' + String(c.item_name || c.description || '').trim())).trim()
+    };
 }
 
 function bseInventoryValidateProposal_(proposal) {
@@ -181,6 +185,34 @@ function bseInventoryCanonicalItem_(item, source) {
   return raw;
 }
 
+
+function bseClaimAmount_(text) {
+  const source=String(text||'');
+  const labelled=source.match(/(?:Amaun|Jumlah)\s*(?:claim\s*)?(?:MYR|RM)?\s*:\s*RM?\s*([\d.,]+)/i);
+  const inline=source.match(/\bRM\s*([\d.,]+)/i);
+  const raw=String(labelled&&labelled[1] || inline&&inline[1] || '').replace(/,/g,'').trim();
+  const value=Number(raw);
+  return Number.isFinite(value)&&value>0?value:null;
+}
+
+function bseClaimDescription_(text) {
+  const source=String(text||'').trim();
+  const labelled=source.match(/^(?:Item|Perkara|Description|Keterangan)\s*:\s*(.+)$/im);
+  if(labelled)return String(labelled[1]||'').replace(/\s+RM\s*[\d.,]+.*$/i,'').trim();
+  const first=source.split(/\r?\n/).map(v=>v.trim()).find(Boolean)||'';
+  return first
+    .replace(/^(?:claim|tuntutan|tuntut\s+bayaran)\s*[:\-]?\s*/i,'')
+    .replace(/\s+RM\s*[\d.,]+.*$/i,'')
+    .replace(/\s+(?:Amaun|Jumlah)\s*[:\-].*$/i,'')
+    .trim();
+}
+
+function bseClaimNaturalSignal_(text) {
+  const source=String(text||'');
+  return /\b(?:claim|tuntutan|tuntut\s+bayaran)\b/i.test(source) ||
+    (/\bRM\s*[\d.,]+\b/i.test(source) && /\b(?:petrol|minyak|diesel|tol|parking|parkir|resit|receipt|belian|beli)\b/i.test(source));
+}
+
 function bseInventoryPlotIds_(text) {
   const source=String(text||'').toUpperCase(), found=[], compact=source.match(/M\s*(\d+)\s*P\s*(\d+)/g)||[];
   compact.forEach(token=>{const m=token.match(/M\s*(\d+)\s*P\s*(\d+)/);if(m)found.push('M'+m[1]+'P'+m[2]);});
@@ -194,7 +226,7 @@ function bseInventoryParseMessage_(text, receivedAt) {
   const source=String(text||'').trim(), normalized=bseInventoryNormalize_(source);
   if(!source)return null;
 
-  const claim=/\b(?:claim|tuntutan|tuntut bayaran)\b/i.test(source);
+  const claim=bseClaimNaturalSignal_(source);
   const adjustment=/\b(?:adjustment|pelarasan)\s+inventori\b/i.test(source);
   const stockCount=/\b(?:stok\s+baki|baki\s+stok|stok\s+gudang\s+baki|stok\s+kat\s+gudang|stock\s+count|kiraan\s+stok)\b/i.test(source);
   const explicitIn=/\b(?:baja\s+in|stok\s+masuk|barang\s+masuk|pembelian\s+bahan|pembelian\s+inventori|beli\s+bahan|bahan\s+dibeli)\b/i.test(source);
@@ -221,7 +253,17 @@ function bseInventoryParseMessage_(text, receivedAt) {
   if(ambiguousAsset)return {validation:'NEED_INFO',production_write:false,inventory_ambiguity:{item_name:item||source,source_key:'',options:classification.options},candidates:[{target:'Inventory_Classification_Log',validation:'NEED_INFO',missing:['classification'],fields:Object.assign({},base,{record_type:'INVENTORY_CLASSIFICATION'})}]};
 
   if(claim){
-    const fields=Object.assign({},base,{record_type:'CLAIM_REQUEST',claimant:(source.match(/(?:Claimant|Penuntut|Nama)\s*:\s*(.+)/i)||[,''])[1].trim(),amount_myr:(source.match(/(?:Amaun|Jumlah)\s*(?:claim\s*)?(?:MYR|RM)?\s*:\s*([\d.,]+)/i)||[,''])[1],reason:(source.match(/(?:Sebab|Alasan)\s*:\s*(.+)/i)||[,''])[1].trim(),purchase_reference:(source.match(/(?:Rujukan Pembelian|Rujukan)\s*:\s*(.+)/i)||[,''])[1].trim()});
+    const description=bseClaimDescription_(source);
+    const amount=bseClaimAmount_(source);
+    const fields=Object.assign({},base,{
+      record_type:'CLAIM_REQUEST',
+      item_name:description || item,
+      description:description || item,
+      claimant:(source.match(/(?:Claimant|Penuntut|Nama)\s*:\s*(.+)/i)||[,''])[1].trim(),
+      amount_myr:amount==null?'':amount,
+      reason:(source.match(/(?:Sebab|Alasan)\s*:\s*(.+)/i)||[,''])[1].trim(),
+      purchase_reference:(source.match(/(?:Rujukan Pembelian|Rujukan)\s*:\s*(.+)/i)||[,''])[1].trim()
+    });
     const check=bseInventoryValidateClaim_(fields),missing=check.ok?[]:check.missing;
     return {validation:missing.length?'NEED_INFO':'PASS',production_write:false,candidates:[{target:'Claim_Request_Log',validation:missing.length?'NEED_INFO':'PASS',missing:missing,fields:fields}]};
   }
@@ -327,7 +369,7 @@ function bseInventoryMissingText_(reference, check) {
 }
 
 function bseInventoryClaimMissingText_(reference, check) {
-  const labels = { claimant: 'Claimant', item_name: 'Item', 'quantity/unit': 'Kuantiti/unit', quantity: 'Kuantiti', unit: 'Unit', amount_myr: 'Amaun claim (RM)' };
+  const labels = { claimant: 'Claimant', item_name: 'Item / keterangan pembelian', amount_myr: 'Amaun claim (RM)', event_date: 'Tarikh' };
   const fields = (check && check.missing || []).map(field => labels[field] || '').filter(Boolean);
   if (!fields.length) return '';
   return 'Maklumat claim belum lengkap:\n' + fields.map(field => '• ' + field).join('\n') + '\n\nSila balas mesej asal dengan maklumat tersebut.';
@@ -856,5 +898,28 @@ function runBseInventoryD038AcceptanceHarnessTests() {
   ];
   const failures=tests.filter(t=>!t[1]);
   if(failures.length)throw new Error('D-038 acceptance harness gagal: '+failures.map(t=>t[0]).join(', '));
+  return {passed:tests.length,failed:0};
+}
+
+
+
+function runBseClaimD039D046AcceptanceHarnessTests() {
+  const natural=bseInventoryParseMessage_('Minyak Petrol RM50','2026-10-04T04:30:00.000Z');
+  const structured=bseInventoryParseMessage_('CLAIM REQUEST\nItem: Petrol\nAmaun MYR: 50','2026-10-04T04:30:00.000Z');
+  const receiptOnly=bseInventoryParseMessage_('resit petrol','2026-10-04T04:30:00.000Z');
+  bseInventoryApplyReporterSnapshot_(natural,{reporterTelegramUserId:'77',reporterName:'Zainal',reporterUsername:'zainal'});
+  bseInventoryApplyReporterSnapshot_(structured,{reporterTelegramUserId:'77',reporterName:'Zainal',reporterUsername:'zainal'});
+  const nf=natural.candidates[0].fields, sf=structured.candidates[0].fields;
+  const ncheck=bseInventoryValidateClaim_(nf), scheck=bseInventoryValidateClaim_(sf);
+  const tests=[
+    ['natural Minyak Petrol RM50 becomes Claim',natural&&natural.candidates[0].target==='Claim_Request_Log'&&nf.item_name==='Minyak Petrol'&&nf.amount_myr===50],
+    ['claimant defaults to Telegram sender',nf.claimant==='Zainal'&&nf.claimant_telegram_user_id==='77'],
+    ['quantity and unit are optional',ncheck.ok&&scheck.ok&&!natural.candidates[0].missing.includes('quantity/unit')&&!structured.candidates[0].missing.includes('quantity/unit')],
+    ['message date fallback is used when date absent',nf.event_date==='2026-10-04'&&sf.event_date==='2026-10-04'],
+    ['receipt-only text lacks enough facts and does not become authoritative claim',!receiptOnly||receiptOnly.validation!=='PASS'],
+    ['TEST only',natural.production_write===false&&structured.production_write===false]
+  ];
+  const failures=tests.filter(t=>!t[1]);
+  if(failures.length)throw new Error('D-039/D-046 acceptance harness gagal: '+failures.map(t=>t[0]).join(', '));
   return {passed:tests.length,failed:0};
 }
