@@ -22,26 +22,54 @@ Authoritative ZASS:
 
 ### AF-xxx — [short title]
 
-**Status:** OPEN  
+**Status:** OPEN
 **Source:** [debug/test area]  
 **Date:** YYYY-MM-DD
 
-**Observed:**  
+**Observed:**
 -
 
-**Evidence:**  
+**Evidence:**
 -
 
-**Affected area:**  
+**Affected area:**
 -
 
-**Potential consequence:**  
+**Potential consequence:**
 -
 
-**Possible options:**  
+**Possible options:**
 -
 
 **ZASS impact:** `NONE` / `REVIEW REQUIRED`
+
+---
+
+### AF-001 — Google Tasks disabled in local Platform P1 conflicts with locked D-006
+
+**Status:** OPEN  
+**Source:** Current local working tree audit  
+**Date:** 2026-10-04
+
+**Observed:**  
+- The uncommitted local `GoogleTasksTest.js` replaces the existing Google Tasks review/reminder implementation with a transitional state where Google Tasks is deliberately disabled and only the TEST owner registry remains.
+
+**Evidence:**  
+- Local diff from canonical `main` removes task-list/task/reminder logic and introduces the comment `Platform P1 transitional state: Google Tasks is deliberately disabled.`
+- Authoritative ZASS `D-006` remains LOCKED and requires one Google Task List per worker/person with private reminder semantics; task completion controls reminder completion only.
+
+**Affected area:**  
+- Platform reminder architecture, owner registry, review follow-up, pilot scope, and regression expectations.
+
+**Potential consequence:**  
+- Committing or deploying the current local P1 state would silently supersede a LOCKED architectural decision and could remove a previously tested reminder capability.
+
+**Possible options:**  
+1. Keep D-006: restore/retain Google Tasks and adapt the P1 refactor around the locked per-person Task List semantics.
+2. Supersede D-006 through ZASS: intentionally remove Google Tasks from the MVP/pilot and define the replacement reminder/follow-up mechanism.
+3. Defer the P1 Google Tasks removal and continue only work that does not depend on this decision.
+
+**ZASS impact:** `REVIEW REQUIRED`
 
 ---
 
