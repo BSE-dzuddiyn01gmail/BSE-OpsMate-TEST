@@ -228,6 +228,14 @@ function bseClaimNaturalSignal_(text) {
     (/\bRM\s*[\d.,]+\b/i.test(source) && /\b(?:petrol|minyak|diesel|tol|parking|parkir|resit|receipt|belian|beli)\b/i.test(source));
 }
 
+function bseAssetName_(source,item) {
+  const labelled=String(source||'').match(/^(?:Aset|Asset|Nama Aset)\s*:\s*(.+)$/im);
+  if(labelled)return String(labelled[1]||'').trim();
+  return String(item||source||'')
+    .replace(/^(?:cadangan\s+(?:beli|pembelian)?|beli|pembelian|daftar\s+aset|register\s+asset)\s*/i,'')
+    .replace(/\bbaru\b$/i,'').trim();
+}
+
 function bseInventoryPlotIds_(text) {
   const source=String(text||'').toUpperCase(), found=[], compact=source.match(/M\s*(\d+)\s*P\s*(\d+)/g)||[];
   compact.forEach(token=>{const m=token.match(/M\s*(\d+)\s*P\s*(\d+)/);if(m)found.push('M'+m[1]+'P'+m[2]);});
@@ -252,8 +260,8 @@ function bseInventoryParseMessage_(text, receivedAt) {
   const classification=bseInventoryClassifyText_(item||source);
   const assetLike=classification.classification==='ASSET_PROPOSAL';
   const assetRegistration=assetLike && /\b(?:daftar\s+aset|aset\s+didaftarkan|asset\s+registered|register\s+asset)\b/i.test(source);
-  const assetAcquisition=assetLike && !assetRegistration && /\b(?:beli|dibeli|pembelian|baru\s+beli|baru\s+dibeli)\b/i.test(source);
-  const assetProposal=assetLike && !assetRegistration && !assetAcquisition && /\b(?:cadangan|proposal)\b/i.test(source);
+  const assetProposal=assetLike && !assetRegistration && /\b(?:cadangan|proposal)\b/i.test(source);
+  const assetAcquisition=assetLike && !assetRegistration && !assetProposal && /\b(?:beli|dibeli|pembelian|baru\s+beli|baru\s+dibeli)\b/i.test(source);
   const ambiguousAsset=classification.classification==='AMBIGUOUS_CLASSIFICATION';
 
   if(!claim&&!adjustment&&!stockCount&&!explicitIn&&!explicitOut&&!fertilizerShorthand&&!assetProposal&&!assetAcquisition&&!assetRegistration&&!ambiguousAsset){
@@ -287,14 +295,14 @@ function bseInventoryParseMessage_(text, receivedAt) {
   }
 
   if(assetProposal){
-    const fields=Object.assign({},base,{record_type:'ASSET_PROPOSAL',event_type:'ASSET_PROPOSAL',description:source,asset_name:item||source,asset_type:item||''});
+    const fields=Object.assign({},base,{record_type:'ASSET_PROPOSAL',event_type:'ASSET_PROPOSAL',description:source,asset_name:bseAssetName_(source,item),asset_type:item||''});
     return {validation:'PASS',production_write:false,candidates:[{target:'Asset_Proposal_Log',validation:'PASS',missing:[],fields:fields}]};
   }
 
   if(assetAcquisition){
     const fields=Object.assign({},base,{
       record_type:'ASSET_ACQUISITION',event_type:'ASSET_ACQUISITION',
-      asset_name:item||source,asset_type:item||'',acquisition_status:'ACQUIRED',
+      asset_name:bseAssetName_(source,item),asset_type:item||'',acquisition_status:'ACQUIRED',
       source_message_id:'',evidence_refs:[],router_confidence:'HIGH'
     });
     const check={domain:'ASSET_ACQUISITION',source_key:'TEMP',production_write:false,original_note:source,
@@ -306,7 +314,7 @@ function bseInventoryParseMessage_(text, receivedAt) {
   if(assetRegistration){
     const fields=Object.assign({},base,{
       record_type:'ASSET_REGISTERED',event_type:'ASSET_REGISTERED',
-      asset_name:item||source,asset_type:item||'',registration_status:'REGISTERED',
+      asset_name:bseAssetName_(source,item),asset_type:item||'',registration_status:'REGISTERED',
       source_message_id:'',evidence_refs:[],router_confidence:'HIGH'
     });
     const check={domain:'ASSET_REGISTERED',source_key:'TEMP',production_write:false,original_note:source,
