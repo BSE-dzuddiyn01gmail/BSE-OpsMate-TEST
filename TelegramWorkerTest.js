@@ -55,9 +55,11 @@ function processBseTelegramTestQueue() {
       const leaveResult=!ecResult&&!inventoryResult&&typeof bseLeaveParseMessage_==='function'?bseLeaveParseMessage_(job.input,job.receivedAt):null;
       const maintenanceResult=!ecResult&&!inventoryResult&&!leaveResult&&typeof bseMaintenanceParseMessage_==='function'?bseMaintenanceParseMessage_(job.input,job.receivedAt):null;
       const treatmentResult=!ecResult&&!inventoryResult&&!leaveResult&&!maintenanceResult&&typeof bseTreatmentListParseMessage_==='function'?bseTreatmentListParseMessage_(job.input,job.receivedAt):null;
-      const rawResult=ecResult||inventoryResult||leaveResult||maintenanceResult||treatmentResult||bseUnifiedProcess_(job.input,job.receivedAt);
+      const plantConditionResult=!ecResult&&!inventoryResult&&!leaveResult&&!maintenanceResult&&!treatmentResult&&typeof bsePlantConditionParseMessage_==='function'?bsePlantConditionParseMessage_(job.input,job.receivedAt):null;
+      const rawResult=ecResult||inventoryResult||leaveResult||maintenanceResult||treatmentResult||plantConditionResult||bseUnifiedProcess_(job.input,job.receivedAt);
       if(typeof bseLeaveApplyReporterSnapshot_==='function')bseLeaveApplyReporterSnapshot_(rawResult,job);
       if(typeof bseMaintenanceApplyReporterSnapshot_==='function')bseMaintenanceApplyReporterSnapshot_(rawResult,job);
+      if(typeof bsePlantConditionApplyReporterSnapshot_==='function')bsePlantConditionApplyReporterSnapshot_(rawResult,job);
       if(typeof bseInventoryApplyReporterSnapshot_==='function')bseInventoryApplyReporterSnapshot_(rawResult,job);
       if(typeof bseInventoryApplyResponsibleSnapshot_==='function')bseInventoryApplyResponsibleSnapshot_(rawResult,job);
       result=ecResult?bseEcLeachateFinalizeResult_(rawResult,job):treatmentResult&&typeof bseTreatmentFinalizeResult_==='function'?bseTreatmentFinalizeResult_(book,rawResult,job):bseTelegramWorkerFinalizeResult_(book,rawResult,job);
@@ -330,4 +332,16 @@ function runBseTreatmentRouterD043HarnessTests(){
     {id:'production write never enabled',pass:!/production_write\s*:\s*true/.test(worker)}
   ];
   const failures=tests.filter(t=>!t.pass);if(failures.length)throw new Error('D-043 treatment router harness gagal: '+failures.map(t=>t.id).join(', '));return tests;
+}
+
+
+
+function runBsePlantConditionRouterD045HarnessTests(){
+  const worker=processBseTelegramTestQueue.toString();
+  const tests=[
+    {id:'plant condition parser runs before Gemini fallback',pass:worker.indexOf("bsePlantConditionParseMessage_(job.input,job.receivedAt)")>=0&&worker.indexOf("bsePlantConditionParseMessage_(job.input,job.receivedAt)")<worker.indexOf("bseUnifiedProcess_(job.input,job.receivedAt)")},
+    {id:'plant condition parser runs after treatment route',pass:worker.indexOf("bseTreatmentListParseMessage_(job.input,job.receivedAt)")<worker.indexOf("bsePlantConditionParseMessage_(job.input,job.receivedAt)")},
+    {id:'production remains TEST-only',pass:!/production_write\s*:\s*true/.test(worker)}
+  ];
+  const failures=tests.filter(t=>!t.pass);if(failures.length)throw new Error('D-045 plant condition router harness gagal: '+failures.map(t=>t.id).join(', '));return tests;
 }
