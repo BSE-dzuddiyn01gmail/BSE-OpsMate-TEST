@@ -52,7 +52,9 @@ function processBseTelegramTestQueue() {
       // deterministic validation and reporter confirmation remain authoritative.
       const ecResult=typeof bseEcLeachateParseJob_==='function'?bseEcLeachateParseJob_(job):typeof bseEcLeachateParseMessage_==='function'?bseEcLeachateParseMessage_(job.input):null;
       const inventoryResult=!ecResult&&typeof bseInventoryParseMessage_==='function'?bseInventoryParseMessage_(job.input,job.receivedAt):null;
-      const rawResult=ecResult||inventoryResult||bseUnifiedProcess_(job.input,job.receivedAt);
+      const leaveResult=!ecResult&&!inventoryResult&&typeof bseLeaveParseMessage_==='function'?bseLeaveParseMessage_(job.input,job.receivedAt):null;
+      const rawResult=ecResult||inventoryResult||leaveResult||bseUnifiedProcess_(job.input,job.receivedAt);
+      if(typeof bseLeaveApplyReporterSnapshot_==='function')bseLeaveApplyReporterSnapshot_(rawResult,job);
       if(typeof bseInventoryApplyReporterSnapshot_==='function')bseInventoryApplyReporterSnapshot_(rawResult,job);
       if(typeof bseInventoryApplyResponsibleSnapshot_==='function')bseInventoryApplyResponsibleSnapshot_(rawResult,job);
       result=ecResult?bseEcLeachateFinalizeResult_(rawResult,job):bseTelegramWorkerFinalizeResult_(book,rawResult,job);
