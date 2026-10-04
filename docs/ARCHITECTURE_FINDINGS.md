@@ -77,7 +77,7 @@ Authoritative ZASS:
 
 ### AF-002 — TEST spreadsheet has broad anonymous writer permission
 
-**Status:** OPEN — SECURITY BLOCKER BEFORE PILOT
+**Status:** RESOLVED — anonymous writer access removed and independently verified
 **Source:** Live Google Drive permission metadata for current TEST spreadsheet
 **Date:** 2026-10-04
 
@@ -103,4 +103,36 @@ Authoritative ZASS:
 3. Re-read Drive permissions after the change.
 4. Independently verify Apps Script project ownership and installed triggers before resolving Q-006.
 
-**ZASS impact:** `REVIEW REQUIRED` — operational security/handover ownership boundary.
+**Resolution evidence:**
+- Project Owner changed the TEST spreadsheet General access from anonymous Editor to Restricted.
+- Independent Google Drive read-back confirms the spreadsheet now has only the BSE owner permission and `shared:false`.
+- Parent folder and TEST Evidence folder also remain owner-only / not broadly shared.
+
+**ZASS impact:** `RESOLVED` for broad-write exposure. Q-006 remains open only for final Apps Script deployment ownership/trigger verification.
+
+
+### AF-003 — Local clasp identity is not the BSE deployment owner
+
+**Status:** OPEN — HANDOVER DEPLOYMENT BLOCKER
+**Source:** Local clasp identity + live BSE Drive ownership inspection
+**Date:** 2026-10-04
+
+**Observed:**
+- The current local `clasp` credential resolves to `dzuddiyn@gmail.com`.
+- The TEST spreadsheet, its parent folder, and TEST Evidence folder are owned by the BSE account `dzuddiyn01@gmail.com`.
+- `clasp pull` can read the Apps Script source, but `clasp deployments` and `clasp versions` return `The caller does not have permission`.
+
+**Affected area:**
+- Q-006 handover ownership, Apps Script version/deployment verification, installed trigger verification, and final deployment evidence.
+
+**Potential consequence:**
+- Source access from the personal account must not be mistaken for authority to version/deploy the BSE-owned Apps Script project.
+- Final handover cannot claim deployment ownership or trigger state until the BSE owner account is used for deployment verification.
+
+**Required resolution direction:**
+1. Re-authenticate `clasp` using the BSE owner account for the handover deployment checkpoint.
+2. Verify Apps Script project/version/deployment access under that account.
+3. Inspect installed triggers and record the accepted handover trigger set.
+4. Keep secrets/tokens local and out of Git.
+
+**ZASS impact:** `REVIEW REQUIRED` — Q-006 remains operationally blocked until BSE-owner deployment access is verified.
