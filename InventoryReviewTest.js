@@ -203,7 +203,7 @@ function bseInventoryCanonicalItem_(item, source) {
 
 function bseClaimAmount_(text) {
   const source=String(text||'');
-  const labelled=source.match(/(?:Amaun|Jumlah)\s*(?:claim\s*)?(?:MYR|RM)?\s*:\s*RM?\s*([\d.,]+)/i);
+  const labelled=source.match(/(?:Amaun|Jumlah)\s*(?:claim\s*)?(?:MYR|RM)?\s*:\s*(?:RM)?\s*([\d.,]+)/i);
   const inline=source.match(/\bRM\s*([\d.,]+)/i);
   const raw=String(labelled&&labelled[1] || inline&&inline[1] || '').replace(/,/g,'').trim();
   const value=Number(raw);
