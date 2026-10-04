@@ -24,8 +24,10 @@ atau integrasi terus ke sistem rasmi BSE.
 
 Scope lock platform yang diluluskan untuk roadmap ialah:
 
-- satu Google Task List bagi setiap pemilik; reminder dihantar secara private
-  kepada pemilik/admin dengan dedup bagi setiap penerima;
+- Google Tasks dikeluarkan daripada MVP/shadow pilot melalui ZASS D-027.
+  Owner registry kekal untuk identity/authorization/notification routing sahaja;
+  MVP tidak menjamin automatic pending-review reminder dan tidak boleh menggantinya
+  secara senyap dengan subsystem lain;
 - retrieval hanya diterima dalam PM bot daripada user berdaftar dan aktif;
   permintaan retrieval dalam group ditolak dengan arahan minimum untuk PM;
 - reporting text-only: daily delta, Friday Report A (provisional + approved),
@@ -177,9 +179,7 @@ Telegram private chat TEST
   -> Kolam <nombor>: ASSET_OBSERVATION_UNSUPPORTED_TEST, acknowledgement, dan berhenti
   -> Gemini unified parser + guard
   -> WAITING_INFO atau NEEDS_HUMAN_REVIEW
-  -> Google Tasks TEST review task
-  -> Telegram reminder bagi task belum selesai
-  -> keputusan human review yang eksplisit
+  -> keputusan human review yang eksplisit melalui workflow Telegram/TEST
   -> TEST log + TEST review audit sahaja
 ```
 
@@ -211,36 +211,21 @@ Telegram private chat TEST
    `source_group_chat_id`, dan `reporter_telegram_user_id`. Sesi ditutup secara
    one-shot selepas queue child disimpan; chat, pelapor, atau sesi yang tidak
    sepadan tidak boleh mengambil alih dan sesi ambigu menjadi `UNLINKED_REPLY`.
-4. `syncBseTelegramTestReviewTasks_()` mencipta atau mendeduplikasi Google Task
-   dalam senarai `BSE TEST Review` untuk row `NEEDS_HUMAN_REVIEW` selepas
-   cutover TEST. Ini ialah implementasi TEST semasa; scope lock platform masa
-   depan memerlukan satu Task List bagi setiap pemilik.
-5. `processBseTelegramTestReminders()` hanya menyemak rujukan queue
-   `NEEDS_HUMAN_REVIEW` yang masih mempunyai task belum selesai. Masa kelayakan
-   `Asia/Kuala_Lumpur` dibaca daripada Script Property
-   `BSE_TEST_REMINDER_TIME_MYT` dalam format `HH:mm`; jika belum diset atau
-   rosak, fallback selamat ialah `12:00`. Menu BSE TEST membolehkan masa ini
-   ditetapkan atau dipaparkan, dan input tidak sah tidak mengubah nilai sedia
-   ada. Selepas masa itu, ia menghantar maksimum satu peringatan bagi setiap
-   rujukan untuk satu tarikh MYT. Marker durable
-   `TELEGRAM_TEST_REMINDER_DEDUP_AUDIT` menggunakan key
-   `BSE-TG-…|YYYY-MM-DD` dan state `ATTEMPTING`, `SENT`, atau `ERROR`; marker
-   hari sama menghalang cubaan berikutnya. Kegagalan send tidak direkod sebagai
-   `SENT`, tetapi juga tidak dicuba semula hari itu untuk mengelakkan spam.
-6. Reviewer membuat keputusan melalui menu BSE TEST. Keputusan ini, bukan
-   status Google Task, mengawal penulisan ke helaian TEST.
+4. Reviewer membuat keputusan melalui workflow Telegram/TEST yang dibenarkan.
+   Keputusan human review yang diaudit mengawal penulisan ke helaian TEST.
 
-## Google Tasks ialah peringatan sahaja
+## Google Tasks dikeluarkan daripada MVP / shadow pilot
 
-Google Tasks digunakan untuk menarik perhatian reviewer kepada rujukan
-`BSE-TG-<update_id>`. Menanda task sebagai selesai tidak meluluskan calon,
-tidak mengemas kini status queue, dan tidak menulis rekod apa-apa. Pada run
-reminder seterusnya, task selesai hanya direkodkan sebagai `COMPLETED` dalam
-`TELEGRAM_TEST_REMINDER_AUDIT`. Ia bukan access control atau mekanisme approval.
+ZASS D-027 (LOCKED 2026-10-04) mensupersede D-006. Google Tasks, Tasks API,
+task-list mapping, task-completion polling, dan reminder berasaskan Google Tasks
+bukan lagi capability aktif bagi MVP/shadow pilot. Fungsi compatibility shim
+boleh kekal sementara untuk mengelakkan caller lama gagal, tetapi ia mesti tiada
+side effect Tasks/Telegram/domain write dan mengekalkan `production_write:false`.
 
-Dalam scope lock platform, setiap pemilik mempunyai Task List tersendiri dan
-reminder dihantar secara private kepada pemilik/admin. Dedup reminder mesti
-berdasarkan penerima, di samping dedup rujukan harian TEST semasa.
+Bukti TEST lama berkaitan Google Tasks/reminder kekal sebagai evidence sejarah
+sahaja. Ia bukan bukti feature semasa. MVP juga tidak menjamin automatic
+pending-review reminder. Sebarang replacement reminder/task integration
+memerlukan keputusan ZASS, architecture, regression dan runtime proof baharu.
 
 ## Status penting
 
@@ -254,9 +239,9 @@ berdasarkan penerima, di samping dedup rujukan harian TEST semasa.
 | `CORRECTION_PROMPT_PENDING` | Callback Betulkan telah dirizabkan tetapi prompt belum disahkan. |
 | `CORRECTION_WAITING_INFO` | Sesi pembetulan owner terbuka; hanya satu mesej biasa daripada pelapor/chat asal boleh dipadankan. |
 | `CORRECTION_ANSWER_RECEIVED` | Sesi pembetulan telah dituntut dan ditutup selepas jawapan disimpan. |
-| `NEEDS_HUMAN_REVIEW` | Hasil tersedia untuk semakan manusia dan Google Task. |
-| `OUT_OF_SCOPE_TEST` | Mesej jelas Site A; direkod untuk audit tetapi berhenti sebelum Gemini, worker, dan Google Tasks. |
-| `ASSET_OBSERVATION_UNSUPPORTED_TEST` | Mesej jelas Kolam <nombor> di luar workflow aset Fasa 1; direkod untuk audit tetapi berhenti sebelum Gemini, worker, dan Google Tasks. |
+| `NEEDS_HUMAN_REVIEW` | Hasil tersedia untuk semakan manusia melalui workflow TEST; tiada dependency Google Tasks. |
+| `OUT_OF_SCOPE_TEST` | Mesej jelas Site A; direkod untuk audit tetapi berhenti sebelum Gemini, worker, dan human-review workflow. |
+| `ASSET_OBSERVATION_UNSUPPORTED_TEST` | Mesej jelas Kolam <nombor> di luar workflow aset Fasa 1; direkod untuk audit tetapi berhenti sebelum Gemini, worker, dan human-review workflow. |
 | `MEASUREMENT_APPROVED_TEST` | Calon Measurement telah diluluskan dan ditulis ke TEST sahaja. |
 | `MEASUREMENT_REJECTED_TEST` | Calon Measurement ditolak; audit sahaja disimpan. |
 | `CROP_BATCH_APPROVED_TEST` | Proposal batch semaian diluluskan dan hanya rekod TEST ditulis. |
@@ -359,9 +344,9 @@ sejarah sumber ke GitHub. Kedua-duanya ialah tindakan berasingan.
 
 ## Sempadan semasa dan Fasa 2
 
-Fasa 1 hanya meliputi `Measurement_Log`. Google Task selesai masih bukan
-keputusan review, dan rujukan yang mempunyai lebih daripada satu calon tidak
-boleh diluluskan melalui vertical slice ini.
+Fasa 1 hanya meliputi `Measurement_Log`. Google Tasks tidak lagi berada
+dalam architecture semasa; keputusan human review kekal authority. Rujukan yang
+mempunyai lebih daripada satu calon tidak boleh diluluskan melalui vertical slice ini.
 
 Fasa 2 perlu menggeneralisasikan semakan mengikut calon bagi:
 
@@ -394,9 +379,9 @@ Allocation daripada semaian sentiasa `PLANNED`, bukan `ACTIVE`. `ACTIVE` hanya
 boleh dipertimbangkan bagi event pindah/penanaman sebenar dalam Fasa 2C. Jika
 format Modul, crop, variety, tarikh semai, atau set calon atomik tidak sah,
 guard mengeluarkan `NEED_INFO`. Fasa 2A belum mempunyai TEST writer, dedup,
-Google Task khusus, atau human-review batch; ia tidak menambah sebarang
-penulisan production dan tidak mengubah maksud Google Task sebagai peringatan
-sahaja.
+atau human-review batch pada checkpoint asal; ia tidak menambah sebarang
+penulisan production. Rujukan Google Tasks dalam checkpoint lama telah
+disupersede oleh D-027.
 
 ### Fasa 2B: human review Crop Batch TEST
 
@@ -416,9 +401,8 @@ telah dikanonkan. Di bawah `ScriptLock`, APPROVED mencipta satu batch ID
 `CROP_BATCH_APPROVED_TEST`. REJECTED memerlukan alasan, hanya menulis audit,
 kemudian menjadi `CROP_BATCH_REJECTED_TEST`.
 
-Fasa ini kekal TEST-only: tiada production writer atau panggilan Google Tasks
-daripada reviewer/writer. Google Task, jika wujud daripada aliran queue,
-kekal peringatan dan bukan kelulusan automatik.
+Fasa ini kekal TEST-only: tiada production writer. Reviewer/writer tidak
+bergantung pada Google Tasks; capability itu telah dikeluarkan oleh D-027.
 
 ### Fasa 2C-1: Transplant / Pindah Anak Pokok TEST
 

@@ -47,7 +47,7 @@ Authoritative ZASS:
 
 ### AF-001 — Google Tasks disabled in local Platform P1 conflicts with locked D-006
 
-**Status:** OPEN
+**Status:** RESOLVED by ZASS D-027
 **Source:** Current local working tree audit
 **Date:** 2026-10-04
 
@@ -69,7 +69,7 @@ Authoritative ZASS:
 2. Supersede D-006 through ZASS: intentionally remove Google Tasks from the MVP/pilot and define the replacement reminder/follow-up mechanism.
 3. Defer the P1 Google Tasks removal and continue only work that does not depend on this decision.
 
-**ZASS impact:** `REVIEW REQUIRED`
+**ZASS impact:** `RESOLVED` — Project Owner selected Option 2; D-027 LOCKED on 2026-10-04 and supersedes D-006.
 
 ---
 

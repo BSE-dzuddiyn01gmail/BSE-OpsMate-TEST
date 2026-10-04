@@ -11,9 +11,10 @@ aliran semasa, status, schema TEST, dan sempadan Fasa 1/Fasa 2.
 - Kekalkan semua aliran sebagai **TEST-only**.
 - Jangan tambah atau panggil production writer. Semua hasil dan tindakan review
   mesti mengekalkan `production_write: false`.
-- Google Task ialah peringatan sahaja. Status `completed` tidak boleh dianggap
-  sebagai kelulusan automatik, tidak boleh menukar status queue secara automatik,
-  dan tidak boleh mencetuskan penulisan rekod.
+- Google Tasks telah dikeluarkan daripada MVP/shadow pilot melalui ZASS D-027.
+  Jangan aktifkan Tasks API, task sync, task-completion polling, atau reminder
+  berasaskan Google Tasks tanpa keputusan ZASS baharu. Human review kekal eksplisit,
+  diaudit, dan tidak boleh dipintas.
 - Guna semakan manusia yang eksplisit, audit, dedup, dan `ScriptLock` bagi
   sebarang workflow review baharu.
 

@@ -21,6 +21,12 @@ BSE. `production_write:false` kekal bermaksud tiada penulisan ke sistem rasmi
 BSE; ia tidak menghalang writer daripada menulis ke Sheet atau Drive milik
 OpsMate.
 
+Google Tasks tidak termasuk dalam MVP/shadow pilot selepas ZASS D-027. PILOT
+tidak boleh bergantung pada Tasks API, task-list setup, task-completion polling,
+atau Google-Task-driven reminder. Human review kekal melalui workflow Telegram
+yang diluluskan. Tiada automatic pending-review reminder dijanjikan melainkan
+replacement capability diluluskan berasingan kemudian.
+
 ## 2. Prasyarat mula
 
 Shadow pilot hanya bermula selepas semua perkara berikut lengkap:
