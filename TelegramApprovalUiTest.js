@@ -160,3 +160,123 @@ function processBseTelegramApprovalReminders(){return {production_write:false,di
 function runBseTelegramApprovalUiHarnessTests(){const card=bseTelegramApprovalEnsureCard_.toString(),core=bseTelegramReporterConfirmationCore_.toString(),callback=bseTelegramApprovalCallback_.toString(),ec={validation:'PASS',production_write:false,candidates:[{target:'EC_Leachate_Log',fields:{event_date:'2026-09-30',session:'PETANG',readings:[{}]}}]},tests=[{id:'reporter card has only reporter controls',pass:/Hanya penghantar asal boleh mengesahkan/.test(card)&&/B1:/.test(bseApprovalMarkup_.toString())},{id:'reporter binding requires original user and group',pass:/row\[3\].*callback.*from.*id/.test(bseTelegramReporterCardAuthorized_.toString())&&/row\[7\].*callback.*message.*chat.*id/.test(bseTelegramReporterCardAuthorized_.toString())},{id:'card is reserved before one send',pass:card.indexOf('CARD_SEND_PENDING')<card.indexOf("'sendMessage'")&&/sheet\.appendRow\(reservation\)/.test(card)},{id:'uncertain group send does not duplicate',pass:/CARD_SEND_PENDING/.test(card)&&/pending:true/.test(card)&&!/sendMessage.*sendMessage/s.test(card)},{id:'reporter correction replies to original report',pass:/CORRECTION_WAITING_INFO/.test(core)&&/reply_parameters:\{message_id:Number\(row\[8\]\),allow_sending_without_reply:false\}/.test(core)},{id:'reporter discard is audit only',pass:/DISCARDED_BY_REPORTER/.test(core)&&/production_write:false/.test(core)},{id:'owner notice has no approval control',pass:/bseTelegramOwnerNotice_/.test(core)&&!/reply_markup/.test(bseTelegramOwnerNotice_.toString())},{id:'EC uses its atomic review core and clear card summary',pass:bseApprovalDomain_(ec).core===bseEcLeachateReviewCore_&&/EC Leaching \| 2026-09-30 \| PETANG \| 1 bacaan/.test(bseApprovalSummary_('BSE-TG-1',ec))},{id:'EC owner notice omits unsupported delete instruction',pass:/message\.indexOf\('EC Leaching \|'\)>=0\?''/.test(bseTelegramOwnerNotice_.toString())},{id:'callback uses one review lock',pass:/bseReviewWithLock_/.test(callback)},{id:'no routine owner reminder',pass:/REPORTER_CARD_NO_OWNER_REMINDER/.test(processBseTelegramApprovalReminders.toString())}];console.log('TELEGRAM_REPORTER_CONFIRMATION_HARNESS: '+JSON.stringify(tests));const failures=tests.filter(test=>!test.pass);if(failures.length)throw new Error('Reporter confirmation harness gagal: '+failures.map(test=>test.id).join(', '));return tests;}
 function runBseTelegramCorrectionSessionHarnessTests(){const core=bseTelegramReporterConfirmationCore_.toString(),match=bseTelegramCorrectionSessionMatch_.toString(),close=bseTelegramCloseCorrectionSession_.toString(),tests=[{id:'correction prompt is direct reply and ordinary text is allowed',pass:/hantar pembetulan sebagai mesej biasa/.test(core)&&/row\[8\]/.test(core)},{id:'session is bound to original chat and reporter',pass:/row\[7\].*chatId.*row\[3\].*userId/.test(match)},{id:'session refuses ambiguity',pass:/matches\.length===1/.test(match)&&/ambiguous:matches\.length>1/.test(match)},{id:'answer closes one-shot session',pass:/CORRECTION_ANSWER_RECEIVED/.test(close)&&/answerUpdateId/.test(close)}];const failures=tests.filter(test=>!test.pass);if(failures.length)throw new Error('Correction session harness gagal: '+failures.map(test=>test.id).join(', '));return tests;}
 function runBseTelegramDeleteHarnessTests(){const command=bseTelegramDeleteCommand_.toString(),receive=bseTelegramDeleteReceiveCommand_.toString(),confirm=bseTelegramDeleteConfirmationCore_.toString(),voider=bseTelegramVoidInventoryRecord_.toString(),callback=bseTelegramApprovalCallback_.toString(),tests=[{id:'delete requires reference and non-empty reason',pass:!!bseTelegramDeleteCommand_('/delete BSE-TG-123 reason')&&!bseTelegramDeleteCommand_('/delete BSE-TG-123')},{id:'private owner authorization is explicit',pass:/bseTestOwnerForTelegramUser_/.test(receive)&&/private_chat_id/.test(receive)},{id:'second confirmation is durable',pass:/PENDING_CONFIRMATION/.test(receive)&&/D2:/.test(receive)&&/PENDING_CONFIRMATION/.test(confirm)},{id:'delete callback has valid locked review context',pass:/reference:'BSE-TG-0'/.test(callback)&&/action:'APPROVED'/.test(callback)&&/bseReviewWithLock_/.test(callback)},{id:'cancel creates no domain write',pass:/CANCELLED/.test(confirm)&&/production_write:false/.test(confirm)},{id:'delete is a void, not physical deletion',pass:/VOIDED_TEST/.test(confirm)&&/VOIDED_TEST/.test(voider)&&!/deleteRow|clear\(/.test(confirm+voider)},{id:'only inventory claim asset are enabled safely',pass:/Claim_Request_Log/.test(receive)&&/Asset_Proposal_Log/.test(receive)&&/TEST_CLAIM_LOG/.test(voider)}];const failures=tests.filter(test=>!test.pass);if(failures.length)throw new Error('Delete harness gagal: '+failures.map(test=>test.id).join(', '));return tests;}
+
+
+/* D-048 multi-record approval override.
+ * One source Telegram message may own multiple independently actionable cards.
+ * Candidate identity is encoded in source_key as ...|C<n>; the queue remains the
+ * lineage anchor and production writes remain disabled.
+ */
+function bseApprovalCandidateEnvelope_(result,index){
+  if(!result||result.production_write!==false||!Array.isArray(result.candidates)||index<0||index>=result.candidates.length)throw new Error('Candidate envelope tidak sah.');
+  const candidate=JSON.parse(JSON.stringify(result.candidates[index]));
+  return {validation:candidate.validation,production_write:false,candidates:[candidate]};
+}
+function bseApprovalCandidateIndexFromSourceKey_(sourceKey){
+  const m=String(sourceKey||'').match(/\|C(\d+)$/);
+  return m?Number(m[1])-1:null;
+}
+function bseApprovalReferenceRows_(sheet,reference){
+  return bseApprovalRows_(sheet).map((row,index)=>({row:row,index:index})).filter(item=>String(item.row[0])===String(reference));
+}
+function bseApprovalRecomputeQueueStatus_(book,reference){
+  const approval=bseTelegramApprovalSheet_(book),items=bseApprovalReferenceRows_(approval,reference),states=items.map(item=>String(item.row[17]||''));
+  const queue=bseTelegramQueue_(book),qrows=queue.getLastRow()>1?queue.getRange(2,1,queue.getLastRow()-1,BSE_TG_QUEUE_HEADERS.length).getValues():[],q=qrows.findIndex(r=>'BSE-TG-'+String(r[0])===String(reference));
+  if(q<0||!states.length)return '';
+  let status='';
+  if(states.some(v=>/^CORRECTION_/.test(v)))status='CORRECTION_WAITING_INFO';
+  else if(states.some(v=>['OPEN','CARD_SEND_PENDING'].includes(v)))status='NEEDS_HUMAN_REVIEW';
+  else if(states.every(v=>v==='DISCARDED_BY_REPORTER'))status='DISCARDED_BY_REPORTER';
+  else if(states.every(v=>['REPORTER_CONFIRMED','DISCARDED_BY_REPORTER'].includes(v)))status='REPORTER_CONFIRMED';
+  else status='NEEDS_HUMAN_REVIEW';
+  queue.getRange(q+2,7).setValue(status);SpreadsheetApp.flush();return status;
+}
+function bseTelegramApprovalEnsureCard_(book,queueRow){
+  const chat=String(queueRow[1]||''),reporter=String(queueRow[2]||''),reference='BSE-TG-'+String(queueRow[0]||'');
+  if(!bseTelegramTestApprovalGroupIds_().includes(chat)||!/^\d+$/.test(reporter))return {skipped:'GROUP_OR_REPORTER_INVALID'};
+  let result;try{result=JSON.parse(String(queueRow[9]||''));}catch(_){return {skipped:'CANDIDATE_JSON_INVALID'};}
+  if(result.production_write!==false||result.validation!=='PASS'||!Array.isArray(result.candidates)||!result.candidates.length)return {skipped:'CANDIDATE_NOT_CONFIRMABLE'};
+  const envelopes=result.candidates.map((_,index)=>bseApprovalCandidateEnvelope_(result,index));
+  // Validate every target before creating any durable card.
+  envelopes.forEach(envelope=>bseApprovalDomain_(envelope));
+  const sheet=bseTelegramApprovalSheet_(book),rows=bseApprovalRows_(sheet),created=[],duplicates=[],pending=[];
+  for(let index=0;index<envelopes.length;index++){
+    const envelope=envelopes[index],domain=bseApprovalDomain_(envelope),suffix=envelopes.length>1?'|C'+(index+1):'',sourceKey=reference+'|'+domain.target+suffix,hash=bseApprovalHash_(envelope);
+    const existing=rows.find(r=>String(r[1])===sourceKey);
+    if(existing){
+      if(String(existing[2]||'')!==hash)throw new Error('CARD_HASH_CONFLICT '+sourceKey);
+      const state=String(existing[17]||''),item={source_key:sourceKey,status:state,token:String(existing[10]||''),approval_message_id:String(existing[9]||'')};
+      if(state==='CARD_SEND_PENDING')pending.push(item);else duplicates.push(item);
+      continue;
+    }
+    const token=bseApprovalToken_(),stamp=new Date().toISOString(),reservation=[reference,sourceKey,hash,reporter,'','','',chat,String(queueRow[3]||''),'',token,'','','','','','','CARD_SEND_PENDING','','',stamp,'','','','',''];
+    sheet.appendRow(reservation);SpreadsheetApp.flush();
+    let sent;try{
+      const heading=envelopes.length>1?'Rekod '+(index+1)+'/'+envelopes.length+'\n':'';
+      sent=bseTelegramApi_('sendMessage',{chat_id:chat,text:heading+bseApprovalSummary_(reference,envelope)+'\n\nSetiap rekod disahkan secara berasingan.',reply_parameters:{message_id:Number(queueRow[3]),allow_sending_without_reply:true},reply_markup:bseApprovalMarkup_(token)});
+    }catch(error){
+      sheet.getRange(sheet.getLastRow(),20).setValue(bseTelegramSafeErrorDescription_(error.message||'CARD_SEND_UNCERTAIN'));SpreadsheetApp.flush();
+      pending.push({source_key:sourceKey,status:'CARD_SEND_PENDING',token:token});continue;
+    }
+    if(!sent||!sent.message_id){sheet.getRange(sheet.getLastRow(),20).setValue('CARD_SEND_UNCERTAIN');SpreadsheetApp.flush();pending.push({source_key:sourceKey,status:'CARD_SEND_PENDING',token:token});continue;}
+    const rowIndex=sheet.getLastRow();sheet.getRange(rowIndex,10).setValue(String(sent.message_id));sheet.getRange(rowIndex,18).setValue('OPEN');SpreadsheetApp.flush();
+    created.push({source_key:sourceKey,token:token,approval_message_id:String(sent.message_id),candidate_index:index});
+    rows.push(reservation.map((v,i)=>i===9?String(sent.message_id):i===17?'OPEN':v));
+  }
+  bseApprovalRecomputeQueueStatus_(book,reference);
+  return {created:created.length>0,created_cards:created,duplicates:duplicates,pending:pending,candidate_count:envelopes.length,production_write:false};
+}
+function bseTelegramReporterConfirmationCore_(book,context,input){
+  const sheet=bseTelegramApprovalSheet_(book),rows=bseApprovalRows_(sheet),i=rows.findIndex(r=>String(r[10])===String(input.token));
+  if(i<0)throw new Error('Token pengesahan tidak ditemui.');
+  const row=rows[i],sheetRow=i+2;
+  if(!bseTelegramReporterCardAuthorized_(row,input.callback)){if(input.callback.id)bseTelegramApi_('answerCallbackQuery',{callback_query_id:input.callback.id,text:'Pilihan ini hanya untuk penghantar asal.',show_alert:true});return {authorized:false};}
+  if(String(row[17])!=='OPEN')return {duplicate:true,status:String(row[17])};
+  const queue=bseTelegramQueue_(book),qrows=queue.getLastRow()>1?queue.getRange(2,1,queue.getLastRow()-1,BSE_TG_QUEUE_HEADERS.length).getValues():[],q=qrows.findIndex(r=>'BSE-TG-'+String(r[0])===String(row[0]));
+  if(q<0)throw new Error('Queue tidak ditemui.');
+  let aggregate;try{aggregate=JSON.parse(String(qrows[q][9]||''));}catch(_){throw new Error('candidate_json tidak sah.');}
+  const candidateIndex=bseApprovalCandidateIndexFromSourceKey_(row[1]),parsed=candidateIndex==null?aggregate:bseApprovalCandidateEnvelope_(aggregate,candidateIndex);
+  if(bseApprovalHash_(parsed)!==String(row[2]))throw new Error('Hash pengesahan bercanggah.');
+
+  if(input.kind==='C'){
+    sheet.getRange(sheetRow,18).setValue('CORRECTION_PROMPT_PENDING');SpreadsheetApp.flush();
+    let prompt;try{prompt=bseTelegramApi_('sendMessage',{chat_id:String(row[7]),text:'Rujukan '+row[0]+(candidateIndex==null?'':' — Rekod '+(candidateIndex+1))+': hantar pembetulan untuk rekod ini sahaja sebagai mesej biasa.',reply_parameters:{message_id:Number(row[8]),allow_sending_without_reply:false}});}
+    catch(error){sheet.getRange(sheetRow,18).setValue('CORRECTION_PROMPT_UNCERTAIN');sheet.getRange(sheetRow,20).setValue(bseTelegramSafeErrorDescription_(error.message||'CORRECTION_PROMPT_UNCERTAIN'));SpreadsheetApp.flush();throw new Error('Prompt pembetulan tidak pasti; tidak dihantar semula secara automatik.');}
+    if(!prompt||!prompt.message_id)throw new Error('Prompt pembetulan tidak disahkan; tidak dihantar semula secara automatik.');
+    sheet.getRange(sheetRow,18).setValue('CORRECTION_WAITING_INFO');sheet.getRange(sheetRow,24).setValue(String(prompt.message_id));SpreadsheetApp.flush();
+    bseApprovalRecomputeQueueStatus_(book,String(row[0]));bseTelegramApprovalCloseCard_(row,'CORRECTION_WAITING_INFO',context.actor_name);
+    return {decision:'CORRECTION',candidate_index:candidateIndex,production_write:false};
+  }
+
+  if(input.kind==='R'){
+    sheet.getRange(sheetRow,12,1,8).setValues([[String(input.callback.message.chat.id),String(input.callback.message.message_id),'DISCARDED_BY_REPORTER','',new Date().toISOString(),String(row[2]),'DISCARDED_BY_REPORTER','']]);SpreadsheetApp.flush();
+    const status=bseApprovalRecomputeQueueStatus_(book,String(row[0]));bseTelegramApprovalCloseCard_(row,'DISCARDED_BY_REPORTER',context.actor_name);
+    return {production_write:false,candidate_index:candidateIndex,queue_status:status};
+  }
+
+  context.reference=String(row[1]);context.action='APPROVED';context.proposalResult=parsed;
+  const outcome=bseApprovalDomain_(parsed).core(book,context);
+  sheet.getRange(sheetRow,12,1,8).setValues([[String(input.callback.message.chat.id),String(input.callback.message.message_id),'REPORTER_CONFIRMED','',new Date().toISOString(),String(row[2]),'REPORTER_CONFIRMED','']]);SpreadsheetApp.flush();
+  const status=bseApprovalRecomputeQueueStatus_(book,String(row[0]));bseTelegramApprovalCloseCard_(row,'REPORTER_CONFIRMED',context.actor_name);
+  try{bseTelegramReporterReceipt_(book,row[3],'Resit TEST '+row[0]+(candidateIndex==null?'':' rekod '+(candidateIndex+1))+' — direkodkan.');}catch(_){}
+  bseTelegramOwnerNotice_(book,'Makluman TEST '+row[0]+(candidateIndex==null?'':' rekod '+(candidateIndex+1))+' telah direkodkan oleh penghantar.');
+  outcome.candidate_index=candidateIndex;outcome.queue_status=status;return outcome;
+}
+function runBseMultiRecordD048ApprovalHarnessTests(){
+  const source=bseTelegramApprovalEnsureCard_.toString(),confirm=bseTelegramReporterConfirmationCore_.toString(),aggregate=bseApprovalRecomputeQueueStatus_.toString();
+  const sample={validation:'PASS',production_write:false,candidates:[
+    {target:'Inventory_Event_Log',validation:'PASS',missing:[],fields:{record_type:'INVENTORY_OUT',item_name:'Fruitka',quantity:1,unit:'set',destination:'M3P1',event_date:'2026-09-11',original_note:'M3 P1 P2 11/9/2026 F'}},
+    {target:'Inventory_Event_Log',validation:'PASS',missing:[],fields:{record_type:'INVENTORY_OUT',item_name:'Fruitka',quantity:1,unit:'set',destination:'M3P2',event_date:'2026-09-11',original_note:'M3 P1 P2 11/9/2026 F'}}
+  ]};
+  const e1=bseApprovalCandidateEnvelope_(sample,0),e2=bseApprovalCandidateEnvelope_(sample,1);
+  const tests=[
+    {id:'one source can split into independent candidate envelopes',pass:e1.candidates.length===1&&e2.candidates.length===1&&e1.candidates[0].fields.destination==='M3P1'&&e2.candidates[0].fields.destination==='M3P2'},
+    {id:'candidate hashes are independent',pass:bseApprovalHash_(e1)!==bseApprovalHash_(e2)},
+    {id:'approval creates candidate-indexed source keys',pass:/\|C'\+\(index\+1\)/.test(source)},
+    {id:'confirmation reconstructs only selected candidate',pass:/bseApprovalCandidateIndexFromSourceKey_/.test(confirm)&&/bseApprovalCandidateEnvelope_\(aggregate,candidateIndex\)/.test(confirm)},
+    {id:'cancel does not blindly discard whole source',pass:/bseApprovalRecomputeQueueStatus_/.test(confirm)&&!/queue\.getRange\(q\+2,7\)\.setValue\('DISCARDED_BY_REPORTER'\)/.test(confirm)},
+    {id:'aggregate remains open while another candidate is open',pass:/states\.some\(v=>\['OPEN','CARD_SEND_PENDING'\]\.includes\(v\)\)/.test(aggregate)},
+    {id:'production boundary preserved',pass:sample.production_write===false&&e1.production_write===false&&e2.production_write===false}
+  ];
+  const failures=tests.filter(test=>!test.pass);if(failures.length)throw new Error('D-048 approval harness gagal: '+failures.map(test=>test.id).join(', '));return tests;
+}
