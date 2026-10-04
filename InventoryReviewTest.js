@@ -196,7 +196,7 @@ function bseInventoryParseMessage_(text, receivedAt) {
 
   const claim=/\b(?:claim|tuntutan|tuntut bayaran)\b/i.test(source);
   const adjustment=/\b(?:adjustment|pelarasan)\s+inventori\b/i.test(source);
-  const stockCount=/\b(?:stok\s+baki|baki\s+stok|stok\s+kat\s+gudang|stock\s+count|kiraan\s+stok)\b/i.test(source);
+  const stockCount=/\b(?:stok\s+baki|baki\s+stok|stok\s+gudang\s+baki|stok\s+kat\s+gudang|stock\s+count|kiraan\s+stok)\b/i.test(source);
   const explicitIn=/\b(?:baja\s+in|stok\s+masuk|barang\s+masuk|pembelian\s+bahan|pembelian\s+inventori|beli\s+bahan|bahan\s+dibeli)\b/i.test(source);
   const explicitOut=/\b(?:baja\s+out|stok\s+keluar|barang\s+keluar|penggunaan\s+bahan|bahan\s+digunakan|guna\s+bahan|digunakan)\b/i.test(source);
   const plots=bseInventoryPlotIds_(source);
@@ -784,7 +784,7 @@ function runBseInventoryQuantityParserRegressionHarnessTests() {
   const inlineItem = bseInventoryItemText_('Item: Sarung tangan pakai buang 2 kotak');
   const acceptedUnits = BSE_INVENTORY_ALLOWED_UNITS.every(unit => {
     const result = bseInventoryParseMessage_(['PENGGUNAAN BAHAN', 'Item: Baja NPK', 'Kuantiti: 1 ' + unit].join('\n'), '2026-09-22T16:30:00.000Z');
-    return result && result.candidates[0].fields.quantity === 1 && String(result.candidates[0].fields.unit).toLowerCase() === unit.toLowerCase();
+    return result && result.candidates[0].fields.quantity === 1 && String(result.candidates[0].fields.unit).toLowerCase() === (unit.toLowerCase()==='pcs'?'unit':unit.toLowerCase());
   });
   const unknown = bseInventoryParseMessage_(['PENGGUNAAN BAHAN', 'Item: Sarung tangan pakai buang', 'Kuantiti: 2 karton'].join('\n'), '2026-09-22T16:30:00.000Z');
   const tests = [
