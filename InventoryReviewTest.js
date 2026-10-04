@@ -596,6 +596,20 @@ function bseInventoryReviewCore_(book, reviewContext) {
       return { validation: 'FAIL', decision: '', missing: [], reason: 'TEST writer gagal: ' + String(error.message || 'unknown'), production_write: false };
     }
   }
+  if (context.action === 'APPROVED' && eventId && typeof bseEvidenceLinkMany_ === 'function') {
+    const refs = proposal.evidence_refs || proposal.evidence_reference || [];
+    if (bseEvidenceRefs_(refs).length) {
+      bseEvidenceLinkMany_(book,{
+        evidence_refs:refs,
+        domain_record_type:proposal.domain,
+        domain_record_id:eventId,
+        link_reason:'DOMAIN_SUPPORT',
+        source_message_id:String(context.reference||''),
+        linked_by:String(context.actor_name||context.actor_id||'SYSTEM_TEST'),
+        production_write:false
+      });
+    }
+  }
   if (reviewSheet) reviewSheet.appendRow([Utilities.getUuid(), sourceKey, eventId, proposal.domain, context.action, context.actor_name, String(context.reason || ''), stamp, 'NEEDS_HUMAN_REVIEW', payloadHash, context.owner_id || '', context.actor_id || '', context.actor_name, proposal.original_note]);
   if (book && typeof book.getSheetByName === 'function') {
     const queue = book.getSheetByName('TELEGRAM_TEST_QUEUE');
@@ -922,4 +936,16 @@ function runBseClaimD039D046AcceptanceHarnessTests() {
   const failures=tests.filter(t=>!t[1]);
   if(failures.length)throw new Error('D-039/D-046 acceptance harness gagal: '+failures.map(t=>t[0]).join(', '));
   return {passed:tests.length,failed:0};
+}
+
+
+
+function runBseEvidenceWriterIntegrationD044HarnessTests(){
+  const core=bseInventoryReviewCore_.toString();
+  const tests=[
+    ['approved domain writer invokes evidence link layer only after event id exists',core.indexOf("context.action === 'APPROVED'")>=0&&core.indexOf("bseEvidenceLinkMany_")>core.indexOf("eventId = 'BSE-SB-INV-'")],
+    ['evidence refs are optional and do not block domain writer',/proposal\.evidence_refs \|\| proposal\.evidence_reference \|\| \[\]/.test(core)],
+    ['linking stays TEST-only',/production_write:false/.test(core)&&!/production_write\s*:\s*true/.test(core)]
+  ];
+  const failures=tests.filter(t=>!t[1]);if(failures.length)throw new Error('D-044 writer integration harness gagal: '+failures.map(t=>t[0]).join(', '));return tests;
 }
