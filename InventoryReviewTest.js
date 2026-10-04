@@ -6,7 +6,8 @@ const BSE_INVENTORY_EVENT_HEADERS = [
   'source_key','event_id','event_type','item_name','quantity','unit',
   'event_date','owner_id','owner_telegram_user_id','owner_name','status',
   'verification_status','production_write','original_note','created_at',
-  'approved_at','reviewer','payload_hash','responsible_name','responsible_source','responsible_telegram_user_id'
+  'approved_at','reviewer','payload_hash','responsible_name','responsible_source','responsible_telegram_user_id',
+  'destination','storage_location','counted_quantity','movement_type','router_confidence'
 ];
 const BSE_INVENTORY_REVIEW_HEADERS = [
   'review_id','source_key','event_id','domain','decision','reviewer',
@@ -28,9 +29,9 @@ const BSE_INVENTORY_CLASSIFICATION_HEADERS = [
   'callback_token','reference','source_key','payload_hash','chat_id','reporter_telegram_user_id',
   'source_message_id','approval_message_id','item_name','options_json','status','decision','created_at','acted_at','last_error','candidate_json'
 ];
-const BSE_INVENTORY_ALLOWED_UNITS = ['kg','g','L','ml','beg','botol','unit','pek','kotak'];
+const BSE_INVENTORY_ALLOWED_UNITS = ['kg','g','L','ml','beg','botol','unit','pcs','pek','kotak','set','tong'];
 const BSE_INVENTORY_DOMAINS = [
-  'INVENTORY_PURCHASE','INVENTORY_USAGE','INVENTORY_ADJUSTMENT',
+  'INVENTORY_IN','INVENTORY_OUT','INVENTORY_STOCK_COUNT','INVENTORY_ADJUSTMENT',
   'CLAIM_REQUEST','ASSET_PROPOSAL'
 ];
 
@@ -61,7 +62,7 @@ function bseInventoryClassifyText_(text) {
       classification: 'AMBIGUOUS_CLASSIFICATION',
       options: [
         { value: 'ASSET_PROPOSAL', label: 'Daftar Aset' },
-        { value: 'INVENTORY_PURCHASE', label: 'Inventori' },
+        { value: 'INVENTORY_IN', label: 'Inventori' },
         { value: 'CLARIFY', label: 'Isi Maklumat' }
       ],
       reason: 'item boleh menjadi aset atau bahan'
@@ -71,7 +72,7 @@ function bseInventoryClassifyText_(text) {
     return { classification: 'ASSET_PROPOSAL', reason: 'peralatan tahan lama' };
   }
   if (/\b(baja|racun|pestisid|herbisid|fungisid|insektisid|bahan guna habis|consumable)\b/.test(normalized)) {
-    return { classification: 'INVENTORY_PURCHASE', reason: 'bahan guna habis' };
+    return { classification: 'INVENTORY_IN', reason: 'bahan guna habis' };
   }
   return { classification: 'NEEDS_INFO', reason: 'kelas item tidak jelas' };
 }
@@ -79,11 +80,12 @@ function bseInventoryClassifyText_(text) {
 function bseInventoryValidateQuantity_(quantity, unit) {
   const value = typeof quantity === 'number' ? quantity : Number(String(quantity == null ? '' : quantity).trim());
   const unitText = String(unit == null ? '' : unit).trim();
-  const canonicalUnit = BSE_INVENTORY_ALLOWED_UNITS.find(u => u.toLowerCase() === unitText.toLowerCase());
-  if (!Number.isFinite(value) || value <= 0 || !canonicalUnit) {
+  const matched = BSE_INVENTORY_ALLOWED_UNITS.find(u => u.toLowerCase() === unitText.toLowerCase());
+  if (!Number.isFinite(value) || value <= 0 || !matched) {
     return { ok: false, reason: 'quantity mesti nombor perpuluhan positif dan unit tidak disokong' };
   }
-  return { ok: true, quantity: value, unit: unitText };
+  const canonicalUnit = matched.toLowerCase() === 'pcs' ? 'unit' : matched;
+  return { ok: true, quantity: value, unit: canonicalUnit, original_unit: unitText };
 }
 
 function bseInventoryValidateClaim_(claim) {
@@ -101,8 +103,7 @@ function bseInventoryValidateClaim_(claim) {
 }
 
 function bseInventoryValidateProposal_(proposal) {
-  const p = proposal || {};
-  const missing = [];
+  const p = proposal || {}, missing = [];
   if (!BSE_INVENTORY_DOMAINS.includes(p.domain)) missing.push('domain');
   if (p.production_write !== false) missing.push('production_write');
   if (!String(p.source_key || '').trim()) missing.push('source_key');
@@ -112,6 +113,11 @@ function bseInventoryValidateProposal_(proposal) {
     if (!claim.ok) missing.push.apply(missing, claim.missing);
   } else if (p.domain === 'ASSET_PROPOSAL') {
     if (!String(p.description || '').trim()) missing.push('description');
+  } else if (p.domain === 'INVENTORY_STOCK_COUNT') {
+    if (!String(p.item_name || '').trim()) missing.push('item_name');
+    const counted = bseInventoryValidateQuantity_(p.counted_quantity, p.unit);
+    if (!counted.ok) missing.push('counted_quantity/unit');
+    if (!String(p.event_date || '').trim() || p.event_date_valid === false) missing.push('event_date');
   } else {
     if (!String(p.item_name || '').trim()) missing.push('item_name');
     const quantity = bseInventoryValidateQuantity_(p.quantity, p.unit);
@@ -131,22 +137,30 @@ function bseInventoryMalaysiaDate_(receivedAt) {
 }
 
 function bseInventoryExtractQuantity_(text) {
-  const match = String(text || '').match(/(?:^|\s)(\d+(?:[.,]\d+)?)\s*(kg|g|L|l|ml|beg|botol|unit|pek|kotak)\b/i);
-  return match ? { quantity: Number(match[1].replace(',', '.')), unit: match[2] } : null;
+  const match = String(text || '').match(/(?:^|\s)(\d+(?:[.,]\d+)?)\s*(kg|g|L|l|ml|beg|botol|unit|pcs|pek|kotak|set|tong)\b/i);
+  if (!match) return null;
+  const checked = bseInventoryValidateQuantity_(Number(match[1].replace(',', '.')), match[2]);
+  return checked.ok ? { quantity: checked.quantity, unit: checked.unit, original_unit: checked.original_unit } : null;
 }
 
 function bseInventoryItemText_(text) {
   const lines = String(text || '').split(/\r?\n/).map(line => line.trim()).filter(Boolean);
   const labelled = lines.find(line => /^(?:Item|Bahan|Nama Item|Perkara)\s*:/i.test(line));
-  if (labelled) return labelled.replace(/^[^:]+:\s*/i, '').replace(/\s+\d+(?:[.,]\d+)?\s*(?:kg|g|L|l|ml|beg|botol|unit|pek|kotak)\b.*$/i, '').trim();
-  const line = lines.find(line => /\b(?:baja|racun|pestisid|herbisid|fungisid|mesin rumput|mesin|pam|hos|alat ganti|perkakas)\b/i.test(line));
-  return line ? line.replace(/\s+\d+(?:[.,]\d+)?\s*(?:kg|g|L|l|ml|beg|botol|unit|pek|kotak)\b.*$/i, '').replace(/^(?:beli|pembelian|guna|penggunaan|cadangan)\s+/i, '').trim() : '';
+  const stripQty = value => String(value || '').replace(/\s+\d+(?:[.,]\d+)?\s*(?:kg|g|L|l|ml|beg|botol|unit|pcs|pek|kotak|set|tong)\b.*$/i, '').trim();
+  if (labelled) return stripQty(labelled.replace(/^[^:]+:\s*/i, ''));
+  const shorthand = String(text || '').match(/(?:^|\s)(F|N)(?:\s|$)/i);
+  if (shorthand) return shorthand[1].toUpperCase() === 'F' ? 'Fruitka' : 'Benegro N';
+  const line = lines.find(line => /\b(?:baja|racun|pestisid|herbisid|fungisid|insektisid|dripper|em|mesin rumput|mesin|pam|hos|alat ganti|perkakas)\b/i.test(line));
+  return line ? stripQty(line.replace(/^(?:beli|pembelian|guna|penggunaan|cadangan|stok\s+masuk|stok\s+keluar|baja\s+in|baja\s+out)\s+/i, '')) : '';
 }
 
 function bseInventoryExtractEventDate_(text, receivedAt) {
-  const source=String(text||''), match=source.match(/(?:Tarikh(?:\s+(?:Pembelian|Penggunaan|Pelarasan|Claim|Inventori))?|Event\s*date)\s*:\s*([^\n]+)/i);
-  if(!match)return {value:bseInventoryMalaysiaDate_(receivedAt),explicit:false,valid:true};
-  const raw=String(match[1]||'').trim(), parts=raw.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/), iso=/^(\d{4})-(\d{2})-(\d{2})$/.test(raw)?raw:'';
+  const source=String(text||'');
+  const labelled=source.match(/(?:Tarikh(?:\s+(?:Pembelian|Penggunaan|Pelarasan|Claim|Inventori))?|Event\s*date)\s*:\s*([^\n]+)/i);
+  const bare=source.match(/\b(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})\b/);
+  const raw=String(labelled&&labelled[1] || bare&&bare[0] || '').trim();
+  if(!raw)return {value:bseInventoryMalaysiaDate_(receivedAt),explicit:false,valid:true};
+  const parts=raw.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/), iso=/^(\d{4})-(\d{2})-(\d{2})$/.test(raw)?raw:'';
   let value=iso;
   if(!value&&parts){const day=Number(parts[1]),month=Number(parts[2]),year=Number(parts[3]),date=new Date(Date.UTC(year,month-1,day));if(date.getUTCFullYear()===year&&date.getUTCMonth()===month-1&&date.getUTCDate()===day)value=year+'-'+('0'+month).slice(-2)+'-'+('0'+day).slice(-2);}
   return {value:value,explicit:true,valid:!!value};
@@ -157,41 +171,104 @@ function bseInventoryDeclaredResponsible_(text) {
   return match&&String(match[1]||'').trim()||'';
 }
 
+
+function bseInventoryCanonicalItem_(item, source) {
+  const raw=String(item||'').trim(), text=String(source||'');
+  if (/^(?:F)$/i.test(raw) || /(?:^|\s)F(?:\s|$)/.test(text)) return 'Fruitka';
+  if (/^(?:N)$/i.test(raw) || /(?:^|\s)N(?:\s|$)/.test(text)) return 'Benegro N';
+  if (/\bdripper\b/i.test(raw||text)) return 'Dripper';
+  if (/\bEM\b/i.test(raw||text)) return 'EM';
+  return raw;
+}
+
+function bseInventoryPlotIds_(text) {
+  const source=String(text||'').toUpperCase(), found=[], compact=source.match(/M\s*(\d+)\s*P\s*(\d+)/g)||[];
+  compact.forEach(token=>{const m=token.match(/M\s*(\d+)\s*P\s*(\d+)/);if(m)found.push('M'+m[1]+'P'+m[2]);});
+  const module=source.match(/\bM\s*(\d+)\b/);
+  if(module){const re=/\bP\s*(\d+)\b/g;let m;while((m=re.exec(source)))found.push('M'+module[1]+'P'+m[1]);}
+  return Array.from(new Set(found));
+}
+
 /** Deterministic narrow D1 route. Returns null for all unrelated reports. */
 function bseInventoryParseMessage_(text, receivedAt) {
-  const source = String(text || '').trim(), normalized = bseInventoryNormalize_(source);
-  if (!source) return null;
-  const claim = /\b(?:claim|tuntutan|tuntut bayaran)\b/i.test(source);
-  const adjustment = /\b(?:adjustment|pelarasan)\s+inventori\b/i.test(source);
-  const usage = /\b(?:penggunaan bahan|bahan digunakan|guna bahan|digunakan)\b/i.test(source);
-  const item = bseInventoryItemText_(source);
-  const classification = bseInventoryClassifyText_(item || source);
-  const explicitInventory = /\b(?:pembelian bahan|pembelian inventori|beli bahan|stok masuk|bahan dibeli)\b/i.test(source);
-  const asset = classification.classification === 'ASSET_PROPOSAL' && /\b(?:cadangan|beli|pembelian|mesin|peralatan)\b/i.test(source);
-  const ambiguous = classification.classification === 'AMBIGUOUS_CLASSIFICATION';
-  if (!claim && !adjustment && !usage && !explicitInventory && !asset && !ambiguous && classification.classification !== 'INVENTORY_PURCHASE') return null;
-  const qty = bseInventoryExtractQuantity_(source), dateInfo = bseInventoryExtractEventDate_(source, receivedAt), responsible = bseInventoryDeclaredResponsible_(source);
-  const base = { project_id: 'BSE_SB', system_year: 2026, event_date: dateInfo.value, event_date_explicit: dateInfo.explicit, event_date_valid: dateInfo.valid, crop: '', item_name: item, quantity: qty && qty.quantity, unit: qty && qty.unit, original_note: source, verification_status: 'PROVISIONAL', responsible_name: responsible, responsible_source: responsible ? 'DECLARED' : '' };
-  if (ambiguous) return { validation: 'NEED_INFO', production_write: false, inventory_ambiguity: { item_name: item || source, source_key: '', options: classification.options }, candidates: [{ target: 'Inventory_Classification_Log', validation: 'NEED_INFO', missing: ['classification'], fields: Object.assign({}, base, { record_type: 'INVENTORY_CLASSIFICATION' }) }] };
-  if (claim) {
-    const fields = Object.assign({}, base, { record_type: 'CLAIM_REQUEST', claimant: (source.match(/(?:Claimant|Penuntut|Nama)\s*:\s*(.+)/i) || [,''])[1].trim(), amount_myr: (source.match(/(?:Amaun|Jumlah)\s*(?:claim\s*)?(?:MYR|RM)?\s*:\s*([\d.,]+)/i) || [,''])[1], reason: (source.match(/(?:Sebab|Alasan)\s*:\s*(.+)/i) || [,''])[1].trim(), purchase_reference: (source.match(/(?:Rujukan Pembelian|Rujukan)\s*:\s*(.+)/i) || [,''])[1].trim() });
-    const claimValidation = bseInventoryValidateClaim_(fields), missing = claimValidation.ok ? [] : claimValidation.missing;
-    return { validation: missing.length ? 'NEED_INFO' : 'PASS', production_write: false, candidates: [{ target: 'Claim_Request_Log', validation: missing.length ? 'NEED_INFO' : 'PASS', missing: missing, fields }] };
+  const source=String(text||'').trim(), normalized=bseInventoryNormalize_(source);
+  if(!source)return null;
+
+  const claim=/\b(?:claim|tuntutan|tuntut bayaran)\b/i.test(source);
+  const adjustment=/\b(?:adjustment|pelarasan)\s+inventori\b/i.test(source);
+  const stockCount=/\b(?:stok\s+baki|baki\s+stok|stok\s+kat\s+gudang|stock\s+count|kiraan\s+stok)\b/i.test(source);
+  const explicitIn=/\b(?:baja\s+in|stok\s+masuk|barang\s+masuk|pembelian\s+bahan|pembelian\s+inventori|beli\s+bahan|bahan\s+dibeli)\b/i.test(source);
+  const explicitOut=/\b(?:baja\s+out|stok\s+keluar|barang\s+keluar|penggunaan\s+bahan|bahan\s+digunakan|guna\s+bahan|digunakan)\b/i.test(source);
+  const plots=bseInventoryPlotIds_(source);
+  const fertilizerShorthand=plots.length>0 && /(?:^|\s)(?:F|N)(?:\s|$)/i.test(source);
+  const itemRaw=bseInventoryItemText_(source), item=bseInventoryCanonicalItem_(itemRaw,source);
+  const classification=bseInventoryClassifyText_(item||source);
+  const asset=classification.classification==='ASSET_PROPOSAL' && /\b(?:cadangan|beli|pembelian|mesin|peralatan)\b/i.test(source);
+  const ambiguousAsset=classification.classification==='AMBIGUOUS_CLASSIFICATION';
+
+  if(!claim&&!adjustment&&!stockCount&&!explicitIn&&!explicitOut&&!fertilizerShorthand&&!asset&&!ambiguousAsset){
+    const qtyOnly=bseInventoryExtractQuantity_(source);
+    if(item&&qtyOnly){
+      const dateInfo=bseInventoryExtractEventDate_(source,receivedAt), base={project_id:'BSE_SB',system_year:2026,event_date:dateInfo.value,event_date_explicit:dateInfo.explicit,event_date_valid:dateInfo.valid,crop:'',item_name:item,quantity:qtyOnly.quantity,unit:qtyOnly.unit,original_note:source,verification_status:'PROVISIONAL',router_confidence:'LOW'};
+      return {validation:'NEED_INFO',production_write:false,inventory_ambiguity:{item_name:item,source_key:'',options:[{value:'INVENTORY_IN',label:'Stok Masuk'},{value:'INVENTORY_OUT',label:'Stok Keluar'},{value:'INVENTORY_STOCK_COUNT',label:'Baki Stok'}]},candidates:[{target:'Inventory_Classification_Log',validation:'NEED_INFO',missing:['movement_type'],fields:Object.assign({},base,{record_type:'INVENTORY_CLASSIFICATION'})}]};
+    }
+    return null;
   }
-  const domain = asset ? 'ASSET_PROPOSAL' : adjustment ? 'INVENTORY_ADJUSTMENT' : usage ? 'INVENTORY_USAGE' : 'INVENTORY_PURCHASE';
-  const target = asset ? 'Asset_Proposal_Log' : 'Inventory_Event_Log';
-  const fields = Object.assign({}, base, { record_type: domain, event_type: domain, description: asset ? source : '', reason: adjustment ? source : '' });
-  const required = asset ? [] : ['item_name', 'quantity', 'unit', 'event_date'];
-  const missing = required.filter(key => fields[key] === undefined || fields[key] === null || String(fields[key]).trim() === '');
-  return { validation: missing.length ? 'NEED_INFO' : 'PASS', production_write: false, candidates: [{ target, validation: missing.length ? 'NEED_INFO' : 'PASS', missing, fields }] };
+
+  const qty=bseInventoryExtractQuantity_(source), dateInfo=bseInventoryExtractEventDate_(source,receivedAt), responsible=bseInventoryDeclaredResponsible_(source);
+  const base={project_id:'BSE_SB',system_year:2026,event_date:dateInfo.value,event_date_explicit:dateInfo.explicit,event_date_valid:dateInfo.valid,crop:'',item_name:item,quantity:qty&&qty.quantity,unit:qty&&qty.unit,original_note:source,verification_status:'PROVISIONAL',responsible_name:responsible,responsible_source:responsible?'DECLARED':'',router_confidence:'HIGH'};
+
+  if(ambiguousAsset)return {validation:'NEED_INFO',production_write:false,inventory_ambiguity:{item_name:item||source,source_key:'',options:classification.options},candidates:[{target:'Inventory_Classification_Log',validation:'NEED_INFO',missing:['classification'],fields:Object.assign({},base,{record_type:'INVENTORY_CLASSIFICATION'})}]};
+
+  if(claim){
+    const fields=Object.assign({},base,{record_type:'CLAIM_REQUEST',claimant:(source.match(/(?:Claimant|Penuntut|Nama)\s*:\s*(.+)/i)||[,''])[1].trim(),amount_myr:(source.match(/(?:Amaun|Jumlah)\s*(?:claim\s*)?(?:MYR|RM)?\s*:\s*([\d.,]+)/i)||[,''])[1],reason:(source.match(/(?:Sebab|Alasan)\s*:\s*(.+)/i)||[,''])[1].trim(),purchase_reference:(source.match(/(?:Rujukan Pembelian|Rujukan)\s*:\s*(.+)/i)||[,''])[1].trim()});
+    const check=bseInventoryValidateClaim_(fields),missing=check.ok?[]:check.missing;
+    return {validation:missing.length?'NEED_INFO':'PASS',production_write:false,candidates:[{target:'Claim_Request_Log',validation:missing.length?'NEED_INFO':'PASS',missing:missing,fields:fields}]};
+  }
+
+  if(asset){
+    const fields=Object.assign({},base,{record_type:'ASSET_PROPOSAL',event_type:'ASSET_PROPOSAL',description:source});
+    return {validation:'PASS',production_write:false,candidates:[{target:'Asset_Proposal_Log',validation:'PASS',missing:[],fields:fields}]};
+  }
+
+  if(stockCount){
+    const fields=Object.assign({},base,{record_type:'INVENTORY_STOCK_COUNT',event_type:'INVENTORY_STOCK_COUNT',counted_quantity:qty&&qty.quantity,quantity:undefined,storage_location:/\bgudang\b/i.test(source)?'gudang':'',movement_type:'COUNT'});
+    const missing=[]; if(!fields.item_name)missing.push('item_name'); if(!qty)missing.push('counted_quantity','unit'); if(!fields.event_date||fields.event_date_valid===false)missing.push('event_date');
+    return {validation:missing.length?'NEED_INFO':'PASS',production_write:false,candidates:[{target:'Inventory_Event_Log',validation:missing.length?'NEED_INFO':'PASS',missing:Array.from(new Set(missing)),fields:fields}]};
+  }
+
+  if(adjustment){
+    const fields=Object.assign({},base,{record_type:'INVENTORY_ADJUSTMENT',event_type:'INVENTORY_ADJUSTMENT',movement_type:'ADJUST',reason:source});
+    const missing=[]; if(!fields.item_name)missing.push('item_name'); if(!qty)missing.push('quantity','unit'); if(!fields.event_date||fields.event_date_valid===false)missing.push('event_date');
+    return {validation:missing.length?'NEED_INFO':'PASS',production_write:false,candidates:[{target:'Inventory_Event_Log',validation:missing.length?'NEED_INFO':'PASS',missing:Array.from(new Set(missing)),fields:fields}]};
+  }
+
+  if(fertilizerShorthand&&!explicitIn&&!explicitOut){
+    const candidates=plots.map(plot=>({target:'Inventory_Event_Log',validation:'PASS',missing:[],fields:Object.assign({},base,{record_type:'INVENTORY_OUT',event_type:'INVENTORY_OUT',item_name:item,quantity:qty?qty.quantity:1,unit:qty?qty.unit:'set',destination:plot,movement_type:'OUT',router_confidence:'MEDIUM'})}));
+    return {validation:'PASS',production_write:false,candidates:candidates};
+  }
+
+  if(explicitIn||explicitOut){
+    const domain=explicitOut?'INVENTORY_OUT':'INVENTORY_IN', movement=explicitOut?'OUT':'IN';
+    const destinations=explicitOut&&plots.length?plots:[''];
+    const candidates=destinations.map(destination=>{
+      const fields=Object.assign({},base,{record_type:domain,event_type:domain,movement_type:movement,destination:destination});
+      const missing=[]; if(!fields.item_name)missing.push('item_name'); if(!qty)missing.push('quantity','unit'); if(!fields.event_date||fields.event_date_valid===false)missing.push('event_date');
+      return {target:'Inventory_Event_Log',validation:missing.length?'NEED_INFO':'PASS',missing:Array.from(new Set(missing)),fields:fields};
+    });
+    return {validation:candidates.every(c=>c.validation==='PASS')?'PASS':'NEED_INFO',production_write:false,candidates:candidates};
+  }
+
+  const ambiguousFields=Object.assign({},base,{record_type:'INVENTORY_CLASSIFICATION',router_confidence:'LOW'});
+  return {validation:'NEED_INFO',production_write:false,inventory_ambiguity:{item_name:item||source,source_key:'',options:[{value:'INVENTORY_IN',label:'Stok Masuk'},{value:'INVENTORY_OUT',label:'Stok Keluar'},{value:'INVENTORY_STOCK_COUNT',label:'Baki Stok'}]},candidates:[{target:'Inventory_Classification_Log',validation:'NEED_INFO',missing:['movement_type'],fields:ambiguousFields}]};
 }
 
 function bseInventoryProposalFromResult_(result) {
-  const candidate = result && result.candidates && result.candidates[0], fields = candidate && candidate.fields || {};
-  if (!candidate) throw new Error('Calon inventori tidak ditemui.');
-  const domain = candidate.target === 'Claim_Request_Log' ? 'CLAIM_REQUEST' : candidate.target === 'Asset_Proposal_Log' ? 'ASSET_PROPOSAL' : (candidate.target === 'Input_Usage_Log' || String(fields.record_type || fields.event_type || '') === 'INPUT_USAGE') ? 'INVENTORY_USAGE' : String(fields.record_type || fields.event_type || '');
-  const proposal = Object.assign({}, fields, { domain: domain, source_key: fields.source_key || '', production_write: result.production_write, original_note: fields.original_note || '' });
-  if (domain === 'CLAIM_REQUEST' && !String(proposal.reason || '').trim()) proposal.reason = 'Claim item: ' + String(proposal.item_name || '').trim();
+  const candidate=result&&result.candidates&&result.candidates[0],fields=candidate&&candidate.fields||{};
+  if(!candidate)throw new Error('Calon inventori tidak ditemui.');
+  const domain=candidate.target==='Claim_Request_Log'?'CLAIM_REQUEST':candidate.target==='Asset_Proposal_Log'?'ASSET_PROPOSAL':String(fields.record_type||fields.event_type||'');
+  const proposal=Object.assign({},fields,{domain:domain,source_key:fields.source_key||'',production_write:result.production_write,original_note:fields.original_note||''});
+  if(domain==='CLAIM_REQUEST'&&!String(proposal.reason||'').trim())proposal.reason='Claim item: '+String(proposal.item_name||'').trim();
   return proposal;
 }
 
@@ -233,7 +310,7 @@ function bseInventoryValidateResult_(result, receivedAt, reference) {
   if (candidates.length !== 1 || !['Inventory_Event_Log', 'Input_Usage_Log', 'Claim_Request_Log', 'Asset_Proposal_Log'].includes(String(candidates[0] && candidates[0].target || ''))) return null;
   const candidate = candidates[0], proposal = bseInventoryProposalFromResult_(result);
   if (!String(proposal.source_key || '').trim()) proposal.source_key = bseInventorySourceKey_(reference || '', proposal.domain);
-  if (['INVENTORY_PURCHASE', 'INVENTORY_USAGE', 'INVENTORY_ADJUSTMENT'].includes(proposal.domain) && !String(proposal.event_date || '').trim()) proposal.event_date = bseInventoryMalaysiaDate_(receivedAt);
+  if (['INVENTORY_IN', 'INVENTORY_OUT', 'INVENTORY_STOCK_COUNT', 'INVENTORY_ADJUSTMENT'].includes(proposal.domain) && !String(proposal.event_date || '').trim()) proposal.event_date = bseInventoryMalaysiaDate_(receivedAt);
   const checked = bseInventoryValidateProposal_(proposal), missing = Array.from(new Set(checked.missing || [])).filter(field => /^[a-z_\/]+$/.test(String(field)));
   const fields = candidate.fields || (candidate.fields = {});
   if (Object.prototype.hasOwnProperty.call(proposal, 'event_date')) fields.event_date = proposal.event_date || '';
@@ -315,7 +392,7 @@ function bseInventoryClassificationCore_(book, context, input) {
     if(!/^-?\d+$/.test(sourceChatId)||!/^\d+$/.test(sourceMessageId))throw new Error('Target reply Isi Maklumat tidak sah; cuba semula.');
     return { authorized: true, decision: 'CLARIFY', status: 'PENDING_CLARIFY_REPLY', production_write: false, reference: row[1], source_key: row[2], source_chat_id: sourceChatId, source_message_id: sourceMessageId, candidate_json: String(row[15] || '') };
   }
-  const target = action === 'A' ? 'Asset_Proposal_Log' : 'Inventory_Event_Log', domain = action === 'A' ? 'ASSET_PROPOSAL' : 'INVENTORY_PURCHASE';
+  const target = action === 'A' ? 'Asset_Proposal_Log' : 'Inventory_Event_Log', domain = action === 'A' ? 'ASSET_PROPOSAL' : 'INVENTORY_IN';
   const fields = Object.assign({}, original, { record_type: domain, event_type: domain, source_key: '', production_write: false });
   if (action === 'A') fields.description = original.item_name || row[8];
   const candidates = [{ target: target, validation: 'PASS', missing: [], fields: fields }];
@@ -332,7 +409,7 @@ function bseInventoryClassificationCore_(book, context, input) {
     if (qindex >= 0) { queue.getRange(qindex + 2, 10).setValue(JSON.stringify(selected)); queue.getRange(qindex + 2, 7).setValue('NEEDS_HUMAN_REVIEW'); }
   }
   SpreadsheetApp.flush();
-  return { decision: action === 'A' ? 'ASSET_PROPOSAL' : 'INVENTORY_PURCHASE', reference: row[1], production_write: false, selected: true };
+  return { decision: action === 'A' ? 'ASSET_PROPOSAL' : 'INVENTORY_IN', reference: row[1], production_write: false, selected: true };
 }
 
 function bseInventoryFindClarificationPrompt_(book, chatId, reporterId, questionMessageId) {
@@ -417,8 +494,8 @@ function bseInventoryBalanceWarning_(approvedEvents, proposedEvent) {
   let balance = 0;
   events.filter(e => e && e.status === 'APPROVED_TEST' &&
     bseInventoryNormalize_(e.item_name) + '|' + bseInventoryNormalize_(e.unit) === key)
-    .forEach(e => { balance += e.event_type === 'INVENTORY_USAGE' ? -Number(e.quantity || 0) : Number(e.quantity || 0); });
-  if (proposedEvent && proposedEvent.event_type === 'INVENTORY_USAGE') balance -= Number(proposedEvent.quantity || 0);
+    .forEach(e => { balance += e.event_type === 'INVENTORY_OUT' ? -Number(e.quantity || 0) : e.event_type === 'INVENTORY_IN' ? Number(e.quantity || 0) : e.event_type === 'INVENTORY_ADJUSTMENT' ? Number(e.quantity || 0) : 0; });
+  if (proposedEvent && proposedEvent.event_type === 'INVENTORY_OUT') balance -= Number(proposedEvent.quantity || 0);
   else if (proposedEvent) balance += Number(proposedEvent.quantity || 0);
   return balance < 0 ? { warning: 'NEGATIVE_BALANCE', review_required: true, balance } :
     { warning: null, review_required: false, balance };
@@ -448,7 +525,7 @@ function bseInventoryReviewCore_(book, reviewContext) {
     proposal.responsible_telegram_user_id=reporterId;
   } else if (!String(proposal.responsible_source||'').trim()) proposal.responsible_source='DECLARED';
   if (!String(proposal.source_key || '').trim() && proposal.domain) proposal.source_key = bseInventorySourceKey_(context.reference, proposal.domain);
-  if (['INVENTORY_PURCHASE', 'INVENTORY_USAGE', 'INVENTORY_ADJUSTMENT'].includes(proposal.domain) && !String(proposal.event_date || '').trim()) proposal.event_date = bseInventoryMalaysiaDate_(context.received_at);
+  if (['INVENTORY_IN', 'INVENTORY_OUT', 'INVENTORY_STOCK_COUNT', 'INVENTORY_ADJUSTMENT'].includes(proposal.domain) && !String(proposal.event_date || '').trim()) proposal.event_date = bseInventoryMalaysiaDate_(context.received_at);
   const validation = bseInventoryValidateProposal_(proposal);
   if (!validation.ok) return { validation: 'NEED_INFO', decision: '', missing: Array.from(new Set(validation.missing || [])).filter(field => /^[a-z_\/]+$/.test(String(field))), reason: 'Medan wajib belum lengkap.', production_write: false };
   const payloadHash = bseInventoryPayloadHash_(proposal);
@@ -471,7 +548,7 @@ function bseInventoryReviewCore_(book, reviewContext) {
         claim.appendRow([sourceKey, eventId, proposal.claimant, proposal.claimant_telegram_user_id || '', proposal.claimant_username || '', proposal.item_name, proposal.quantity, proposal.unit, proposal.amount_myr, proposal.reason, proposal.event_date || '', proposal.purchase_reference || '', proposal.evidence_reference || '', context.owner_id || '', context.actor_id || '', context.actor_name, 'APPROVED_TEST', false, proposal.original_note, stamp, stamp, context.actor_name, payloadHash, proposal.responsible_name || '', proposal.responsible_source || '', proposal.responsible_telegram_user_id || '']);
       } else {
         const event = bseInventoryEnsureSheet_(book, 'TEST_INVENTORY_EVENT', BSE_INVENTORY_EVENT_HEADERS);
-        event.appendRow([sourceKey, eventId, proposal.domain, proposal.item_name, proposal.quantity, proposal.unit, proposal.event_date, context.owner_id || '', context.actor_id || '', context.actor_name, 'APPROVED_TEST', 'VERIFIED_TEST', false, proposal.original_note, stamp, stamp, context.actor_name, payloadHash, proposal.responsible_name || '', proposal.responsible_source || '', proposal.responsible_telegram_user_id || '']);
+        event.appendRow([sourceKey, eventId, proposal.domain, proposal.item_name, proposal.domain === 'INVENTORY_STOCK_COUNT' ? proposal.counted_quantity : proposal.quantity, proposal.unit, proposal.event_date, context.owner_id || '', context.actor_id || '', context.actor_name, 'APPROVED_TEST', 'VERIFIED_TEST', false, proposal.original_note, stamp, stamp, context.actor_name, payloadHash, proposal.responsible_name || '', proposal.responsible_source || '', proposal.responsible_telegram_user_id || '', proposal.destination || '', proposal.storage_location || '', proposal.counted_quantity || '', proposal.movement_type || '', proposal.router_confidence || '']);
       }
     } catch (error) {
       return { validation: 'FAIL', decision: '', missing: [], reason: 'TEST writer gagal: ' + String(error.message || 'unknown'), production_write: false };
@@ -575,7 +652,7 @@ function runBseInventoryClaimFoundationHarnessLegacyTests() {
   const overlap = bseInventoryClassifyText_('beli pam dan hos');
   const claimOk = bseInventoryValidateClaim_({ claimant: 'Ali', item_name: 'Baja', quantity: '2.5', unit: 'kg', amount_myr: '25.00', reason: 'Pembelian TEST' });
   const claimBad = bseInventoryValidateClaim_({ claimant: 'Ali', item_name: 'Baja', quantity: 0, unit: 'kg', amount_myr: '', reason: '' });
-  const validProposal = { domain: 'INVENTORY_PURCHASE', source_key: 'BSE-TG-1|INVENTORY_PURCHASE', item_name: 'Baja', quantity: 2, unit: 'kg', event_date: '2026-09-22', original_note: 'beli baja', production_write: false };
+  const validProposal = { domain: 'INVENTORY_IN', source_key: 'BSE-TG-1|INVENTORY_IN', item_name: 'Baja', quantity: 2, unit: 'kg', event_date: '2026-09-22', original_note: 'beli baja', production_write: false };
   const ctx = { reference: 'BSE-TG-1', action: 'APPROVED', actor_type: 'APPS_SCRIPT', actor_id: 'TEST_OPERATOR', actor_name: 'TEST', source_channel: 'APPS_SCRIPT', proposal: validProposal };
   const core = bseInventoryReviewCore_({}, ctx);
   const rejectCore = bseInventoryReviewCore_({}, Object.assign({}, ctx, { action: 'REJECTED', reason: 'Tidak diperlukan' }));
@@ -592,15 +669,15 @@ function runBseInventoryClaimFoundationHarnessLegacyTests() {
   const claimMissing = bseInventoryParseMessage_('CLAIM REQUEST\nClaimant: Ali\nItem: Baja', '2026-09-22T00:00:00.000Z');
   const assetProposal = bseInventoryParseMessage_('CADANGAN ASET\nItem: Mesin rumput', '2026-09-22T00:00:00.000Z');
   const ambiguityResult = bseInventoryParseMessage_('Item: Pam air\n1 unit', '2026-09-22T00:00:00.000Z');
-  const noDate = { production_write: false, candidates: [{ target: 'Inventory_Event_Log', validation: 'PASS', missing: [], fields: { record_type: 'INVENTORY_PURCHASE', original_note: 'Baja', item_name: 'Baja NPK', quantity: 2, unit: 'kg', event_date: '' } }] };
+  const noDate = { production_write: false, candidates: [{ target: 'Inventory_Event_Log', validation: 'PASS', missing: [], fields: { record_type: 'INVENTORY_IN', original_note: 'Baja', item_name: 'Baja NPK', quantity: 2, unit: 'kg', event_date: '' } }] };
   const noDateCheck = bseInventoryValidateResult_(noDate, '2026-09-22T00:00:00.000Z', 'BSE-TG-2');
-  const incomplete = { production_write: false, candidates: [{ target: 'Inventory_Event_Log', validation: 'PASS', missing: [], fields: { record_type: 'INVENTORY_PURCHASE', original_note: 'Baja', item_name: '', quantity: 2, unit: 'kg', event_date: '2026-09-22' } }] };
+  const incomplete = { production_write: false, candidates: [{ target: 'Inventory_Event_Log', validation: 'PASS', missing: [], fields: { record_type: 'INVENTORY_IN', original_note: 'Baja', item_name: '', quantity: 2, unit: 'kg', event_date: '2026-09-22' } }] };
   const incompleteCheck = bseInventoryValidateResult_(incomplete, '2026-09-22T00:00:00.000Z', 'BSE-TG-3');
   const claimMissingText = bseInventoryClaimMissingText_('BSE-TG-4', { missing: ['amount_myr'] });
   const genericMissingText = bseInventoryMissingText_('BSE-TG-5', { missing: [] });
   const workerSource = typeof processBseTelegramTestQueue === 'function' ? processBseTelegramTestQueue.toString() : '';
   const tests = [
-    expect('five domain routes are deterministic', purchase.candidates[0].target === 'Inventory_Event_Log' && use.candidates[0].fields.record_type === 'INVENTORY_USAGE' && adjust.candidates[0].fields.record_type === 'INVENTORY_ADJUSTMENT' && claim.candidates[0].target === 'Claim_Request_Log' && assetProposal.candidates[0].target === 'Asset_Proposal_Log'),
+    expect('five domain routes are deterministic', purchase.candidates[0].target === 'Inventory_Event_Log' && use.candidates[0].fields.record_type === 'INVENTORY_OUT' && adjust.candidates[0].fields.record_type === 'INVENTORY_ADJUSTMENT' && claim.candidates[0].target === 'Claim_Request_Log' && assetProposal.candidates[0].target === 'Asset_Proposal_Log'),
     expect('asset proposal is not active asset registry', assetProposal.production_write === false && assetProposal.candidates[0].fields.record_type === 'ASSET_PROPOSAL'),
     expect('ambiguous classification offers exact reporter choices', ambiguityResult.validation === 'NEED_INFO' && ambiguityResult.inventory_ambiguity.options.map(option => option.label).join('|') === 'Daftar Aset|Inventori|Isi Maklumat'),
     expect('claim missing fields waits for information', claimMissing.validation === 'NEED_INFO' && claimMissing.candidates[0].missing.includes('amount_myr') && !claimMissing.candidates[0].missing.includes('reason')),
@@ -609,13 +686,13 @@ function runBseInventoryClaimFoundationHarnessLegacyTests() {
     expect('claim missing response lists exact fields', claimMissingText.includes('• Amaun claim (RM)') && !claimMissingText.includes('• Claimant') && !claimMissingText.includes('• Sebab claim') && !claimMissingText.includes('• Item')),
     expect('unknown structure keeps generic fallback', genericMissingText.includes('maklumat inventori')),
     expect('WAITING_INFO path has no approval card', workerSource ? /reviewStatus==='NEEDS_HUMAN_REVIEW'/.test(workerSource) && /setValue\('WAITING_INFO'\)/.test(workerSource) : true),
-    expect('fertilizer-classifies-inventory', fertilizer.classification === 'INVENTORY_PURCHASE'),
-    expect('pesticide-classifies-inventory', pesticide.classification === 'INVENTORY_PURCHASE'),
+    expect('fertilizer-classifies-inventory', fertilizer.classification === 'INVENTORY_IN'),
+    expect('pesticide-classifies-inventory', pesticide.classification === 'INVENTORY_IN'),
     expect('mower-classifies-asset', mower.classification === 'ASSET_PROPOSAL'),
     expect('overlap-offers-three-choices', overlap.classification === 'AMBIGUOUS_CLASSIFICATION' && overlap.options.length === 3 && overlap.options.map(option => option.label).join('|') === 'Daftar Aset|Inventori|Isi Maklumat'),
     expect('claim-required-fields', claimOk.ok && !claimBad.ok),
     expect('units-and-positive-decimal', bseInventoryValidateQuantity_('1.25', 'L').ok && !bseInventoryValidateQuantity_(0, 'kg').ok),
-    expect('negative-balance-warning', bseInventoryBalanceWarning_([{ status: 'APPROVED_TEST', event_type: 'INVENTORY_PURCHASE', item_name: 'Baja', quantity: 1, unit: 'kg' }], { event_type: 'INVENTORY_USAGE', item_name: 'Baja', quantity: 2, unit: 'kg' }).warning === 'NEGATIVE_BALANCE'),
+    expect('negative-balance-warning', bseInventoryBalanceWarning_([{ status: 'APPROVED_TEST', event_type: 'INVENTORY_IN', item_name: 'Baja', quantity: 1, unit: 'kg' }], { event_type: 'INVENTORY_OUT', item_name: 'Baja', quantity: 2, unit: 'kg' }).warning === 'NEGATIVE_BALANCE'),
     expect('stable-hash-and-idempotency', hashA === hashB && bseInventoryDecisionFromPrior_(prior, validProposal.source_key, hashA, 'APPROVED').state === 'IDEMPOTENT' && bseInventoryDecisionFromPrior_(prior, validProposal.source_key, 'different', 'APPROVED').state === 'CONFLICT'),
     expect('core-test-only-writer-boundary', core.validation === 'FAIL' && core.production_write === false && /TEST writer tidak tersedia/.test(core.reason || '')),
     expect('approve-reject core contracts', !core.decision && rejectCore.decision === 'REJECTED' && rejectCore.production_write === false),
@@ -714,7 +791,7 @@ function runBseInventoryQuantityParserRegressionHarnessTests() {
     ['labelled kotak parses quantity and unit', labeledResult.candidates[0].fields.quantity === 2 && labeledResult.candidates[0].fields.unit === 'kotak'],
     ['unlabelled kotak parses quantity and unit', unlabeledResult.candidates[0].fields.quantity === 2 && unlabeledResult.candidates[0].fields.unit === 'kotak'],
     ['item name remains canonical', labeledResult.candidates[0].fields.item_name === 'Sarung tangan pakai buang' && inlineItem === 'Sarung tangan pakai buang'],
-    ['usage routes and passes with date fallback', labeledResult.candidates[0].fields.record_type === 'INVENTORY_USAGE' && labeledResult.candidates[0].target === 'Inventory_Event_Log' && labeledResult.validation === 'PASS' && labeledResult.candidates[0].fields.event_date === '2026-09-23'],
+    ['usage routes and passes with date fallback', labeledResult.candidates[0].fields.record_type === 'INVENTORY_OUT' && labeledResult.candidates[0].target === 'Inventory_Event_Log' && labeledResult.validation === 'PASS' && labeledResult.candidates[0].fields.event_date === '2026-09-23'],
     ['all validator units parse', acceptedUnits],
     ['unknown unit remains rejected', unknown.validation === 'NEED_INFO' && unknown.candidates[0].missing.includes('quantity') && unknown.candidates[0].missing.includes('unit')]
   ];
@@ -751,7 +828,7 @@ function runBseInventoryClarificationSelectionHarnessTests() {
   const clarifyA = run('CLARIFY', 'A'), clarifyI = run('CLARIFY', 'I'), clarifyC = run('CLARIFY', 'C'), selectedRetry = run('SELECTED', 'A');
   const tests = [
     { id: 'CLARIFY + A selects asset proposal', pass: clarifyA.selected === true && clarifyA.decision === 'ASSET_PROPOSAL' },
-    { id: 'CLARIFY + I selects inventory', pass: clarifyI.selected === true && clarifyI.decision === 'INVENTORY_PURCHASE' },
+    { id: 'CLARIFY + I selects inventory', pass: clarifyI.selected === true && clarifyI.decision === 'INVENTORY_IN' },
     { id: 'CLARIFY + C remains clarification', pass: clarifyC.duplicate === true && clarifyC.status === 'CLARIFY' && clarifyC.selected !== true },
     { id: 'SELECTED retry is idempotent', pass: selectedRetry.duplicate === true && selectedRetry.status === 'SELECTED' },
     { id: 'no domain writer before owner approval', pass: !/appendRow|bseInventoryReviewCore_/.test(bseInventoryClassificationCore_.toString()) }
@@ -759,4 +836,25 @@ function runBseInventoryClarificationSelectionHarnessTests() {
   const failures = tests.filter(test => !test.pass);
   if (failures.length) throw new Error('Inventory clarification selection harness gagal: ' + failures.map(test => test.id).join(', '));
   return tests;
+}
+
+
+
+function runBseInventoryD038AcceptanceHarnessTests() {
+  const inResult=bseInventoryParseMessage_('Baja In 5 Set F','2026-10-04T04:00:00.000Z');
+  const outResult=bseInventoryParseMessage_('M3 P1 P2 11/9/2026 F','2026-10-04T04:00:00.000Z');
+  const stockResult=bseInventoryParseMessage_('stok gudang baki 500 pcs dripper','2026-10-04T04:00:00.000Z');
+  const emResult=bseInventoryParseMessage_('M3 EM 1 TONG','2026-10-04T04:00:00.000Z');
+  const ambiguous=bseInventoryParseMessage_('Baja 3 beg','2026-10-04T04:00:00.000Z');
+  const tests=[
+    ['Baja In -> INVENTORY_IN Fruitka 5 set',inResult&&inResult.validation==='PASS'&&inResult.candidates.length===1&&inResult.candidates[0].fields.record_type==='INVENTORY_IN'&&inResult.candidates[0].fields.item_name==='Fruitka'&&inResult.candidates[0].fields.quantity===5&&inResult.candidates[0].fields.unit==='set'],
+    ['shorthand F -> two INVENTORY_OUT candidates, one set per plot',outResult&&outResult.validation==='PASS'&&outResult.candidates.length===2&&outResult.candidates.every(c=>c.fields.record_type==='INVENTORY_OUT'&&c.fields.item_name==='Fruitka'&&c.fields.quantity===1&&c.fields.unit==='set'&&c.fields.router_confidence==='MEDIUM')&&outResult.candidates.map(c=>c.fields.destination).join('|')==='M3P1|M3P2'],
+    ['stock count pcs canonicalizes to unit',stockResult&&stockResult.validation==='PASS'&&stockResult.candidates[0].fields.record_type==='INVENTORY_STOCK_COUNT'&&stockResult.candidates[0].fields.counted_quantity===500&&stockResult.candidates[0].fields.unit==='unit'&&stockResult.candidates[0].fields.storage_location==='gudang'],
+    ['EM 1 tong without direction waits for movement clarification',emResult&&emResult.validation==='NEED_INFO'&&emResult.candidates[0].missing.includes('movement_type')],
+    ['Baja 3 beg is ambiguous, not auto-written',ambiguous&&ambiguous.validation==='NEED_INFO'&&ambiguous.production_write===false&&ambiguous.candidates[0].missing.includes('movement_type')],
+    ['TEST only', [inResult,outResult,stockResult,emResult,ambiguous].every(r=>r&&r.production_write===false)]
+  ];
+  const failures=tests.filter(t=>!t[1]);
+  if(failures.length)throw new Error('D-038 acceptance harness gagal: '+failures.map(t=>t[0]).join(', '));
+  return {passed:tests.length,failed:0};
 }
