@@ -73,3 +73,34 @@ Authoritative ZASS:
 
 ---
 
+
+
+### AF-002 — TEST spreadsheet has broad anonymous writer permission
+
+**Status:** OPEN — SECURITY BLOCKER BEFORE PILOT
+**Source:** Live Google Drive permission metadata for current TEST spreadsheet
+**Date:** 2026-10-04
+
+**Observed:**
+- Current TEST spreadsheet `Kerani_AI_BSE_SB_TEST` is owned by the BSE Google account used for this project.
+- Google Drive metadata reports an `anyone` permission with role `writer` on that spreadsheet.
+- The current TEST Evidence folder is owned by the same BSE account and is not broadly shared.
+
+**Evidence:**
+- Direct Google Drive permission read-back on the live TEST spreadsheet and Evidence folder.
+- Local `.clasp.json` confirms the TEST repo is linked to an Apps Script project, but Apps Script ownership and installed trigger state have not yet been independently verified.
+
+**Affected area:**
+- Access control, data integrity, pilot readiness, handover ownership, and Q-006.
+
+**Potential consequence:**
+- Anyone with the spreadsheet link may be able to modify TEST operational data, defeating the intended registration/access controls and weakening audit/data-integrity evidence.
+- Pilot acceptance must not treat application-level Telegram authorization as sufficient while the underlying datastore is broadly writable.
+
+**Required resolution direction:**
+1. Remove broad anonymous writer access before shadow pilot.
+2. Keep the BSE-owned account as the datastore owner unless Project Owner explicitly selects a different handover owner.
+3. Re-read Drive permissions after the change.
+4. Independently verify Apps Script project ownership and installed triggers before resolving Q-006.
+
+**ZASS impact:** `REVIEW REQUIRED` — operational security/handover ownership boundary.
