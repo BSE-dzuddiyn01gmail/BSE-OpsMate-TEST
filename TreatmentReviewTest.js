@@ -23,7 +23,17 @@ function bseReviewTelegramTreatmentByReference_(decision,reference,note){
   }finally{lock.releaseLock();}
 }
 function bseTreatmentRequireDecision_(decision,note){if(!['APPROVED','REJECTED'].includes(decision))throw new Error('Keputusan semakan tidak sah.');if(decision==='REJECTED'&&!String(note||'').trim())throw new Error('Sebab penolakan wajib diisi.');}
-function bseTreatmentProposal_(encoded,original){let result;try{result=JSON.parse(String(encoded||''));}catch(_){throw new Error('candidate_json tidak sah.');}if(!result||typeof result!=='object'||Array.isArray(result)||Object.keys(result).some(key=>!['validation','production_write','candidates'].includes(key))||result.validation!=='PASS'||result.production_write!==false||!Array.isArray(result.candidates)||result.candidates.length!==1)throw new Error('Hasil Rawatan TEST tidak sah.');const candidate=result.candidates[0],f=candidate&&candidate.fields,allowed=['project_id','system_year','event_date','record_type','verification_status','original_note','crop','treatment_description','plot_ids','event_status'];if(!candidate||candidate.target!=='Treatment_Event_Log'||candidate.validation!=='PASS'||!Array.isArray(candidate.missing)||candidate.missing.length||!f||typeof f!=='object'||Array.isArray(f)||Object.keys(f).some(key=>!allowed.includes(key))||f.project_id!=='BSE_SB'||f.system_year!==2026||f.record_type!=='TREATMENT_EVENT'||f.verification_status!=='PROVISIONAL'||f.original_note!==original||typeof f.crop!=='string'||!f.crop.trim()||typeof f.treatment_description!=='string'||!f.treatment_description.trim()||f.event_status!=='PROPOSED'||!bseCropBatchDate_(f.event_date)||!Array.isArray(f.plot_ids)||!f.plot_ids.length)throw new Error('Calon Rawatan gagal semakan kontrak TEST.');const plots=f.plot_ids.slice().map(String).sort(bseCropBatchPlotCompare_);if(new Set(plots).size!==plots.length||plots.some(plot=>!/^M[1-9]\d*P[1-9]\d*$/.test(plot))||JSON.stringify(plots)!==JSON.stringify(f.plot_ids))throw new Error('Plot Rawatan mesti unik dan diisih secara kanonik.');const canonical={event_date:f.event_date,crop:f.crop,treatment_description:f.treatment_description,plot_ids:plots,event_status:'PROPOSED',verification_status:'PROVISIONAL',original_note:original,production_write:false};return {fields:f,plots:plots,canonical:canonical};}
+function bseTreatmentProposal_(encoded,original){
+  let result;try{result=JSON.parse(String(encoded||''));}catch(_){throw new Error('candidate_json tidak sah.');}
+  if(!result||typeof result!=='object'||Array.isArray(result)||Object.keys(result).some(key=>!['validation','production_write','candidates'].includes(key))||result.validation!=='PASS'||result.production_write!==false||!Array.isArray(result.candidates)||result.candidates.length!==1)throw new Error('Hasil Rawatan TEST tidak sah.');
+  const candidate=result.candidates[0],f=candidate&&candidate.fields;
+  const allowed=['project_id','system_year','event_date','record_type','verification_status','original_note','crop','treatment_description','plot_ids','event_status','router_confidence'];
+  if(!candidate||candidate.target!=='Treatment_Event_Log'||candidate.validation!=='PASS'||!Array.isArray(candidate.missing)||candidate.missing.length||!f||typeof f!=='object'||Array.isArray(f)||Object.keys(f).some(key=>!allowed.includes(key))||f.project_id!=='BSE_SB'||f.system_year!==2026||f.record_type!=='TREATMENT_EVENT'||f.verification_status!=='PROVISIONAL'||f.original_note!==original||typeof f.crop!=='string'||!f.crop.trim()||typeof f.treatment_description!=='string'||!f.treatment_description.trim()||!['PROPOSED','COMPLETED'].includes(f.event_status)||!bseCropBatchDate_(f.event_date)||!Array.isArray(f.plot_ids)||!f.plot_ids.length)throw new Error('Calon Rawatan gagal semakan kontrak TEST.');
+  const plots=f.plot_ids.slice().map(String).sort(bseCropBatchPlotCompare_);
+  if(new Set(plots).size!==plots.length||plots.some(plot=>!/^M[1-9]\d*P[1-9]\d*$/.test(plot))||JSON.stringify(plots)!==JSON.stringify(f.plot_ids))throw new Error('Plot Rawatan mesti unik dan diisih secara kanonik.');
+  const canonical={event_date:f.event_date,crop:f.crop,treatment_description:f.treatment_description,plot_ids:plots,event_status:f.event_status,verification_status:'PROVISIONAL',original_note:original,production_write:false};
+  return {fields:f,plots:plots,canonical:canonical};
+}
 function bseTreatmentMatchForBook_(book,proposal){return bseActiveAllocationFindMatches_(proposal.fields.crop,proposal.plots,bseTransplantRowsByName_(book,'TEST_CROP_BATCH',BSE_CROP_BATCH_HEADERS),bseTransplantRowsByName_(book,'TEST_PLOT_ALLOCATION',BSE_PLOT_ALLOCATION_HEADERS),bseTransplantRowsByName_(book,'TEST_CROP_BATCH_REVIEW',BSE_CROP_BATCH_REVIEW_HEADERS),bseTransplantRowsByName_(book,'TEST_ALLOCATION_STATUS_EVENT',BSE_ALLOCATION_STATUS_EVENT_HEADERS));}
 function bseTreatmentQueueGuard_(book,result){if(!result||!Array.isArray(result.candidates)||result.candidates.length!==1||!result.candidates[0]||result.candidates[0].target!=='Treatment_Event_Log'||result.validation!=='PASS')return result;let proposal;try{proposal=bseTreatmentProposal_(JSON.stringify(result),String(result.candidates[0].fields.original_note||''));}catch(_){return bseTreatmentMarkNeedInfo_(result);}return bseTreatmentMatchForBook_(book,proposal).kind==='UNIQUE'?result:bseTreatmentMarkNeedInfo_(result);}
 function bseTreatmentMarkNeedInfo_(result){result.validation='NEED_INFO';result.candidates.forEach(candidate=>{if(!candidate)return;candidate.validation='NEED_INFO';candidate.missing=Array.from(new Set((Array.isArray(candidate.missing)?candidate.missing:[]).concat(['batch_match'])));});return result;}
@@ -39,4 +49,93 @@ function runBseTreatmentReviewHarnessTests(){
   pass('CADANGAN RAWATAN does not create treatment event',()=>{const suggestion={validation:'PASS',production_write:false,candidates:[{target:'Decision_Approval_Log',validation:'PASS',missing:[],fields:{project_id:'BSE_SB',system_year:2026,event_date:'2026-09-22',record_type:'DECISION_APPROVAL',verification_status:'PROVISIONAL',original_note:'CADANGAN RAWATAN\nJenis Tanaman: Timun\nM2P1\nRawatan: Semburan foliar',decision_subject:'Cadangan rawatan',proposal_text:'Cadangan sahaja',approval_status:'PROPOSED',proposed_by:'',approved_by:'',approval_date:''}}]};const guarded=bseUnifiedGuard_(suggestion,{received_at:'2026-09-22T00:00:00.000Z'});if(guarded.candidates.some(item=>item.target==='Treatment_Event_Log'))throw new Error('proposal mencipta rawatan');});
   pass('reject audit only and retry baseline unchanged',()=>{let failed=false;try{bseTreatmentRequireDecision_('REJECTED','');}catch(_){failed=true;}const eventId='BSE-SB-TX-20260922-001',events=[['sk','2',eventId,batch[2],'2026-09-22','Timun','Semburan','[\"M2P1\"]','COMPLETED','VERIFIED_TEST','','','','h']],links=[['sk','2',eventId,batch[2],allocations[0][3],'M2P1','2026-09-22','h']],before=JSON.stringify({events:events,links:links,allocations:allocations});bseTreatmentAssertApprovedRows_(events,links,'sk','h',['M2P1'],eventId,batch[2]);if(!failed||before!==JSON.stringify({events:events,links:links,allocations:allocations})||/Tasks\./.test(bseReviewTelegramTreatmentByReference_.toString()))throw new Error('audit/retry tidak selamat');});
   console.log('TREATMENT_REVIEW_HARNESS: '+JSON.stringify(tests));const failures=tests.filter(test=>!test.pass);if(failures.length)throw new Error('Treatment review harness gagal: '+failures.map(test=>test.id).join(', '));return tests;
+}
+
+
+
+function bseTreatmentListPlots_(text){
+  const source=String(text||'').toUpperCase(),plots=[];
+  const compact=source.match(/M\s*([1-9]\d*)\s*P\s*([1-9]\d*)/g)||[];
+  compact.forEach(token=>{const m=token.match(/M\s*([1-9]\d*)\s*P\s*([1-9]\d*)/);if(m)plots.push('M'+m[1]+'P'+m[2]);});
+  const module=source.match(/\bM\s*([1-9]\d*)\b/);
+  if(module){const re=/\bP\s*([1-9]\d*)\b/g;let m;while((m=re.exec(source)))plots.push('M'+module[1]+'P'+m[1]);}
+  return Array.from(new Set(plots)).sort(bseCropBatchPlotCompare_);
+}
+
+function bseTreatmentListCrop_(text){
+  const source=String(text||''),m=source.match(/(?:Jenis\s+Tanaman|Tanaman|Crop)\s*[:=-]?\s*([^\n]+)/i);
+  return m?String(m[1]||'').trim():'';
+}
+
+function bseTreatmentListDate_(text,receivedAt){
+  const source=String(text||''),m=source.match(/(?:Tarikh\s+Rawatan|Tarikh|Date)\s*[:=-]?\s*(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})/i);
+  if(m){
+    const day=Number(m[1]),month=Number(m[2]),year=Number(m[3]),d=new Date(Date.UTC(year,month-1,day));
+    if(year===2026&&d.getUTCFullYear()===year&&d.getUTCMonth()===month-1&&d.getUTCDate()===day)return year+'-'+String(month).padStart(2,'0')+'-'+String(day).padStart(2,'0');
+    return '';
+  }
+  if(!receivedAt)return '';
+  const d=new Date(receivedAt);if(isNaN(d.getTime()))return '';
+  return Utilities.formatDate(d,'Asia/Kuala_Lumpur','yyyy-MM-dd');
+}
+
+function bseTreatmentListItems_(text){
+  const lines=String(text||'').split(/\r?\n/).map(line=>line.trim()).filter(Boolean),items=[];
+  lines.forEach(line=>{
+    if(/^(?:CADANGAN\s+MERACUN|RAWATAN\s+DIBUAT)$/i.test(line))return;
+    if(/^(?:Jenis\s+Tanaman|Tanaman|Crop|Tarikh|Date|Plot|Modul)\s*[:=-]?/i.test(line))return;
+    if(/^M\s*\d+/i.test(line))return;
+    const m=line.match(/^(.+?)\s*(?:-|:|=)\s*(\d+(?:[.,]\d+)?)\s*$/);
+    if(m)items.push({product:String(m[1]||'').trim(),dosage:Number(String(m[2]).replace(',','.'))});
+  });
+  return items;
+}
+
+function bseTreatmentListParseMessage_(text,receivedAt){
+  const source=String(text||'').trim();
+  if(!source)return null;
+  const items=bseTreatmentListItems_(source),plots=bseTreatmentListPlots_(source),crop=bseTreatmentListCrop_(source);
+  const workflowSignal=/^\s*(?:CADANGAN\s+MERACUN|RAWATAN\s+DIBUAT)\s*$/im.test(source)||items.length>0&&plots.length>0;
+  if(!workflowSignal)return null;
+  const eventDate=bseTreatmentListDate_(source,receivedAt);
+  const missing=[];
+  if(!crop)missing.push('crop');
+  if(!plots.length)missing.push('plot_ids');
+  if(!items.length)missing.push('treatment_description');
+  if(!eventDate)missing.push('event_date');
+  const description=items.map(item=>item.product+' - '+item.dosage).join('\n');
+  const fields={
+    project_id:'BSE_SB',system_year:2026,event_date:eventDate,record_type:'TREATMENT_EVENT',
+    verification_status:'PROVISIONAL',original_note:source,crop:crop,
+    treatment_description:description,plot_ids:plots,event_status:'COMPLETED',
+    router_confidence:missing.length?'LOW':'HIGH'
+  };
+  return {validation:missing.length?'NEED_INFO':'PASS',production_write:false,candidates:[{
+    target:'Treatment_Event_Log',validation:missing.length?'NEED_INFO':'PASS',missing:missing,fields:fields
+  }]};
+}
+
+function bseTreatmentFinalizeResult_(book,rawResult,job){
+  if(!rawResult||rawResult.production_write!==false||!Array.isArray(rawResult.candidates)||rawResult.candidates.length!==1)return rawResult;
+  const c=rawResult.candidates[0];
+  if(!c||c.target!=='Treatment_Event_Log')return rawResult;
+  if(rawResult.validation!=='PASS')return rawResult;
+  let proposal;try{proposal=bseTreatmentProposal_(JSON.stringify(rawResult),String(c.fields&&c.fields.original_note||''));}
+  catch(_){return bseTreatmentMarkNeedInfo_(rawResult);}
+  return bseTreatmentMatchForBook_(book,proposal).kind==='UNIQUE'?rawResult:bseTreatmentMarkNeedInfo_(rawResult);
+}
+
+function runBseTreatmentD043AcceptanceHarnessTests(){
+  const msg='CADANGAN MERACUN\nJenis Tanaman: Timun\nM3 P1 P2\nAcerio - 30\nAbamectin - 20';
+  const result=bseTreatmentListParseMessage_(msg,'2026-10-04T07:00:00.000Z');
+  const f=result.candidates[0].fields;
+  const tests=[
+    ['historical CADANGAN header does not create proposal state',f.event_status==='COMPLETED'],
+    ['sent date is used when treatment date absent',f.event_date==='2026-10-04'],
+    ['plots are canonical and complete',f.plot_ids.join('|')==='M3P1|M3P2'],
+    ['dosage values are preserved without invented units',f.treatment_description==='Acerio - 30\nAbamectin - 20'&&!/(ml|mg|g|l|liter)/i.test(f.treatment_description)],
+    ['workflow becomes one completed Treatment candidate',result.validation==='PASS'&&result.candidates.length===1&&result.candidates[0].target==='Treatment_Event_Log'],
+    ['TEST only',result.production_write===false]
+  ];
+  const failures=tests.filter(t=>!t[1]);if(failures.length)throw new Error('D-043 treatment harness gagal: '+failures.map(t=>t[0]).join(', '));return tests;
 }
