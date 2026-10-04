@@ -25,6 +25,13 @@ const BSE_ASSET_PROPOSAL_HEADERS = [
   'owner_telegram_user_id','owner_name','production_write','original_note',
   'created_at','approved_at','reviewer','payload_hash','responsible_name','responsible_source','responsible_telegram_user_id'
 ];
+const BSE_ASSET_EVENT_HEADERS = [
+  'source_key','asset_event_id','event_type','asset_name','asset_type','event_date',
+  'acquisition_status','registration_status','status','production_write','original_note',
+  'source_message_id','evidence_reference','owner_id','owner_telegram_user_id','owner_name',
+  'created_at','approved_at','reviewer','payload_hash','reported_by','reported_by_telegram_user_id',
+  'price_myr','vendor','brand','model','serial_number','quantity','location','warranty'
+];
 const BSE_INVENTORY_CLASSIFICATION_HEADERS = [
   'callback_token','reference','source_key','payload_hash','chat_id','reporter_telegram_user_id',
   'source_message_id','approval_message_id','item_name','options_json','status','decision','created_at','acted_at','last_error','candidate_json'
@@ -32,7 +39,7 @@ const BSE_INVENTORY_CLASSIFICATION_HEADERS = [
 const BSE_INVENTORY_ALLOWED_UNITS = ['kg','g','L','ml','beg','botol','unit','pcs','pek','kotak','set','tong'];
 const BSE_INVENTORY_DOMAINS = [
   'INVENTORY_IN','INVENTORY_OUT','INVENTORY_STOCK_COUNT','INVENTORY_ADJUSTMENT',
-  'CLAIM_REQUEST','ASSET_PROPOSAL'
+  'CLAIM_REQUEST','ASSET_PROPOSAL','ASSET_ACQUISITION','ASSET_REGISTERED'
 ];
 
 function bseInventoryStableJson_(value) {
@@ -117,6 +124,14 @@ function bseInventoryValidateProposal_(proposal) {
     if (!claim.ok) missing.push.apply(missing, claim.missing);
   } else if (p.domain === 'ASSET_PROPOSAL') {
     if (!String(p.description || '').trim()) missing.push('description');
+  } else if (p.domain === 'ASSET_ACQUISITION') {
+    if (!String(p.asset_name || p.item_name || '').trim()) missing.push('asset_name');
+    if (String(p.acquisition_status || '') !== 'ACQUIRED') missing.push('acquisition_status');
+    if (!String(p.event_date || '').trim() || p.event_date_valid === false) missing.push('event_date');
+  } else if (p.domain === 'ASSET_REGISTERED') {
+    if (!String(p.asset_name || p.item_name || '').trim()) missing.push('asset_name');
+    if (String(p.registration_status || '') !== 'REGISTERED') missing.push('registration_status');
+    if (!String(p.event_date || '').trim() || p.event_date_valid === false) missing.push('event_date');
   } else if (p.domain === 'INVENTORY_STOCK_COUNT') {
     if (!String(p.item_name || '').trim()) missing.push('item_name');
     const counted = bseInventoryValidateQuantity_(p.counted_quantity, p.unit);
@@ -235,10 +250,13 @@ function bseInventoryParseMessage_(text, receivedAt) {
   const fertilizerShorthand=plots.length>0 && /(?:^|\s)(?:F|N)(?:\s|$)/i.test(source);
   const itemRaw=bseInventoryItemText_(source), item=bseInventoryCanonicalItem_(itemRaw,source);
   const classification=bseInventoryClassifyText_(item||source);
-  const asset=classification.classification==='ASSET_PROPOSAL' && /\b(?:cadangan|beli|pembelian|mesin|peralatan)\b/i.test(source);
+  const assetLike=classification.classification==='ASSET_PROPOSAL';
+  const assetRegistration=assetLike && /\b(?:daftar\s+aset|aset\s+didaftarkan|asset\s+registered|register\s+asset)\b/i.test(source);
+  const assetAcquisition=assetLike && !assetRegistration && /\b(?:beli|dibeli|pembelian|baru\s+beli|baru\s+dibeli)\b/i.test(source);
+  const assetProposal=assetLike && !assetRegistration && !assetAcquisition && /\b(?:cadangan|proposal)\b/i.test(source);
   const ambiguousAsset=classification.classification==='AMBIGUOUS_CLASSIFICATION';
 
-  if(!claim&&!adjustment&&!stockCount&&!explicitIn&&!explicitOut&&!fertilizerShorthand&&!asset&&!ambiguousAsset){
+  if(!claim&&!adjustment&&!stockCount&&!explicitIn&&!explicitOut&&!fertilizerShorthand&&!assetProposal&&!assetAcquisition&&!assetRegistration&&!ambiguousAsset){
     const qtyOnly=bseInventoryExtractQuantity_(source);
     if(item&&qtyOnly){
       const dateInfo=bseInventoryExtractEventDate_(source,receivedAt), base={project_id:'BSE_SB',system_year:2026,event_date:dateInfo.value,event_date_explicit:dateInfo.explicit,event_date_valid:dateInfo.valid,crop:'',item_name:item,quantity:qtyOnly.quantity,unit:qtyOnly.unit,original_note:source,verification_status:'PROVISIONAL',router_confidence:'LOW'};
@@ -268,9 +286,33 @@ function bseInventoryParseMessage_(text, receivedAt) {
     return {validation:missing.length?'NEED_INFO':'PASS',production_write:false,candidates:[{target:'Claim_Request_Log',validation:missing.length?'NEED_INFO':'PASS',missing:missing,fields:fields}]};
   }
 
-  if(asset){
-    const fields=Object.assign({},base,{record_type:'ASSET_PROPOSAL',event_type:'ASSET_PROPOSAL',description:source});
+  if(assetProposal){
+    const fields=Object.assign({},base,{record_type:'ASSET_PROPOSAL',event_type:'ASSET_PROPOSAL',description:source,asset_name:item||source,asset_type:item||''});
     return {validation:'PASS',production_write:false,candidates:[{target:'Asset_Proposal_Log',validation:'PASS',missing:[],fields:fields}]};
+  }
+
+  if(assetAcquisition){
+    const fields=Object.assign({},base,{
+      record_type:'ASSET_ACQUISITION',event_type:'ASSET_ACQUISITION',
+      asset_name:item||source,asset_type:item||'',acquisition_status:'ACQUIRED',
+      source_message_id:'',evidence_refs:[],router_confidence:'HIGH'
+    });
+    const check={domain:'ASSET_ACQUISITION',source_key:'TEMP',production_write:false,original_note:source,
+      asset_name:fields.asset_name,acquisition_status:fields.acquisition_status,event_date:fields.event_date,event_date_valid:fields.event_date_valid};
+    const missing=bseInventoryValidateProposal_(check).missing||[];
+    return {validation:missing.length?'NEED_INFO':'PASS',production_write:false,candidates:[{target:'Asset_Event_Log',validation:missing.length?'NEED_INFO':'PASS',missing:missing,fields:fields}]};
+  }
+
+  if(assetRegistration){
+    const fields=Object.assign({},base,{
+      record_type:'ASSET_REGISTERED',event_type:'ASSET_REGISTERED',
+      asset_name:item||source,asset_type:item||'',registration_status:'REGISTERED',
+      source_message_id:'',evidence_refs:[],router_confidence:'HIGH'
+    });
+    const check={domain:'ASSET_REGISTERED',source_key:'TEMP',production_write:false,original_note:source,
+      asset_name:fields.asset_name,registration_status:fields.registration_status,event_date:fields.event_date,event_date_valid:fields.event_date_valid};
+    const missing=bseInventoryValidateProposal_(check).missing||[];
+    return {validation:missing.length?'NEED_INFO':'PASS',production_write:false,candidates:[{target:'Asset_Event_Log',validation:missing.length?'NEED_INFO':'PASS',missing:missing,fields:fields}]};
   }
 
   if(stockCount){
@@ -308,7 +350,10 @@ function bseInventoryParseMessage_(text, receivedAt) {
 function bseInventoryProposalFromResult_(result) {
   const candidate=result&&result.candidates&&result.candidates[0],fields=candidate&&candidate.fields||{};
   if(!candidate)throw new Error('Calon inventori tidak ditemui.');
-  const domain=candidate.target==='Claim_Request_Log'?'CLAIM_REQUEST':candidate.target==='Asset_Proposal_Log'?'ASSET_PROPOSAL':String(fields.record_type||fields.event_type||'');
+  const domain=candidate.target==='Claim_Request_Log'?'CLAIM_REQUEST':
+    candidate.target==='Asset_Proposal_Log'?'ASSET_PROPOSAL':
+    candidate.target==='Asset_Event_Log'?String(fields.record_type||fields.event_type||''):
+    String(fields.record_type||fields.event_type||'');
   const proposal=Object.assign({},fields,{domain:domain,source_key:fields.source_key||'',production_write:result.production_write,original_note:fields.original_note||''});
   if(domain==='CLAIM_REQUEST'&&!String(proposal.reason||'').trim())proposal.reason='Claim item: '+String(proposal.item_name||'').trim();
   return proposal;
@@ -585,6 +630,18 @@ function bseInventoryReviewCore_(book, reviewContext) {
       if (proposal.domain === 'ASSET_PROPOSAL') {
         const asset = bseInventoryEnsureSheet_(book, 'TEST_ASSET_PROPOSAL', BSE_ASSET_PROPOSAL_HEADERS);
         asset.appendRow([sourceKey, eventId, 'ASSET_PROPOSAL', proposal.description || proposal.original_note, 'APPROVED_TEST', context.owner_id || '', context.actor_id || '', context.actor_name, false, proposal.original_note, stamp, stamp, context.actor_name, payloadHash, proposal.responsible_name || '', proposal.responsible_source || '', proposal.responsible_telegram_user_id || '']);
+      } else if (proposal.domain === 'ASSET_ACQUISITION' || proposal.domain === 'ASSET_REGISTERED') {
+        const assetEvent=bseInventoryEnsureSheet_(book,'TEST_ASSET_EVENT',BSE_ASSET_EVENT_HEADERS);
+        assetEvent.appendRow([
+          sourceKey,eventId,proposal.domain,proposal.asset_name||proposal.item_name||'',proposal.asset_type||'',
+          proposal.event_date||'',proposal.acquisition_status||'',proposal.registration_status||'',
+          'APPROVED_TEST',false,proposal.original_note,String(proposal.source_message_id||context.reference||''),
+          Array.isArray(proposal.evidence_refs)?proposal.evidence_refs.join(','):String(proposal.evidence_reference||''),
+          context.owner_id||'',context.actor_id||'',context.actor_name,stamp,stamp,context.actor_name,payloadHash,
+          proposal.responsible_name||context.reporter_name||context.actor_name||'',proposal.responsible_telegram_user_id||context.reporter_telegram_user_id||'',
+          proposal.price_myr||'',proposal.vendor||'',proposal.brand||'',proposal.model||'',proposal.serial_number||'',
+          proposal.quantity||'',proposal.location||'',proposal.warranty||''
+        ]);
       } else if (proposal.domain === 'CLAIM_REQUEST') {
         const claim = bseInventoryEnsureSheet_(book, 'TEST_CLAIM_LOG', BSE_CLAIM_HEADERS);
         claim.appendRow([sourceKey, eventId, proposal.claimant, proposal.claimant_telegram_user_id || '', proposal.claimant_username || '', proposal.item_name, proposal.quantity, proposal.unit, proposal.amount_myr, proposal.reason, proposal.event_date || '', proposal.purchase_reference || '', proposal.evidence_reference || '', context.owner_id || '', context.actor_id || '', context.actor_name, 'APPROVED_TEST', false, proposal.original_note, stamp, stamp, context.actor_name, payloadHash, proposal.responsible_name || '', proposal.responsible_source || '', proposal.responsible_telegram_user_id || '']);
@@ -689,6 +746,7 @@ function migrateBseInventoryClaimTestSheetsV2() {
   bseInventoryMigrateSheetHeaders_(book,'TEST_INVENTORY_REVIEW',BSE_INVENTORY_REVIEW_HEADERS);
   bseInventoryMigrateClaimHeaders_(book);
   bseInventoryMigrateSheetHeaders_(book,'TEST_ASSET_PROPOSAL',BSE_ASSET_PROPOSAL_HEADERS);
+  bseInventoryMigrateSheetHeaders_(book,'TEST_ASSET_EVENT',BSE_ASSET_EVENT_HEADERS);
 }
 
 /** Manual setup only; never called by receiver, worker, trigger or review core. */
@@ -698,6 +756,7 @@ function setupBseInventoryClaimTestSheets() {
   bseInventoryMigrateSheetHeaders_(book, 'TEST_INVENTORY_REVIEW', BSE_INVENTORY_REVIEW_HEADERS);
   bseInventoryMigrateClaimHeaders_(book);
   bseInventoryMigrateSheetHeaders_(book, 'TEST_ASSET_PROPOSAL', BSE_ASSET_PROPOSAL_HEADERS);
+  bseInventoryMigrateSheetHeaders_(book, 'TEST_ASSET_EVENT', BSE_ASSET_EVENT_HEADERS);
 }
 
 function runBseInventoryClaimFoundationHarnessLegacyTests() {
@@ -948,4 +1007,23 @@ function runBseEvidenceWriterIntegrationD044HarnessTests(){
     ['linking stays TEST-only',/production_write:false/.test(core)&&!/production_write\s*:\s*true/.test(core)]
   ];
   const failures=tests.filter(t=>!t[1]);if(failures.length)throw new Error('D-044 writer integration harness gagal: '+failures.map(t=>t[0]).join(', '));return tests;
+}
+
+
+
+function runBseAssetD040AcceptanceHarnessTests(){
+  const proposal=bseInventoryParseMessage_('Cadangan beli mesin rumput','2026-10-04T05:00:00.000Z');
+  const acquired=bseInventoryParseMessage_('beli mesin rumput baru','2026-10-04T05:00:00.000Z');
+  const registered=bseInventoryParseMessage_('daftar aset mesin rumput','2026-10-04T05:00:00.000Z');
+  const af=acquired&&acquired.candidates[0]&&acquired.candidates[0].fields||{},rf=registered&&registered.candidates[0]&&registered.candidates[0].fields||{};
+  const tests=[
+    ['proposal remains distinct',proposal&&proposal.candidates[0].target==='Asset_Proposal_Log'&&proposal.candidates[0].fields.record_type==='ASSET_PROPOSAL'],
+    ['completed purchase becomes acquisition',acquired&&acquired.validation==='PASS'&&acquired.candidates[0].target==='Asset_Event_Log'&&af.record_type==='ASSET_ACQUISITION'&&af.acquisition_status==='ACQUIRED'],
+    ['acquisition does not auto-register',!af.registration_status],
+    ['registration is distinct explicit state',registered&&registered.validation==='PASS'&&rf.record_type==='ASSET_REGISTERED'&&rf.registration_status==='REGISTERED'],
+    ['sent date supplies event date when absent',af.event_date==='2026-10-04'&&rf.event_date==='2026-10-04'],
+    ['optional commercial fields are not required',!acquired.candidates[0].missing.includes('vendor')&&!acquired.candidates[0].missing.includes('brand')&&!acquired.candidates[0].missing.includes('price_myr')],
+    ['TEST only',proposal.production_write===false&&acquired.production_write===false&&registered.production_write===false]
+  ];
+  const failures=tests.filter(t=>!t[1]);if(failures.length)throw new Error('D-040 asset harness gagal: '+failures.map(t=>t[0]).join(', '));return tests;
 }
