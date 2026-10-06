@@ -2,8 +2,8 @@
 // Manual worker: one queued report per run, TEST-only; no production writer.
 function processBseTelegramTestQueue() {
   const book=boundTestBook_(),props=PropertiesService.getScriptProperties();
-  const chat=(props.getProperty('TELEGRAM_TEST_CHAT_ID')||'').trim(),user=(props.getProperty('TELEGRAM_TEST_USER_ID')||'').trim(),groups=bseTelegramTestApprovalGroupIds_();
-  if((!chat||chat!==user)&&!groups.length)throw new Error('Konfigurasi chat TEST atau group approval belum lengkap.');
+  const chat=bseRuntimeLegacyChatId_(),user=bseRuntimeLegacyUserId_(),groups=bseTelegramTestApprovalGroupIds_();
+  if((!chat||chat!==user)&&!groups.length)throw new Error('Konfigurasi chat '+bseRuntimeEnvironmentLabel_()+' atau group approval belum lengkap.');
   const lock=LockService.getScriptLock();
   if(!lock.tryLock(1000))throw new Error('Barisan sedang dikemas kini.');
   let job;

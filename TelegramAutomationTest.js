@@ -2,7 +2,7 @@
 // Opens only the fixed BSE TEST spreadsheet for unattended triggers.
 // Install manually after reviewing the TEST receiver and worker.
 function bseTelegramAutomationBook_() {
-  const id='1O2k9ef5yp7abyVxDBS5E1YuAEu9IwvuRKsr5YpbQ9M8';
+  const id=bseRuntimeSpreadsheetId_();
   const book=SpreadsheetApp.openById(id);
   SpreadsheetApp.setActiveSpreadsheet(book);
   boundTestBook_();
@@ -11,6 +11,7 @@ function installBseTelegramTestAutomation() {
   const lock=LockService.getScriptLock();
   if(!lock.tryLock(1000))throw new Error('Barisan sibuk; cuba pemasangan kemudian.');
   try {
+    if(bseRuntimeEnvironmentName_()==='PILOT_TEST')throw new Error('PILOT_TEST automation kekal OFF semasa environment setup; controlled replay mesti dijalankan secara manual.');
     bseTelegramAutomationBook_();
     const props=PropertiesService.getScriptProperties();
     const chat=props.getProperty('TELEGRAM_TEST_CHAT_ID'),user=props.getProperty('TELEGRAM_TEST_USER_ID');

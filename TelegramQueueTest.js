@@ -3,16 +3,16 @@
 const BSE_TG_QUEUE_HEADERS=['update_id','chat_id','user_id','message_id','original_note','received_at','status','ack_status','ack_message_id','candidate_json','processing_attempts','next_attempt_at','last_error','reply_to_message_id','parent_update_id','question_message_id','source_metadata_json','source_message_date'];
 function receiveBseTelegramTest() {
   const book=boundTestBook_(),props=PropertiesService.getScriptProperties();
-  const chat=(props.getProperty('TELEGRAM_TEST_CHAT_ID')||'').trim();
-  const user=(props.getProperty('TELEGRAM_TEST_USER_ID')||'').trim();
+  const chat=bseRuntimeLegacyChatId_();
+  const user=bseRuntimeLegacyUserId_();
   const groups=bseTelegramTestApprovalGroupIds_();
-  if((!/^\d+$/.test(chat)||!/^\d+$/.test(user)||chat!==user)&&!groups.length)throw new Error('Tetapkan private TEST legacy atau BSE_TEST_APPROVAL_GROUP_CHAT_IDS.');
+  if((!/^\d+$/.test(chat)||!/^\d+$/.test(user)||chat!==user)&&!groups.length)throw new Error('Tetapkan private '+bseRuntimeEnvironmentLabel_()+' legacy atau approval group allow-list environment.');
   const rejectReplies=[];let receiverError=null;
   const lock=LockService.getScriptLock();
   if(!lock.tryLock(1000))throw new Error('Penerimaan lain sedang berjalan.');
   try {
     const me=bseTelegramApi_('getMe',{});
-    if(!me||me.username!=='bse_kerani_test_bot')throw new Error('Identiti bot tidak sepadan.');
+    if(!me||me.username!==bseRuntimeBotUsername_())throw new Error('Identiti bot '+bseRuntimeEnvironmentLabel_()+' tidak sepadan.');
     if(bseTelegramApi_('getWebhookInfo',{}).url)throw new Error('Webhook aktif; tiada perubahan dibuat.');
     const queue=bseTelegramQueue_(book);
     const offsetText=props.getProperty('BSE_TELEGRAM_OFFSET')||'0';

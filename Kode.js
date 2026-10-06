@@ -10,7 +10,7 @@ const RESULT_HEADERS = ['run_id','tested_at','test_id','input_text','validation'
   'routes','candidate_json','missing_fields','production_write','config_version','script_version'];
 
 function onOpen() {
-  SpreadsheetApp.getUi().createMenu('BSE TEST')
+  SpreadsheetApp.getUi().createMenu('BSE ' + bseRuntimeEnvironmentLabel_())
     .addItem('Uji baris dipilih', 'runSelectedTest')
     .addItem('Uji semua input', 'runAllTests')
     .addSeparator()
@@ -34,15 +34,16 @@ function onOpen() {
 
 function boundTestBook_() {
   const book = SpreadsheetApp.getActiveSpreadsheet();
-  if (!book || book.getId() !== BSE_TEST.spreadsheetId) throw new Error('Skrip hanya untuk workbook BSE TEST yang ditetapkan.');
-  return book;
+  if (!book) throw new Error('Workbook aktif BSE ' + bseRuntimeEnvironmentLabel_() + ' tidak tersedia.');
+  bseRuntimeAssertWorkbookId_(book.getId());
+  return bseRuntimeBook_(book);
 }
 
 function runSelectedTest() {
   const book = boundTestBook_();
   const selection = book.getActiveRange();
-  if (!selection || selection.getSheet().getName() !== BSE_TEST.inputTab || selection.getRow() < 2 || selection.getNumRows() !== 1) {
-    throw new Error('Pilih satu sel pada baris ujian dalam TEST_INPUT.');
+  if (!selection || selection.getSheet().getName() !== bseRuntimeSheetName_(BSE_TEST.inputTab) || selection.getRow() < 2 || selection.getNumRows() !== 1) {
+    throw new Error('Pilih satu sel pada baris ujian dalam ' + bseRuntimeSheetName_(BSE_TEST.inputTab) + '.');
   }
   runTestRows_([selection.getRow()]);
 }

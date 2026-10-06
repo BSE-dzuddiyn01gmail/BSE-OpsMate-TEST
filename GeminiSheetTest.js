@@ -7,7 +7,7 @@ function showBseApiMenu() {
 }
 function runGeminiSelectedRow() {
   const book=boundTestBook_(),selection=book.getActiveRange();
-  if(!selection||selection.getSheet().getName()!=='TEST_INPUT'||selection.getRow()<2||selection.getNumRows()!==1)throw new Error('Pilih satu sel pada baris input dalam TEST_INPUT.');
+  if(!selection||selection.getSheet().getName()!==bseRuntimeSheetName_('TEST_INPUT')||selection.getRow()<2||selection.getNumRows()!==1)throw new Error('Pilih satu sel pada baris input dalam '+bseRuntimeSheetName_('TEST_INPUT')+'.');
   return bseRunGeminiSheetRow_(selection.getRow());
 }
 // No active sheet, selection or menu required. Default: TEST_INPUT row 2.

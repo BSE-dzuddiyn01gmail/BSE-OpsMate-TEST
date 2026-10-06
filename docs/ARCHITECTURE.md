@@ -40,6 +40,37 @@ Scope lock platform yang diluluskan untuk roadmap ialah:
   penuntut tepat selepas `claimant`; migrasi TEST yang dikenali menyusun data
   legacy mengikut nama header sebelum writer Claim digunakan.
 
+## PILOT_TEST environment adapter dan isolation boundary
+
+Pelaksanaan first-pilot menggunakan source TEST yang sama melalui adapter runtime
+yang eksplisit, bukan dengan menunjuk source TEST secara terus kepada workbook
+pilot. `EnvironmentTest.js` memegang kontrak environment berikut:
+
+- `TEST` kekal default compatibility environment;
+- `PILOT_TEST` hanya boleh resolve kepada workbook dan Evidence folder pilot yang
+  telah dibind secara eksplisit;
+- setiap `boundTestBook_()` mesti memanggil `bseRuntimeAssertWorkbookId_()`
+  sebelum writer mendapat akses kepada workbook;
+- nama target legacy `TEST_*` dipetakan secara deterministik kepada
+  `PILOT_TEST_*`, manakala `TELEGRAM_TEST_QUEUE` dipetakan kepada
+  `PILOT_TEST_TELEGRAM_QUEUE`;
+- PILOT_TEST Evidence tidak boleh auto-create fallback folder; folder ID mesti
+  sepadan dengan binding pilot yang dikunci;
+- property Telegram group/chat PILOT_TEST berasingan daripada TEST, dan output
+  Telegram PILOT_TEST dilabel `[PILOT TEST]`;
+- pemasangan automation trigger ditolak semasa controlled setup/replay;
+- semua environment kekal `production_write:false` dan
+  `official_bse_write:false`.
+
+Apps Script manifest tidak lagi mengaktifkan Google Tasks advanced service,
+selaras dengan D-027. Runtime isolation checkpoint 2026-10-06 membuktikan full
+regression 23/23 PASS dalam TEST dan 23/23 PASS dalam PILOT_TEST. Apps Script
+PILOT_TEST juga membuat write TEST_ONLY sebenar ke target pilot yang dipetakan,
+diikuti independent Sheet read-back; workbook TEST salah ditolak sebelum fake
+writer boleh dipanggil. Tiada probe sheet ditinggalkan selepas cleanup. Bukti
+terperinci direkodkan dalam `docs/PILOT_TEST_RUNTIME_ISOLATION_EVIDENCE.md`.
+Controlled replay dan Telegram pilot sebenar belum bermula.
+
 ## Keputusan terkunci: pengesahan penghantar dan pembatalan owner
 
 - Laporan lengkap kekal dalam group. Kad `Benar` / `Betulkan` / `Batal` dihantar
