@@ -253,10 +253,12 @@ function bseInventoryParseMessage_(text, receivedAt) {
   const adjustment=/\b(?:adjustment|pelarasan)\s+inventori\b/i.test(source);
   const stockCount=/\b(?:stok\s+baki|baki\s+stok|stok\s+gudang\s+baki|stok\s+kat\s+gudang|stock\s+count|kiraan\s+stok)\b/i.test(source);
   const explicitIn=/\b(?:baja\s+in|stok\s+masuk|barang\s+masuk|pembelian\s+bahan|pembelian\s+inventori|beli\s+bahan|bahan\s+dibeli)\b/i.test(source);
-  const explicitOut=/\b(?:baja\s+out|stok\s+keluar|barang\s+keluar|penggunaan\s+bahan|bahan\s+digunakan|guna\s+bahan|digunakan)\b/i.test(source);
+  const explicitOut=/\b(?:baja\s+out|stok\s+keluar|barang\s+keluar|penggunaan\s+bahan|bahan\s+digunakan|guna\s+bahan|digunakan|ambil\s+baja)\b/i.test(source);
   const plots=bseInventoryPlotIds_(source);
   const fertilizerShorthand=plots.length>0 && /(?:^|\s)(?:F|N)(?:\s|$)/i.test(source);
-  const itemRaw=bseInventoryItemText_(source), item=bseInventoryCanonicalItem_(itemRaw,source);
+  const itemRaw=bseInventoryItemText_(source);
+  const genericFertilizerTake=/\bambil\s+baja\b/i.test(source) && !/(?:^|\s)(?:F|N)(?:\s|$)/i.test(source);
+  const item=genericFertilizerTake?'':bseInventoryCanonicalItem_(itemRaw,source);
   const classification=bseInventoryClassifyText_(item||source);
   const assetLike=classification.classification==='ASSET_PROPOSAL';
   const assetRegistration=assetLike && /\b(?:daftar\s+aset|aset\s+didaftarkan|asset\s+registered|register\s+asset)\b/i.test(source);
@@ -336,7 +338,14 @@ function bseInventoryParseMessage_(text, receivedAt) {
   }
 
   if(fertilizerShorthand&&!explicitIn&&!explicitOut){
-    const candidates=plots.map(plot=>({target:'Inventory_Event_Log',validation:'PASS',missing:[],fields:Object.assign({},base,{record_type:'INVENTORY_OUT',event_type:'INVENTORY_OUT',item_name:item,quantity:qty?qty.quantity:1,unit:qty?qty.unit:'set',destination:plot,movement_type:'OUT',router_confidence:'MEDIUM'})}));
+    const specs=[],re=/(?:^|\s)(F|N)(?:\s+(\d+(?:[.,]\d+)?)\s*(kg|g|L|l|ml|beg|botol|unit|pcs|pek|kotak|set|tong))?(?=\s|$)/ig;let m;
+    while((m=re.exec(source))){
+      const checked=m[2]?bseInventoryValidateQuantity_(Number(String(m[2]).replace(',','.')),m[3]):{ok:true,quantity:1,unit:'set'};
+      if(checked.ok)specs.push({item_name:String(m[1]).toUpperCase()==='F'?'Fruitka':'Benegro N',quantity:checked.quantity,unit:checked.unit});
+    }
+    const unique=[];specs.forEach(spec=>{if(!unique.some(x=>x.item_name===spec.item_name))unique.push(spec);});
+    const candidates=[];
+    unique.forEach(spec=>plots.forEach(plot=>candidates.push({target:'Inventory_Event_Log',validation:'PASS',missing:[],fields:Object.assign({},base,{record_type:'INVENTORY_OUT',event_type:'INVENTORY_OUT',item_name:spec.item_name,quantity:spec.quantity,unit:spec.unit,destination:plot,movement_type:'OUT',router_confidence:'MEDIUM'})})));
     return {validation:'PASS',production_write:false,candidates:candidates};
   }
 
