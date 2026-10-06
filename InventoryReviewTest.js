@@ -163,11 +163,13 @@ function bseInventoryExtractQuantity_(text) {
 }
 
 function bseInventoryItemText_(text) {
-  const lines = String(text || '').split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+  const source=String(text||''),lines = source.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
   const labelled = lines.find(line => /^(?:Item|Bahan|Nama Item|Perkara)\s*:/i.test(line));
   const stripQty = value => String(value || '').replace(/\s+\d+(?:[.,]\d+)?\s*(?:kg|g|L|l|ml|beg|botol|unit|pcs|pek|kotak|set|tong)\b.*$/i, '').trim();
   if (labelled) return stripQty(labelled.replace(/^[^:]+:\s*/i, ''));
-  const shorthand = String(text || '').match(/(?:^|\s)(F|N)(?:\s|$)/i);
+  const inlineMovement=source.match(/\b(?:baja\s+(?:in|out)|stok\s+(?:masuk|keluar)|barang\s+(?:masuk|keluar))\s+\d+(?:[.,]\d+)?\s*(?:kg|g|L|l|ml|beg|botol|unit|pcs|pek|kotak|set|tong)\b\s+(.+?)\s*$/i);
+  if(inlineMovement&&String(inlineMovement[1]||'').trim())return String(inlineMovement[1]).trim();
+  const shorthand = source.match(/(?:^|\s)(F|N)(?:\s|$)/i);
   if (shorthand) return shorthand[1].toUpperCase() === 'F' ? 'Fruitka' : 'Benegro N';
   const line = lines.find(line => /\b(?:baja|racun|pestisid|herbisid|fungisid|insektisid|dripper|em|mesin rumput|mesin|pam|hos|alat ganti|perkakas)\b/i.test(line));
   return line ? stripQty(line.replace(/^(?:beli|pembelian|guna|penggunaan|cadangan|stok\s+masuk|stok\s+keluar|baja\s+in|baja\s+out)\s+/i, '')) : '';
@@ -975,16 +977,18 @@ function runBseInventoryClarificationSelectionHarnessTests() {
 function runBseInventoryD038AcceptanceHarnessTests() {
   const inResult=bseInventoryParseMessage_('Baja In 5 Set F','2026-10-04T04:00:00.000Z');
   const outResult=bseInventoryParseMessage_('M3 P1 P2 11/9/2026 F','2026-10-04T04:00:00.000Z');
+  const replayOut=bseInventoryParseMessage_('02/01/2026 Baja Out 3 Set Baja AB','2026-01-02T04:00:00.000Z');
   const stockResult=bseInventoryParseMessage_('stok gudang baki 500 pcs dripper','2026-10-04T04:00:00.000Z');
   const emResult=bseInventoryParseMessage_('M3 EM 1 TONG','2026-10-04T04:00:00.000Z');
   const ambiguous=bseInventoryParseMessage_('Baja 3 beg','2026-10-04T04:00:00.000Z');
   const tests=[
     ['Baja In -> INVENTORY_IN Fruitka 5 set',inResult&&inResult.validation==='PASS'&&inResult.candidates.length===1&&inResult.candidates[0].fields.record_type==='INVENTORY_IN'&&inResult.candidates[0].fields.item_name==='Fruitka'&&inResult.candidates[0].fields.quantity===5&&inResult.candidates[0].fields.unit==='set'],
     ['shorthand F -> two INVENTORY_OUT candidates, one set per plot',outResult&&outResult.validation==='PASS'&&outResult.candidates.length===2&&outResult.candidates.every(c=>c.fields.record_type==='INVENTORY_OUT'&&c.fields.item_name==='Fruitka'&&c.fields.quantity===1&&c.fields.unit==='set'&&c.fields.router_confidence==='MEDIUM')&&outResult.candidates.map(c=>c.fields.destination).join('|')==='M3P1|M3P2'],
+    ['dated Baja Out preserves trailing item after quantity',replayOut&&replayOut.validation==='PASS'&&replayOut.candidates.length===1&&replayOut.candidates[0].fields.record_type==='INVENTORY_OUT'&&replayOut.candidates[0].fields.item_name==='Baja AB'&&replayOut.candidates[0].fields.quantity===3&&replayOut.candidates[0].fields.unit==='set'&&replayOut.candidates[0].fields.event_date==='2026-01-02'],
     ['stock count pcs canonicalizes to unit',stockResult&&stockResult.validation==='PASS'&&stockResult.candidates[0].fields.record_type==='INVENTORY_STOCK_COUNT'&&stockResult.candidates[0].fields.counted_quantity===500&&stockResult.candidates[0].fields.unit==='unit'&&stockResult.candidates[0].fields.storage_location==='gudang'],
     ['EM 1 tong without direction waits for movement clarification',emResult&&emResult.validation==='NEED_INFO'&&emResult.candidates[0].missing.includes('movement_type')],
     ['Baja 3 beg is ambiguous, not auto-written',ambiguous&&ambiguous.validation==='NEED_INFO'&&ambiguous.production_write===false&&ambiguous.candidates[0].missing.includes('movement_type')],
-    ['TEST only', [inResult,outResult,stockResult,emResult,ambiguous].every(r=>r&&r.production_write===false)]
+    ['TEST only', [inResult,outResult,replayOut,stockResult,emResult,ambiguous].every(r=>r&&r.production_write===false)]
   ];
   const failures=tests.filter(t=>!t[1]);
   if(failures.length)throw new Error('D-038 acceptance harness gagal: '+failures.map(t=>t[0]).join(', '));
