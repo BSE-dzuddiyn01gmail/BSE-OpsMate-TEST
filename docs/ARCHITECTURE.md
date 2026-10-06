@@ -69,7 +69,7 @@ PILOT_TEST juga membuat write TEST_ONLY sebenar ke target pilot yang dipetakan,
 diikuti independent Sheet read-back; workbook TEST salah ditolak sebelum fake
 writer boleh dipanggil. Tiada probe sheet ditinggalkan selepas cleanup. Bukti
 terperinci direkodkan dalam `docs/PILOT_TEST_RUNTIME_ISOLATION_EVIDENCE.md`.
-Controlled replay telah bermula dalam PILOT_TEST. Run `PTR-20261006-001` menemui dua mismatch parser; selepas fix TEST merged `482779f`, rerun `PTR-20261006-002` mencapai 10/10 boundary-correct PASS. Dependency-required review paths dan Telegram pilot/smoke sebenar belum bermula.
+Controlled replay telah bermula dalam PILOT_TEST. Run `PTR-20261006-001` menemui dua mismatch parser; selepas fix TEST merged `482779f`, rerun `PTR-20261006-002` mencapai 10/10 boundary-correct PASS. Dependency-required Crop/Transplant/Census review paths kemudian diselesaikan dalam `PTR-20261006-003`, termasuk PLANNED→ACTIVE lineage dan Banci terhadap ACTIVE allocation. Semua TEST_ONLY prerequisite/proof rows dibersihkan selepas independent read-back. Comparator yang sebelum ini `OPEN_CONTROLLED` kini sama ada dibind kepada sumber sebenar dengan had eksplisit atau diklasifikasikan `LEGACY_MISSING`; tiada comparator direka. Bukti direkodkan dalam `docs/PILOT_TEST_DEPENDENCY_COMPARATOR_EVIDENCE.md`. Telegram pilot/smoke sebenar belum bermula.
 
 ## Keputusan terkunci: pengesahan penghantar dan pembatalan owner
 
