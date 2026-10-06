@@ -150,9 +150,12 @@ merekodkan kontrak implementasi TEST dan bukan sumber ZASS yang kedua.
   Gemini yang dilabel jelas; Gemini tidak boleh mencipta fakta, approval, atau
   domain write. Kegagalan Gemini tidak menghalang fakta canonical daripada
   dipulangkan, dan alasan kegagalan diaudit tanpa credential. Ia bukan scheduler.
-- Banci Pokok khusus (2C-2A) telah runtime-tested dalam TEST. Rawatan sebenar
-  khusus (2C-2B) masih ditangguh; buat sementara, laporan Rawatan boleh direkodkan
-  sebagai `Observation` yang disahkan penghantar, tanpa writer Rawatan khusus.
+- Banci Pokok khusus (2C-2A) dan Rawatan sebenar khusus (2C-2B) telah mencapai
+  dedicated regression dan Apps Script TEST runtime PASS. Rawatan 2C-2B mengikuti
+  kontrak ZASS D-043: bagi workflow treatment-list BSE yang telah ditetapkan,
+  wording sejarah seperti `CADANGAN MERACUN` tidak menentukan state; rekod ialah
+  treatment yang sudah dibuat di plot, tertakluk kepada pengesahan penghantar,
+  audit, validation ACTIVE allocation, dan `production_write:false`.
 - EC Leaching ialah target TEST baharu yang berasingan, `EC_Leachate_Log`.
   Tarikh `DD/MM/YYYY` dan sesi `PAGI` atau `PETANG` adalah wajib. `x : x`
   disimpan sebagai `NOT_MEASURED`; `AK` bermaksud `EC_IN_NEXT=0` dengan status
@@ -456,14 +459,21 @@ dan menulis audit sahaja. Retry keputusan sama adalah idempotent. Baseline
 `TEST_PLOT_ALLOCATION` dan ledger transplant tidak pernah diubah; tiada Google
 Tasks atau production writer digunakan oleh workflow ini.
 
-### Fasa 2C-2B: Rawatan sebenar TEST — implemented locally / pending runtime
+### Fasa 2C-2B: Rawatan sebenar TEST — dedicated runtime PASS
 
-Hanya header jelas `RAWATAN DIBUAT` membentuk satu `Treatment_Event_Log`.
-Laporan mesti mempunyai `Jenis Tanaman`, satu atau lebih plot kanonik, serta
-`Rawatan` yang tidak kosong. Jika `Tarikh Rawatan` tidak ada, tarikh event
-datang daripada `received_at` Telegram di `Asia/Kuala_Lumpur`; tarikh eksplisit
-yang malformat menjadi `WAITING_INFO`, bukan fallback. `CADANGAN RAWATAN`
-kekal proposal sahaja dan tidak boleh menghasilkan rawatan sebenar.
+Kontrak semasa ialah ZASS D-043. Bagi workflow treatment-list BSE yang telah
+ditetapkan, mesej rawatan yang dihantar ialah rekod treatment yang telah
+manager-approved dan sudah dibuat di plot. Wording sejarah/copy seperti
+`CADANGAN MERACUN` tidak menentukan state dan tidak boleh menukar rekod itu
+menjadi proposal. Rule ini khusus kepada workflow BSE tersebut dan tidak boleh
+digeneralisasi kepada mesej rawatan lain tanpa signal workflow yang sah.
+
+Tarikh eksplisit yang sah digunakan apabila ada; jika tiada, `event_date`
+datang daripada tarikh mesej Telegram. Dos/nilai produk disimpan tepat seperti
+dihantar. Unit dos tidak wajib dan OpsMate tidak boleh mereka `ml`, `g`, `L`,
+concentration, rate, diagnosis, tujuan rawatan, manager name, atau fakta rawatan
+lain yang tidak dinyatakan. Fakta wajib lain yang benar-benar hilang menjadi
+`WAITING_INFO` / minimum clarification, bukan inference.
 
 Matcher ACTIVE umum yang dikongsi dengan Census membaca batch approved, crop
 normalisasi sempit, baseline `TEST_PLOT_ALLOCATION`, dan status efektif ledger
@@ -471,9 +481,17 @@ transplant. Semua plot mesti berada dalam satu batch unik serta efektif `ACTIVE`
 PLANNED, batch tiada/berganda, crop tidak sepadan, atau plot tidak kanonik
 menjadi `WAITING_INFO` dengan `batch_match`, tanpa write.
 
-Menu `Lulus Rawatan ikut rujukan` dan `Tolak Rawatan ikut rujukan` menggunakan
-`ScriptLock`, hash stabil, dan dedup source key rujukan akar +
-`Treatment_Event_Log`. APPROVED menulis satu `TEST_TREATMENT_EVENT` dan satu
-`TEST_TREATMENT_ALLOCATION_LINK` bagi setiap allocation; REJECTED memerlukan
-alasan dan audit sahaja. Tiada inventori, jumlah bahan, claim, Google Tasks,
-production writer, perubahan baseline allocation, atau ledger transplant.
+Human confirmation kekal boundary rekod TEST. Menu `Lulus Rawatan ikut rujukan`
+dan `Tolak Rawatan ikut rujukan` menggunakan `ScriptLock`, hash stabil, dan
+dedup source key rujukan akar + `Treatment_Event_Log`. APPROVED menulis satu
+`TEST_TREATMENT_EVENT` dan satu `TEST_TREATMENT_ALLOCATION_LINK` bagi setiap
+allocation; REJECTED memerlukan alasan dan audit sahaja. Tiada inventori, claim,
+Google Tasks, production writer, perubahan baseline allocation, atau ledger
+transplant.
+
+Dedicated closure pada 2026-10-06 membuktikan 13/13 treatment assertions PASS
+(D-043 parser/state/date/dose/no-invention, deterministic router, ACTIVE
+allocation/review safety) dan full I-011 regression 22/22 PASS pada Apps Script
+TEST runtime. Independent Sheet read-back mengesahkan
+`production_write:false`; temporary TEST_ONLY probe kemudian dibuang dan Apps
+Script TEST HEAD dipulihkan kepada source canonical.
