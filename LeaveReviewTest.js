@@ -24,7 +24,7 @@ function bseLeaveMalaysiaDate_(receivedAt){
 
 function bseLeaveCanonicalDate_(raw){
   const text=String(raw||'').trim();
-  const m=text.match(/^(\d{1,2})[\/-](\d{1,2})(?:[\/-](\d{2}|\d{4}))?$/);
+  const m=text.match(/^(\d{1,2})[\/-](\d{1,2})(?:[\/-](\d{4}|\d{2}))?$/);
   if(!m)return '';
   const day=Number(m[1]),month=Number(m[2]),year=m[3]?Number(m[3].length===2?'20'+m[3]:m[3]):2026;
   const date=new Date(Date.UTC(year,month-1,day));
@@ -64,9 +64,9 @@ function bseLeaveDates_(text,receivedAt){
   const source=String(text||'');
   const labelled=source.match(/(?:TARIKH\s+CUTI|Tarikh|Date)\s*[:=-]?\s*([^\n]+)/i);
   const segment=String(labelled&&labelled[1]||'');
-  const all=(segment.match(/\d{1,2}[\/-]\d{1,2}(?:[\/-](?:\d{2}|\d{4}))?/g)||[]).map(bseLeaveCanonicalDate_).filter(Boolean);
+  const all=(segment.match(/\d{1,2}[\/-]\d{1,2}(?:[\/-](?:\d{4}|\d{2}))?/g)||[]).map(bseLeaveCanonicalDate_).filter(Boolean);
   if(all.length)return {start:all[0],end:all[1]||'',explicit:true,valid:true};
-  const bare=(source.match(/\b\d{1,2}[\/-]\d{1,2}[\/-](?:\d{2}|\d{4})\b/g)||[]).map(bseLeaveCanonicalDate_).filter(Boolean);
+  const bare=(source.match(/\b\d{1,2}[\/-]\d{1,2}[\/-](?:\d{4}|\d{2})\b/g)||[]).map(bseLeaveCanonicalDate_).filter(Boolean);
   if(bare.length)return {start:bare[0],end:bare[1]||'',explicit:true,valid:true};
   return {start:'',end:'',explicit:false,valid:true};
 }

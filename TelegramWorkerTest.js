@@ -300,7 +300,7 @@ function bseTelegramRouterTrace_(input,receivedAt) {
   const candidates=Array.isArray(inventory.candidates)?inventory.candidates:[];
   const confidences=candidates.map(c=>String(c&&c.fields&&c.fields.router_confidence||'')).filter(Boolean);
   const confidence=confidences.includes('LOW')?'LOW':confidences.includes('MEDIUM')?'MEDIUM':confidences.includes('HIGH')?'HIGH':'';
-  return {route:'DETERMINISTIC_INVENTORY',confidence:confidence,validation:String(inventory.validation||''),production_write:inventory.production_write===false};
+  return {route:'DETERMINISTIC_INVENTORY',confidence:confidence,validation:String(inventory.validation||''),production_write:inventory.production_write};
 }
 
 function runBseRouterD047HarnessTests() {
