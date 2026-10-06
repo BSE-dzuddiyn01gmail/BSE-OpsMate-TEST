@@ -28,7 +28,8 @@ const BSE_I011_LEGACY_GUARDS=[
   'runBseInventoryQuantityParserRegressionHarnessTests',
   'runBseTelegramQueueStatusRegressionTests',
   'runBseTelegramEvidenceHarnessTests',
-  'runBseTreatmentReviewHarnessTests'
+  'runBseTreatmentReviewHarnessTests',
+  'runBseEnvironmentIsolationHarnessTests'
 ];
 
 function bseI011RunHarness_(name){
