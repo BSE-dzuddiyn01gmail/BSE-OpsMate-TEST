@@ -30,6 +30,7 @@
 | PoC retrieval sejarah / laporan Gemini / EC Leaching | TEST runtime PASS | Owner/admin ditetapkan manual untuk PoC; `/history` dan `/report` kekal PM owner-only. EC Leaching menerima tarikh/sesi/bacaan deterministik, kad penghantar `Benar`/`Betulkan`/`Batal`, batch atomik, audit/hash/idempotence, serta PM `/retrieve BSE-TG-...` dan `/history`. Rawatan khusus kekal ditangguh sebagai Observation sementara. |
 | Fasa 2C-2A — Banci Pokok | `f9da6a2` | Siap TEST, committed, dan runtime-tested. Regression/harness PASS; runtime membuktikan laporan satu plot, `Batal` audit sahaja, `Betulkan` one-shot, pengaktifan allocation melalui Transplant, serta Banci dua plot. `BSE-TG-146694362` diretrieve sebagai `M2P1: 93 pokok`; `BSE-TG-146694372` diretrieve sebagai `M2P1: 92 pokok, M2P2: 88 pokok`. Semua bukti kekal `production_write:false`. |
 | Fasa 2C-2B — Rawatan sebenar | Belum committed | Implemented locally / pending runtime; regression PASS. |
+| I-011 implementation-only regression | `3a3770c` | TEST runtime PASS bagi `runBseI011ImplementationOnly`: 17/17 harness PASS, 0 FAIL, `production_write:false`. Bukti runtime dibuat melalui custom-function TEST_ONLY dalam workbook `Kerani_AI_BSE_SB_TEST`, dibaca semula secara bebas, kemudian sheet probe dan wrapper sementara dibuang. Full regression I-011 masih belum dijalankan. |
 
 Fasa 2C-2A ialah sebahagian kecil 2C-2. Baki 2C-2 dan Fasa 2C-3 belum mula.
 Semua checkpoint di atas kekal TEST-only;
