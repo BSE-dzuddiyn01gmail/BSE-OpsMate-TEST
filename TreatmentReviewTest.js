@@ -95,15 +95,16 @@ function bseTreatmentListParseMessage_(text,receivedAt){
   const source=String(text||'').trim();
   if(!source)return null;
   const items=bseTreatmentListItems_(source),plots=bseTreatmentListPlots_(source),crop=bseTreatmentListCrop_(source);
+  const labelledDescription=(source.match(/^\s*Rawatan\s*:\s*(.+?)\s*$/im)||[,''])[1].trim();
+  const description=labelledDescription||items.map(item=>item.product+' - '+item.dosage).join('\n');
   const workflowSignal=/^\s*(?:CADANGAN\s+MERACUN|RAWATAN\s+DIBUAT)\s*$/im.test(source)||items.length>0&&plots.length>0;
   if(!workflowSignal)return null;
   const eventDate=bseTreatmentListDate_(source,receivedAt);
   const missing=[];
   if(!crop)missing.push('crop');
   if(!plots.length)missing.push('plot_ids');
-  if(!items.length)missing.push('treatment_description');
+  if(!description)missing.push('treatment_description');
   if(!eventDate)missing.push('event_date');
-  const description=items.map(item=>item.product+' - '+item.dosage).join('\n');
   const fields={
     project_id:'BSE_SB',system_year:2026,event_date:eventDate,record_type:'TREATMENT_EVENT',
     verification_status:'PROVISIONAL',original_note:source,crop:crop,
@@ -129,13 +130,17 @@ function runBseTreatmentD043AcceptanceHarnessTests(){
   const msg='CADANGAN MERACUN\nJenis Tanaman: Timun\nM3 P1 P2\nAcerio - 30\nAbamectin - 20';
   const result=bseTreatmentListParseMessage_(msg,'2026-10-04T07:00:00.000Z');
   const f=result.candidates[0].fields;
+  const replayMsg='RAWATAN DIBUAT\nJenis Tanaman: Timun\nM2P1\nRawatan: Semburan racun kulat';
+  const replay=bseTreatmentListParseMessage_(replayMsg,'2026-09-22T06:56:47.042Z');
+  const rf=replay&&replay.candidates&&replay.candidates[0]&&replay.candidates[0].fields||{};
   const tests=[
     ['historical CADANGAN header does not create proposal state',f.event_status==='COMPLETED'],
     ['sent date is used when treatment date absent',f.event_date==='2026-10-04'],
     ['plots are canonical and complete',f.plot_ids.join('|')==='M3P1|M3P2'],
     ['dosage values are preserved without invented units',f.treatment_description==='Acerio - 30\nAbamectin - 20'&&!/(ml|mg|g|l|liter)/i.test(f.treatment_description)],
+    ['RAWATAN DIBUAT labelled description is preserved',replay&&replay.validation==='PASS'&&rf.treatment_description==='Semburan racun kulat'&&rf.event_status==='COMPLETED'&&rf.event_date==='2026-09-22'&&rf.plot_ids.join('|')==='M2P1'],
     ['workflow becomes one completed Treatment candidate',result.validation==='PASS'&&result.candidates.length===1&&result.candidates[0].target==='Treatment_Event_Log'],
-    ['TEST only',result.production_write===false]
+    ['TEST only',result.production_write===false&&replay&&replay.production_write===false]
   ];
   const failures=tests.filter(t=>!t[1]);if(failures.length)throw new Error('D-043 treatment harness gagal: '+failures.map(t=>t[0]).join(', '));return tests;
 }
