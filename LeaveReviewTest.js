@@ -24,11 +24,18 @@ function bseLeaveMalaysiaDate_(receivedAt){
 
 function bseLeaveCanonicalDate_(raw){
   const text=String(raw||'').trim();
-  const m=text.match(/^(\d{1,2})[\/-](\d{1,2})(?:[\/-](\d{4}|\d{2}))?$/);
-  if(!m)return '';
-  const day=Number(m[1]),month=Number(m[2]),year=m[3]?Number(m[3].length===2?'20'+m[3]:m[3]):2026;
+  let day,month,year;
+  const numeric=text.match(/^(\d{1,2})[\/-](\d{1,2})(?:[\/-](\d{4}|\d{2}))?$/);
+  if(numeric){
+    day=Number(numeric[1]);month=Number(numeric[2]);year=numeric[3]?Number(numeric[3].length===2?'20'+numeric[3]:numeric[3]):2026;
+  }else{
+    const named=text.match(/^(\d{1,2})\s+([A-Za-z]+)(?:\s+(\d{4}|\d{2}))?$/i);
+    if(!named)return '';
+    const months={january:1,jan:1,januari:1,february:2,feb:2,februari:2,march:3,mar:3,mac:3,april:4,apr:4,may:5,mei:5,june:6,jun:6,julai:7,july:7,jul:7,august:8,aug:8,ogos:8,september:9,sept:9,sep:9,oktober:10,october:10,oct:10,november:11,nov:11,disember:12,december:12,dec:12};
+    day=Number(named[1]);month=months[String(named[2]||'').toLowerCase()]||0;year=named[3]?Number(named[3].length===2?'20'+named[3]:named[3]):2026;
+  }
   const date=new Date(Date.UTC(year,month-1,day));
-  if(date.getUTCFullYear()!==year||date.getUTCMonth()!==month-1||date.getUTCDate()!==day)return '';
+  if(!month||date.getUTCFullYear()!==year||date.getUTCMonth()!==month-1||date.getUTCDate()!==day)return '';
   return year+'-'+('0'+month).slice(-2)+'-'+('0'+day).slice(-2);
 }
 
@@ -64,7 +71,7 @@ function bseLeaveDates_(text,receivedAt){
   const source=String(text||'');
   const labelled=source.match(/(?:TARIKH\s+CUTI|Tarikh|Date)\s*[:=-]?\s*([^\n]+)/i);
   const segment=String(labelled&&labelled[1]||'');
-  const all=(segment.match(/\d{1,2}[\/-]\d{1,2}(?:[\/-](?:\d{4}|\d{2}))?/g)||[]).map(bseLeaveCanonicalDate_).filter(Boolean);
+  const all=((segment.match(/\d{1,2}[\/-]\d{1,2}(?:[\/-](?:\d{4}|\d{2}))?/g)||[]).concat(segment.match(/\d{1,2}\s+[A-Za-z]+(?:\s+(?:\d{4}|\d{2}))?/g)||[])).map(bseLeaveCanonicalDate_).filter(Boolean);
   if(all.length)return {start:all[0],end:all[1]||'',explicit:true,valid:true};
   const bare=(source.match(/\b\d{1,2}[\/-]\d{1,2}[\/-](?:\d{4}|\d{2})\b/g)||[]).map(bseLeaveCanonicalDate_).filter(Boolean);
   if(bare.length)return {start:bare[0],end:bare[1]||'',explicit:true,valid:true};
