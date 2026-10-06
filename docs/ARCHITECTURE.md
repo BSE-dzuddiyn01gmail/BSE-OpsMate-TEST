@@ -69,7 +69,7 @@ PILOT_TEST juga membuat write TEST_ONLY sebenar ke target pilot yang dipetakan,
 diikuti independent Sheet read-back; workbook TEST salah ditolak sebelum fake
 writer boleh dipanggil. Tiada probe sheet ditinggalkan selepas cleanup. Bukti
 terperinci direkodkan dalam `docs/PILOT_TEST_RUNTIME_ISOLATION_EVIDENCE.md`.
-Controlled replay dan Telegram pilot sebenar belum bermula.
+Controlled replay telah bermula dalam PILOT_TEST. Run `PTR-20261006-001` menemui dua mismatch parser; selepas fix TEST merged `482779f`, rerun `PTR-20261006-002` mencapai 10/10 boundary-correct PASS. Dependency-required review paths dan Telegram pilot/smoke sebenar belum bermula.
 
 ## Keputusan terkunci: pengesahan penghantar dan pembatalan owner
 

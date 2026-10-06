@@ -144,8 +144,32 @@ The temporary TEST_ONLY formula sheet and wrapper were removed. A fresh
 - temporary wrapper absent;
 - Apps Script TEST HEAD source diff count = 0 against the intended fix source.
 
+## Post-merge controlled replay rerun
+
+TEST PR #5 was merged to canonical TEST main at `482779f`. The PILOT_TEST
+Apps Script HEAD was then updated from that merged source before replay.
+
+Controlled replay rerun `PTR-20261006-002` independently read back **10/10
+boundary-correct cases**:
+
+- `RP-INV-001`: PASS — `Baja AB`, quantity `3`, unit `set`, date
+  `2026-01-02`;
+- `RP-TG-TREAT-001`: PASS — D-043 `COMPLETED`, description
+  `Semburan racun kulat`, date `2026-09-22`, plot `M2P1`;
+- the other eight cases retained their expected PASS, `WAITING_INFO`, or
+  `DEPENDENCY_REQUIRED` safety boundary.
+
+The rerun used no Telegram API, no automation, and no domain writes.
+`production_write:false` and `official_bse_write:false` remained unchanged.
+Reconciliation and runtime-audit rows were persisted in the PILOT_TEST workbook.
+
+Temporary replay formula/wrapper artifacts were removed after evidence capture.
+A fresh PILOT_TEST `clasp pull` matched canonical TEST main source with diff
+count 0, and no TEST_ONLY replay wrapper remained.
+
 ## Next gate
 
-Merge the TEST fix, update the PILOT_TEST Apps Script runtime from merged TEST
-main, then rerun the controlled replay corpus and reconcile the two previously
-failing cases. This document does not claim the rerun has passed yet.
+Controlled replay is no longer blocked by the two parser bugs. It remains
+**IN PROGRESS**, because dependency-required Crop/Transplant/Census review paths
+and currently unbound legacy comparators still require controlled completion
+before `PILOT_TEST PASS`. Telegram manual smoke testing has not started.
