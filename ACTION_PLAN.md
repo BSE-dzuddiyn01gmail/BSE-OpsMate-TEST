@@ -26,10 +26,10 @@ RECOVERY SOURCE RECONCILED; LIVE RECONCILIATION PENDING. PILOT_TEST Telegram E2E
 - REC-008 Remove executable TEST_ONLY artifact. DONE; remote tombstone remains because clasp does not delete files.
 - REC-009 Reproducible Apps Script HEAD and independent pull/compare. DONE, subject to non-executable tombstone noted above.
 - REC-010 Reconcile Telegram updates 746192218/220/223/225 with queue, domain, callback and offset state. DONE: 218=DISCARDED_BY_REPORTER; 220=NEEDS_HUMAN_REVIEW; 223=UNLINKED_REPLY; 225 is absent from queue, still present in Telegram, offset=746192224.
-- REC-011 Retry only if update 746192225 is proven unprocessed and safe. READY FOR EXPLICIT OWNER AUTHORIZATION: retry writes TEST queue/offset and sends an acknowledgement; it does not write production.
-- REC-012 Confirmation/domain-write proof. BLOCKED BY REC-011.
-- REC-013 Idempotency proof. BLOCKED BY REC-011.
-- REC-014 Full final reconciliation. BLOCKED BY REC-011–013.
+- REC-011 Retry only if update 746192225 is proven unprocessed and safe. DONE with owner authorization: one queue row created, status=QUEUED, ACK=SENT (message id 21), offset=746192226, automation remains OFF.
+- REC-012 Confirmation/domain-write proof. REQUIRES EXPLICIT OWNER AUTHORIZATION: the worker mutates TEST queue/domain state and sends the provisional Telegram confirmation/card; it does not write production.
+- REC-013 Idempotency proof. BLOCKED BY REC-012.
+- REC-014 Full final reconciliation. BLOCKED BY REC-012–013.
 - REC-015 Clean-up. PENDING.
 - REC-016 Evidence/PR and owner merge gate. PENDING.
 
