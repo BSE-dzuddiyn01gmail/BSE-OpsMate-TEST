@@ -607,14 +607,24 @@ function bseInventoryBalanceWarning_(approvedEvents, proposedEvent) {
     { warning: null, review_required: false, balance };
 }
 
+function bseInventoryAssetRecoveryDecision_(rows,sourceKey,eventId,payloadHash,domain){
+  const matches=(rows||[]).filter(row=>String(row[0]||'')===String(sourceKey));
+  if(!matches.length)return {state:'NEW'};
+  if(matches.length!==1)return {state:'CONFLICT',reason:'multiple Asset Event rows for source_key'};
+  const row=matches[0];
+  if(String(row[1]||'')!==String(eventId)||String(row[2]||'')!==String(domain)||String(row[19]||'')!==String(payloadHash)||String(row[8]||'')!=='APPROVED_TEST'||row[9]!==false)
+    return {state:'CONFLICT',reason:'existing Asset Event ID/domain/hash/status/TEST flag differs'};
+  return {state:'RECOVER_EXISTING'};
+}
+
 function bseInventoryDecisionFromPrior_(priorRows, sourceKey, payloadHash, decision) {
   const rows = Array.isArray(priorRows) ? priorRows : [];
-  const prior = rows.find(r => r && r.source_key === sourceKey);
-  if (!prior) return { state: 'NEW' };
-  if (prior.payload_hash !== payloadHash || prior.decision !== decision) {
-    return { state: 'CONFLICT', reason: 'source_key sudah mempunyai hash/keputusan berbeza' };
-  }
-  return { state: 'IDEMPOTENT', event_id: prior.event_id || null };
+  const matches=rows.filter(r=>r&&(Array.isArray(r)?String(r[1]||''):String(r.source_key||''))===String(sourceKey));
+  if(!matches.length)return {state:'NEW'};
+  if(matches.length!==1)return {state:'CONFLICT',reason:'multiple review rows for source_key'};
+  const prior=matches[0],priorHash=Array.isArray(prior)?String(prior[9]||''):String(prior.payload_hash||''),priorDecision=Array.isArray(prior)?String(prior[4]||''):String(prior.decision||'');
+  if(priorHash!==String(payloadHash)||priorDecision!==String(decision))return {state:'CONFLICT',reason:'source_key sudah mempunyai hash/keputusan berbeza'};
+  return {state:'IDEMPOTENT',event_id:Array.isArray(prior)?String(prior[2]||''):(prior.event_id||null)};
 }
 
 /**
@@ -651,7 +661,10 @@ function bseInventoryReviewCore_(book, reviewContext) {
         asset.appendRow([sourceKey, eventId, 'ASSET_PROPOSAL', proposal.description || proposal.original_note, 'APPROVED_TEST', context.owner_id || '', context.actor_id || '', context.actor_name, false, proposal.original_note, stamp, stamp, context.actor_name, payloadHash, proposal.responsible_name || '', proposal.responsible_source || '', proposal.responsible_telegram_user_id || '']);
       } else if (proposal.domain === 'ASSET_ACQUISITION' || proposal.domain === 'ASSET_REGISTERED') {
         const assetEvent=bseInventoryEnsureSheet_(book,'TEST_ASSET_EVENT',BSE_ASSET_EVENT_HEADERS);
-        assetEvent.appendRow([
+        const existingAssetRows=assetEvent.getLastRow()>1?assetEvent.getRange(2,1,assetEvent.getLastRow()-1,BSE_ASSET_EVENT_HEADERS.length).getValues():[];
+        const assetRecovery=bseInventoryAssetRecoveryDecision_(existingAssetRows,sourceKey,eventId,payloadHash,proposal.domain);
+        if(assetRecovery.state==='CONFLICT')throw new Error('PARTIAL_WRITE_CONFLICT: '+assetRecovery.reason);
+        if(assetRecovery.state==='NEW')assetEvent.appendRow([
           sourceKey,eventId,proposal.domain,proposal.asset_name||proposal.item_name||'',proposal.asset_type||'',
           proposal.event_date||'',proposal.acquisition_status||'',proposal.registration_status||'',
           'APPROVED_TEST',false,proposal.original_note,String(proposal.source_message_id||context.reference||''),
