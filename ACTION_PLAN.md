@@ -19,7 +19,7 @@ RECOVERY SOURCE MERGED AND VERIFIED. PR #9 is merged to canonical `main`; PILOT_
 - REC-001 through REC-009: DONE — source/runtime audit, Owner Registry extraction, tests, and reproducible Script HEAD audit.
 - REC-010 through REC-015: DONE — Telegram reconciliation, controlled retry, confirmation/idempotency proof, and cleanup.
 - REC-016: DONE — evidence captured; PR #9 merged to `main`.
-- REC-017: IN REVIEW — this canonical status record records merged `main`, verified Script HEAD, and 25/25 live regression evidence.
+- REC-017: DONE — canonical status record merged to `main` in PR #10; Script HEAD verified and 25/25 live regression evidence retained.
 
 ## Current operational state
 - `PILOT_TEST` only; automation OFF; manual receive/worker execution only.
