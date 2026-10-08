@@ -552,7 +552,7 @@ function bseObservationHypothesisOnly_(fields) {
 // It is the authority for seed-sowing destination plots; Gemini cannot add to it.
 function bseSeedSowingModulePlots_(input) {
   const text=String(input||'');
-  const match=text.match(/(?:^|\n)\s*Modul\s*:\s*([^\r\n]*)/i);
+  const match=text.match(/(?:^|\n)\s*(?:\d+\.\s*)?Modul\s*:\s*([^\r\n]*)/i);
   if(!match)return {ok:false,plots:[],reason:'MODUL_LINE_MISSING'};
   const value=match[1].trim();
   let module,plotNumbers=[];
@@ -603,13 +603,13 @@ function bseSeedSowingSourceFacts_(source){
   const add=(values,value)=>{const clean=String(value||'').trim();if(clean&& !values.some(item=>normalize(item)===normalize(clean)))values.push(clean);};
   [source.original].concat(source.clarifications||[]).forEach(text=>{
     String(text||'').split(/\r?\n/).forEach(line=>{
-      const crop=line.match(/^\s*Jenis\s+Tanaman\s*:\s*(.*?)\s*$/i);
+      const crop=line.match(/^\s*(?:\d+\.\s*)?Jenis\s+Tanaman\s*:\s*(.*?)\s*$/i);
       if(crop){
         const value=crop[1].trim(),localPair=value.match(/^(.*?)\s+Lokal\s*\(([^()]+)\)\s*$/i),paired=value.match(/^(.*?)\s*\(([^()]+)\)\s*$/);
         if(localPair){add(crops,localPair[1]);add(varieties,'Lokal ('+localPair[2].trim()+')');return;}
         add(crops,paired?paired[1]:value);if(paired)add(varieties,paired[2]);return;
       }
-      const variety=line.match(/^\s*Varieti\s*:\s*(.*?)\s*$/i);if(variety)add(varieties,variety[1]);
+      const variety=line.match(/^\s*(?:\d+\.\s*)?Varieti\s*:\s*(.*?)\s*$/i);if(variety)add(varieties,variety[1]);
     });
   });
   return {crop:crops.length===1?crops[0]:'',variety:varieties.length===1?varieties[0]:'',cropConflict:crops.length>1,varietyConflict:varieties.length>1,normalize:normalize};

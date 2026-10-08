@@ -49,6 +49,9 @@ function bseLeaveType_(text){
   if(yes('OFFDAY')||yes('OFF DAY'))explicit.push({raw:'OFFDAY',value:'Off Day'});
   if(explicit.length===1)return {ok:true,raw:explicit[0].raw,value:explicit[0].value};
   if(explicit.length>1)return {ok:false,ambiguous:true,options:explicit};
+  // A structured JENIS CUTI checklist with no affirmative choice is intentionally incomplete.
+  // Do not infer a leave type from ALASAN or from the option labels themselves.
+  if(/JENIS\s+CUTI\s*\(YES\/NO\)/i.test(source))return {ok:false,ambiguous:false,options:[]};
 
   const rules=[
     [/\bOFF\s*DAY\b|\bOFFDAY\b/i,'OFFDAY','Off Day'],
