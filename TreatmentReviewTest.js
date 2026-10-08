@@ -94,6 +94,22 @@ function bseTreatmentListItems_(text){
 function bseTreatmentListParseMessage_(text,receivedAt){
   const source=String(text||'').trim();
   if(!source)return null;
+  // Numbered treatment sections are independent records. Never pool doses across crops/plots.
+  const headings=[...source.matchAll(/^\s*\*?\d+\.\s*(M\s*\d+)(?:\s*[- ]\s*(P\s*\d+))?\s+([^\n*]+)\*?\s*$/gim)];
+  if(headings.length>1){
+    const eventDate=bseTreatmentListDate_(source,receivedAt),candidates=[];
+    headings.forEach((heading,i)=>{
+      const segment=source.slice(heading.index+heading[0].length,i+1<headings.length?headings[i+1].index:source.length);
+      const items=bseTreatmentListItems_(segment),module=heading[1].replace(/\s+/g,'').toUpperCase();
+      const plot=heading[2]?module+heading[2].replace(/\s+/g,'').toUpperCase():'';
+      const crop=String(heading[3]||'').trim().replace(/^[-\s]+/,'').replace(/\*+$/,'').trim();
+      const description=items.map(item=>item.product+' - '+item.dosage).join('\n');
+      const missing=[];if(!crop)missing.push('crop');if(!plot)missing.push('plot_ids');
+      if(!description)missing.push('treatment_description');if(!eventDate)missing.push('event_date');
+      candidates.push({target:'Treatment_Event_Log',validation:'NEED_INFO',missing:Array.from(new Set(missing.concat('active_allocation_unverified'))),fields:{project_id:'BSE_SB',system_year:2026,event_date:eventDate,record_type:'TREATMENT_EVENT',verification_status:'PROVISIONAL',original_note:source,crop:crop,treatment_description:description,plot_ids:plot?[plot]:[],module_id:module,event_status:'COMPLETED',router_confidence:'LOW'}});
+    });
+    return {validation:'NEED_INFO',production_write:false,candidates:candidates};
+  }
   const items=bseTreatmentListItems_(source),plots=bseTreatmentListPlots_(source),crop=bseTreatmentListCrop_(source);
   const labelledDescription=(source.match(/^\s*Rawatan\s*:\s*(.+?)\s*$/im)||[,''])[1].trim();
   const description=labelledDescription||items.map(item=>item.product+' - '+item.dosage).join('\n');
