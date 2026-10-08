@@ -354,8 +354,24 @@ function bseInventoryParseMessage_(text, receivedAt) {
   if(explicitIn||explicitOut){
     const domain=explicitOut?'INVENTORY_OUT':'INVENTORY_IN', movement=explicitOut?'OUT':'IN';
     const destinations=explicitOut&&plots.length?plots:[''];
+    // Scope fertilizer shorthand to its own source line, never the entire report.
+    // A mixed F/N report must not inherit the first product for every plot.
+    const lineItems={}; let mixedShorthand=false;
+    if(explicitOut&&plots.length){
+      source.split(/\r?\n/).forEach(line=>{
+        const match=line.match(/(?:^|\s)(F|N)(?=\s|$)/i);
+        if(!match)return;
+        mixedShorthand=true;
+        const lineItem=match[1].toUpperCase()==='F'?'Fruitka':'Benegro N';
+        bseInventoryPlotIds_(line).forEach(plot=>{
+          if(lineItems[plot]&&lineItems[plot]!==lineItem)lineItems[plot]='';
+          else if(!Object.prototype.hasOwnProperty.call(lineItems,plot))lineItems[plot]=lineItem;
+        });
+      });
+    }
     const candidates=destinations.map(destination=>{
-      const fields=Object.assign({},base,{record_type:domain,event_type:domain,movement_type:movement,destination:destination});
+      const scopedItem=mixedShorthand?(lineItems[destination]||''):item;
+      const fields=Object.assign({},base,{record_type:domain,event_type:domain,movement_type:movement,destination:destination,item_name:scopedItem});
       const missing=[]; if(!fields.item_name)missing.push('item_name'); if(!qty)missing.push('quantity','unit'); if(!fields.event_date||fields.event_date_valid===false)missing.push('event_date');
       return {target:'Inventory_Event_Log',validation:missing.length?'NEED_INFO':'PASS',missing:Array.from(new Set(missing)),fields:fields};
     });
