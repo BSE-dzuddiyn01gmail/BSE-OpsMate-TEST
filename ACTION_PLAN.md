@@ -16,6 +16,7 @@ RECOVERY SOURCE MERGED AND VERIFIED. PR #9 is merged to canonical `main`; PILOT_
 - REC-018 cleanup: `TEST_ONLY_PILOT_E2E_SMOKE.gs` was deleted from the active PILOT_TEST Apps Script editor, independently read back as absent, and removed from the executor mirror. Canonical Git did not track this tombstone.
 - REC-021 LIVE Betulkan proof (2026-10-08): BSE-TG-746192233 opened a correction session; BSE-TG-746192235 was received once as the replacement report (`Baja NPK`, `0.75 kg`), then reached `REPORTER_CONFIRMED`. Independent PILOT_TEST_INVENTORY_EVENT read-back confirmed one `APPROVED_TEST / VERIFIED_TEST` record with `production_write:FALSE` and preserved original-plus-correction provenance. Full regression after parser fix: 26/26 PASS.
 - REC-022 LIVE Batal proof (2026-10-08): BSE-TG-746192237 (`Baja NPK`, `1.0 kg`) received once, produced one reporter card, and after the reporter selected Batal reached `DISCARDED_BY_REPORTER` in both queue and approval UI. Independent PILOT_TEST_INVENTORY_EVENT read-back confirmed no source key or TEST inventory record for BSE-TG-746192237; no domain or production write occurred.
+- REC-023 stale-card closure (2026-10-08): the pre-fix incorrect candidate card BSE-TG-746192232 / Telegram message 37 was explicitly discarded by its original reporter. Queue and approval UI both read back `DISCARDED_BY_REPORTER`; PILOT_TEST_INVENTORY_EVENT contains no BSE-TG-746192232 source key.
 
 ## Recovery tasks
 - REC-001 through REC-009: DONE — source/runtime audit, Owner Registry extraction, tests, and reproducible Script HEAD audit.
@@ -26,6 +27,7 @@ RECOVERY SOURCE MERGED AND VERIFIED. PR #9 is merged to canonical `main`; PILOT_
 - REC-019: DONE — latest manual Telegram pilot LIVE PASS evidence merged to canonical `main` in PR #12; no runtime or production change.
 - REC-021: DONE — clean LIVE Betulkan flow repaired, source merged in PR #15, and BSE-TG-746192235 independently verified as the corrected `0.75 kg` TEST record; no production write.
 - REC-022: DONE — clean LIVE Batal flow independently verified; BSE-TG-746192237 ended as `DISCARDED_BY_REPORTER` with no TEST domain record and no production write.
+- REC-023: DONE — stale incorrect card 37 and its queue were explicitly discarded; independent read-back confirmed no TEST inventory record for BSE-TG-746192232.
 
 ## Current operational state
 - `PILOT_TEST` only; automation OFF; manual receive/worker execution only.
