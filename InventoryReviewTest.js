@@ -216,7 +216,8 @@ function bseClaimDescription_(text) {
   const source=String(text||'').trim();
   const labelled=source.match(/^(?:Item|Perkara|Description|Keterangan)\s*:\s*(.+)$/im);
   if(labelled)return String(labelled[1]||'').replace(/\s+RM\s*[\d.,]+.*$/i,'').trim();
-  const first=source.split(/\r?\n/).map(v=>v.trim()).find(Boolean)||'';
+  // Ignore corpus/Telegram attachment descriptions, not the actual purchased item.
+  const first=source.split(/\r?\n/).map(v=>v.trim()).find(v=>v&&!/^\(?\s*(?:gambar|photo|image|resit|receipt)\b[^\n]*\)?$/i.test(v))||'';
   return first
     .replace(/^(?:claim|tuntutan|tuntut\s+bayaran)\s*[:\-]?\s*/i,'')
     .replace(/\s+RM\s*[\d.,]+.*$/i,'')
