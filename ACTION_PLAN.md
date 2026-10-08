@@ -1,39 +1,31 @@
 # ACTION PLAN — OpsMate BSE Site B Recovery
 
 ## Current true milestone
-RECOVERY SOURCE RECONCILED; LIVE RECONCILIATION PENDING. PILOT_TEST Telegram E2E is not PASS.
+RECOVERY SOURCE MERGED AND VERIFIED. PR #9 is merged to canonical `main`; PILOT_TEST Apps Script HEAD matches canonical source. Telegram E2E proof is TEST-only and remains non-production.
 
 ## Locked safety
-`production_write:false`; `official_bse_write:false`; `BSE_TELEGRAM_AUTOMATION=OFF`; no Google Tasks; no official BSE write; no Telegram retry unless REC-010 proves it safe.
+`production_write:false`; `official_bse_write:false`; `BSE_TELEGRAM_AUTOMATION=OFF`; no Google Tasks; no official BSE write; no Telegram retry unless independently proven safe.
 
 ## Evidence snapshot
-- Dirty local main: `1723678`; canonical `origin/main`: `13c8b8e`. Dirty work is preserved untouched.
-- Recovery branch: `recovery/pilot-source-reconcile`, containing additive-header, callback-context, and independent Owner Registry fixes.
-- Targeted Apps Script tests PASS: Owner Registry and additive header harnesses.
-- Full Apps Script regression PASS: 25/25, `failed:0`, with `production_write:false`.
-- PILOT_TEST Script HEAD was pushed from the recovery source and pulled independently into a disposable audit copy.
-- Critical runtime files match recovery byte-for-byte: OwnerRegistryTest.js, RegressionSuiteTest.js, ReviewCoreTest.js, TelegramApprovalUiTest.js.
-- The former TEST_ONLY smoke file is now a two-line non-executable tombstone. Clasp cannot delete a remote file that is absent locally; no TEST_ONLY function remains.
+- Canonical `origin/main`: `54133fd` (merge of PR #9). Dirty local main at `1723678` is preserved untouched.
+- PR #9 merged 12 recovery commits from `recovery/pilot-source-reconcile`.
+- Canonical source was pushed to PILOT_TEST Apps Script HEAD; no Apps Script version or deployment was created or updated.
+- Live Apps Script full regression: 25/25 PASS, `failed:0`, `production_write:false`.
+- Independent pull/byte audit after the canonical push: 42/42 canonical files match.
+- Telegram proof: BSE-TG-746192225 has exactly one TEST_INVENTORY_EVENT, status `APPROVED_TEST / VERIFIED_TEST`; queue is `REPORTER_CONFIRMED`; no production write.
+- Former TEST_ONLY smoke artefact is a non-executable tombstone; no TEST_ONLY function remains.
 
 ## Recovery tasks
-- REC-001 Snapshot canonical/worktree/runtime state. DONE.
-- REC-002 Exact Apps Script HEAD mismatch manifest. DONE: prior source mismatch isolated; recovery source is the runtime baseline.
-- REC-003 Owner Registry lineage audit. DONE: extracted as a standalone module with no Tasks dependency.
-- REC-004 Minimal canonical Owner Registry module. DONE.
-- REC-005 Combine header and callback repairs. DONE.
-- REC-006 Register Owner Registry regression. DONE.
-- REC-007 Syntax, targeted, full regression, diff checks. DONE (25/25 live Apps Script harnesses).
-- REC-008 Remove executable TEST_ONLY artifact. DONE; remote tombstone remains because clasp does not delete files.
-- REC-009 Reproducible Apps Script HEAD and independent pull/compare. DONE, subject to non-executable tombstone noted above.
-- REC-010 Reconcile Telegram updates 746192218/220/223/225 with queue, domain, callback and offset state. DONE: 218=DISCARDED_BY_REPORTER; 220=NEEDS_HUMAN_REVIEW; 223=UNLINKED_REPLY; 225 is absent from queue, still present in Telegram, offset=746192224.
-- REC-011 Retry only if update 746192225 is proven unprocessed and safe. DONE with owner authorization: one queue row created, status=QUEUED, ACK=SENT (message id 21), offset=746192226, automation remains OFF.
-- REC-012 Confirmation/domain-write proof. DONE: candidate validation=PASS, target=Inventory_Event_Log, production_write=false; queue=NEEDS_HUMAN_REVIEW; one reporter confirmation card OPEN (message id 23), no card error.
-- REC-013 Idempotency proof. DONE: approval-card and callback-processor harnesses PASS after stale assertions were repaired to match the active multi-record contract.
-- REC-014 Full final reconciliation. DONE: callback 746192226 is PROCESSED after the canonical-reference repair; queue=REPORTER_CONFIRMED; exactly one TEST_INVENTORY_EVENT record exists for BSE-TG-746192225, status=APPROVED_TEST / VERIFIED_TEST; no production write.
-- REC-015 Clean-up. DONE: temporary audit functions were removed before final Script HEAD push; TEST_ONLY smoke file remains only as a non-executable tombstone because clasp cannot delete remote files.
-- REC-016 Evidence/PR and owner merge gate. READY: recovery branch pushed through 133e431; final live regression 25/25 PASS, plus callback-context and approval-card harnesses PASS. Merge remains an owner decision.
+- REC-001 through REC-009: DONE — source/runtime audit, Owner Registry extraction, tests, and reproducible Script HEAD audit.
+- REC-010 through REC-015: DONE — Telegram reconciliation, controlled retry, confirmation/idempotency proof, and cleanup.
+- REC-016: DONE — evidence captured; PR #9 merged to `main`.
+- REC-017: IN REVIEW — this canonical status record records merged `main`, verified Script HEAD, and 25/25 live regression evidence.
 
-## Known live facts requiring reconciliation
-- Update 746192225 / group message id 19 was previously observed after offset 746192224.
-- Prior refs 746192218, 746192220, 746192223 have historical status/callback anomalies.
-- Cloud log access through clasp is unavailable because the clasp project configuration has no GCP project ID, despite the Apps Script standard project being linked. This is a diagnostic gap, not a pass or a reason to retry.
+## Current operational state
+- `PILOT_TEST` only; automation OFF; manual receive/worker execution only.
+- User `913757987` is registered as active TEST owner/admin.
+- No Google Tasks, production writer, production deployment, or official BSE integration is enabled.
+
+## Known limits
+- Apps Script cloud logs remain unavailable through clasp because its project configuration lacks a GCP project ID; this is a diagnostic gap only.
+- Removing the remote tombstone file requires an explicit Apps Script file deletion action; it is non-executable and does not affect runtime behavior.
