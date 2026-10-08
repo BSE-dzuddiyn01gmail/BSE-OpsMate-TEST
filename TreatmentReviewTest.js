@@ -35,7 +35,23 @@ function bseTreatmentProposal_(encoded,original){
   return {fields:f,plots:plots,canonical:canonical};
 }
 function bseTreatmentMatchForBook_(book,proposal){return bseActiveAllocationFindMatches_(proposal.fields.crop,proposal.plots,bseTransplantRowsByName_(book,'TEST_CROP_BATCH',BSE_CROP_BATCH_HEADERS),bseTransplantRowsByName_(book,'TEST_PLOT_ALLOCATION',BSE_PLOT_ALLOCATION_HEADERS),bseTransplantRowsByName_(book,'TEST_CROP_BATCH_REVIEW',BSE_CROP_BATCH_REVIEW_HEADERS),bseTransplantRowsByName_(book,'TEST_ALLOCATION_STATUS_EVENT',BSE_ALLOCATION_STATUS_EVENT_HEADERS));}
-function bseTreatmentQueueGuard_(book,result){if(!result||!Array.isArray(result.candidates)||result.candidates.length!==1||!result.candidates[0]||result.candidates[0].target!=='Treatment_Event_Log'||result.validation!=='PASS')return result;let proposal;try{proposal=bseTreatmentProposal_(JSON.stringify(result),String(result.candidates[0].fields.original_note||''));}catch(_){return bseTreatmentMarkNeedInfo_(result);}return bseTreatmentMatchForBook_(book,proposal).kind==='UNIQUE'?result:bseTreatmentMarkNeedInfo_(result);}
+function bseTreatmentReconcileCandidates_(book,result){
+  if(!result||result.production_write!==false||!Array.isArray(result.candidates)||!result.candidates.length||!result.candidates.every(c=>c&&c.target==='Treatment_Event_Log'))return result;
+  // Resolve only fully specified records; no partial D-048 cards for incomplete groups.
+  result.candidates.forEach(candidate=>{
+    const missing=(candidate.missing||[]).filter(k=>k!=='active_allocation_unverified'&&k!=='batch_match');
+    let ok=false;
+    if(!missing.length){
+      const single={validation:'PASS',production_write:false,candidates:[Object.assign({},candidate,{validation:'PASS',missing:[]})]};
+      try{const proposal=bseTreatmentProposal_(JSON.stringify(single),String(candidate.fields.original_note||''));ok=bseTreatmentMatchForBook_(book,proposal).kind==='UNIQUE';}catch(_){ok=false;}
+    }
+    candidate.validation=ok?'PASS':'NEED_INFO';
+    candidate.missing=ok?[]:Array.from(new Set(missing.concat('batch_match')));
+  });
+  result.validation=result.candidates.every(c=>c.validation==='PASS')?'PASS':'NEED_INFO';
+  return result;
+}
+function bseTreatmentQueueGuard_(book,result){return bseTreatmentReconcileCandidates_(book,result);}
 function bseTreatmentMarkNeedInfo_(result){result.validation='NEED_INFO';result.candidates.forEach(candidate=>{if(!candidate)return;candidate.validation='NEED_INFO';candidate.missing=Array.from(new Set((Array.isArray(candidate.missing)?candidate.missing:[]).concat(['batch_match'])));});return result;}
 function bseTreatmentNextId_(rows,date){if(!bseCropBatchDate_(date))throw new Error('Tarikh Rawatan tidak sah untuk ID.');const prefix='BSE-SB-TX-'+date.replace(/-/g,'')+'-',used=rows.map(row=>String(row[2]||''));let highest=0;used.forEach(id=>{const match=id.match(new RegExp('^'+prefix+'(\\d{3})$'));if(match)highest=Math.max(highest,Number(match[1]));});if(highest>=999)throw new Error('Siri Rawatan harian telah penuh.');return prefix+String(highest+1).padStart(3,'0');}
 function bseTreatmentAssertApprovedRows_(events,links,sourceKey,payloadHash,plots,eventId,batchId){const event=events.filter(row=>String(row[0])===sourceKey),rows=links.filter(row=>String(row[0])===sourceKey);if(!eventId||!batchId||event.length!==1||rows.length!==plots.length||String(event[0][2])!==eventId||String(event[0][3])!==batchId||String(event[0][8])!=='COMPLETED'||String(event[0][9])!=='VERIFIED_TEST'||String(event[0][13])!==payloadHash||rows.some(row=>String(row[2])!==eventId||String(row[3])!==batchId||String(row[7])!==payloadHash)||rows.map(row=>String(row[5])).join('|')!==plots.join('|'))throw new Error('Audit APPROVED tidak sepadan dengan rekod Rawatan TEST.');}
@@ -94,6 +110,22 @@ function bseTreatmentListItems_(text){
 function bseTreatmentListParseMessage_(text,receivedAt){
   const source=String(text||'').trim();
   if(!source)return null;
+  // Numbered treatment sections are independent records. Never pool doses across crops/plots.
+  const headings=[...source.matchAll(/^\s*\*?\d+\.\s*(M\s*\d+)(?:\s*[- ]\s*(P\s*\d+))?\s+([^\n*]+)\*?\s*$/gim)];
+  if(headings.length>1){
+    const eventDate=bseTreatmentListDate_(source,receivedAt),candidates=[];
+    headings.forEach((heading,i)=>{
+      const segment=source.slice(heading.index+heading[0].length,i+1<headings.length?headings[i+1].index:source.length);
+      const items=bseTreatmentListItems_(segment),module=heading[1].replace(/\s+/g,'').toUpperCase();
+      const plot=heading[2]?module+heading[2].replace(/\s+/g,'').toUpperCase():'';
+      const crop=String(heading[3]||'').trim().replace(/^[-\s]+/,'').replace(/\*+$/,'').trim();
+      const description=items.map(item=>item.product+' - '+item.dosage).join('\n');
+      const missing=[];if(!crop)missing.push('crop');if(!plot)missing.push('plot_ids');
+      if(!description)missing.push('treatment_description');if(!eventDate)missing.push('event_date');
+      candidates.push({target:'Treatment_Event_Log',validation:'NEED_INFO',missing:Array.from(new Set(missing.concat('active_allocation_unverified'))),fields:{project_id:'BSE_SB',system_year:2026,event_date:eventDate,record_type:'TREATMENT_EVENT',verification_status:'PROVISIONAL',original_note:source,crop:crop,treatment_description:description,plot_ids:plot?[plot]:[],event_status:'COMPLETED',router_confidence:'LOW'}});
+    });
+    return {validation:'NEED_INFO',production_write:false,candidates:candidates};
+  }
   const items=bseTreatmentListItems_(source),plots=bseTreatmentListPlots_(source),crop=bseTreatmentListCrop_(source);
   const labelledDescription=(source.match(/^\s*Rawatan\s*:\s*(.+?)\s*$/im)||[,''])[1].trim();
   const description=labelledDescription||items.map(item=>item.product+' - '+item.dosage).join('\n');
@@ -117,7 +149,8 @@ function bseTreatmentListParseMessage_(text,receivedAt){
 }
 
 function bseTreatmentFinalizeResult_(book,rawResult,job){
-  if(!rawResult||rawResult.production_write!==false||!Array.isArray(rawResult.candidates)||rawResult.candidates.length!==1)return rawResult;
+  if(!rawResult||rawResult.production_write!==false||!Array.isArray(rawResult.candidates)||!rawResult.candidates.length)return rawResult;
+  if(rawResult.candidates.length>1)return bseTreatmentReconcileCandidates_(book,rawResult);
   const c=rawResult.candidates[0];
   if(!c||c.target!=='Treatment_Event_Log')return rawResult;
   if(rawResult.validation!=='PASS')return rawResult;
