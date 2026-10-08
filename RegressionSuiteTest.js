@@ -25,6 +25,7 @@ const BSE_I011_HARNESSES=[
 
 const BSE_I011_LEGACY_GUARDS=[
   'runBseAdditiveHeaderHarnessTests',
+  'runBseOwnerRegistryHarnessTests',
   'runBseInventoryClaimFoundationHarnessTests',
   'runBseInventoryQuantityParserRegressionHarnessTests',
   'runBseTelegramQueueStatusRegressionTests',
