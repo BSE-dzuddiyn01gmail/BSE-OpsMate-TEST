@@ -30,6 +30,7 @@ RECOVERY SOURCE MERGED AND VERIFIED. PR #9 is merged to canonical `main`; PILOT_
 - REC-022: DONE — clean LIVE Batal flow independently verified; BSE-TG-746192237 ended as `DISCARDED_BY_REPORTER` with no TEST domain record and no production write.
 - REC-023: DONE — stale incorrect card 37 and its queue were explicitly discarded; independent read-back confirmed no TEST inventory record for BSE-TG-746192232.
 - REC-024: DONE — final read-only pilot readiness audit passed: no approval card remains OPEN, all persisted callbacks are processed, runtime remains safely bound to PILOT_TEST, and full regression is 26/26 PASS.
+- REC-025: DONE — PILOT_TEST stability cycle (2026-10-08) passed with independent Sheet read-back. Cycle 1 Benar: BSE-TG-746192241 produced exactly one `Baja NPK` `1.25 kg` inventory TEST record after reporter confirmation. Cycle 2 Betulkan: BSE-TG-746192243 (`0.40 kg`) entered correction state; replacement BSE-TG-746192245 (`0.60 kg`) produced exactly one confirmed TEST record with original-plus-correction provenance, while the root created no domain record. Cycle 3 Batal: BSE-TG-746192247 (`2.00 kg`) reached `DISCARDED_BY_REPORTER` with no inventory record. A controlled receive/worker retry with no new Telegram message created no queue, approval card, callback, or inventory duplicate. Final runtime audit retained `PILOT_TEST`, automation `OFF`, `production_write:false`, `official_bse_write:false`; full regression 26/26 PASS.
 
 ## Current operational state
 - `PILOT_TEST` only; automation OFF; manual receive/worker execution only.
