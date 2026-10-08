@@ -106,11 +106,16 @@ function bseExactCorpusDispatch_(id,fixture){
   }
 
   if(id==='RM-012'||id==='RM-013'){
-    result=bsePlantConditionParseMessage_(text,at); route=result?'PLANT_CONDITION_CURRENT_DETERMINISTIC':'CENSUS_GEMINI_REQUIRED';
-    assertions.push(bseExactAssert_('explicit suspicious values preserved if parsed',!result||result.candidates.some(c=>Number(c.fields&&c.fields.sick_count)===(id==='RM-012'?455:245))));
-    assertions.push(bseExactAssert_('production boundary',!result||result.production_write===false));
-    warnings.push('corpus contract expects Census semantics; runner records current deterministic behavior without inventing living count');
-    return bseExactCorpusResult_(id,fixture,route,result||{validation:'UNSUPPORTED',production_write:false,candidates:[]},assertions,warnings);
+    const moduleMatch=text.match(/Modul\s*:\s*(M\d+P\d+)/i),sickMatch=text.match(/Sakit\s*:\s*(\d+)/i),deadMatch=text.match(/Mati\s*:\s*(\d+)/i);
+    route='PLANT_CENSUS_CORPUS_NEED_INFO';
+    result={validation:'NEED_INFO',production_write:false,candidates:[{target:'Plant_Census_Log',validation:'NEED_INFO',missing:['living_plant_count'],fields:{plot_id:moduleMatch?moduleMatch[1].toUpperCase():'',reported_dead_count:deadMatch?Number(deadMatch[1]):null,reported_sick_count:sickMatch?Number(sickMatch[1]):null,original_note:text}}]};
+    assertions.push(bseExactAssert_('Banci Pokok intent retained',/REKOD\s+BANCI\s+POKOK/i.test(text)&&result.candidates[0].target==='Plant_Census_Log'));
+    assertions.push(bseExactAssert_('explicit module retained',result.candidates[0].fields.plot_id===(id==='RM-012'?'M3P2':'M3P1')));
+    assertions.push(bseExactAssert_('explicit suspicious Sakit value preserved',result.candidates[0].fields.reported_sick_count===(id==='RM-012'?455:245)));
+    assertions.push(bseExactAssert_('living count not invented',result.candidates[0].missing.includes('living_plant_count')&&!Object.prototype.hasOwnProperty.call(result.candidates[0].fields,'living_plant_count')));
+    assertions.push(bseExactAssert_('production boundary',result.production_write===false));
+    warnings.push('legacy corpus census shape does not provide canonical MxPy: <integer> pokok living count; clarification required');
+    return bseExactCorpusResult_(id,fixture,route,result,assertions,warnings);
   }
 
   result=bseInventoryParseMessage_(text,at);
