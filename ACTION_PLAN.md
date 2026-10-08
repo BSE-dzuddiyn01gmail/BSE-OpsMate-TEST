@@ -29,9 +29,9 @@ RECOVERY SOURCE RECONCILED; LIVE RECONCILIATION PENDING. PILOT_TEST Telegram E2E
 - REC-011 Retry only if update 746192225 is proven unprocessed and safe. DONE with owner authorization: one queue row created, status=QUEUED, ACK=SENT (message id 21), offset=746192226, automation remains OFF.
 - REC-012 Confirmation/domain-write proof. DONE: candidate validation=PASS, target=Inventory_Event_Log, production_write=false; queue=NEEDS_HUMAN_REVIEW; one reporter confirmation card OPEN (message id 23), no card error.
 - REC-013 Idempotency proof. DONE: approval-card and callback-processor harnesses PASS after stale assertions were repaired to match the active multi-record contract.
-- REC-014 Full final reconciliation. PENDING REPORTER DECISION on card 23.
-- REC-015 Clean-up. PENDING after REC-014.
-- REC-016 Evidence/PR and owner merge gate. PENDING after REC-014.
+- REC-014 Full final reconciliation. DONE: callback 746192226 is PROCESSED after the canonical-reference repair; queue=REPORTER_CONFIRMED; exactly one TEST_INVENTORY_EVENT record exists for BSE-TG-746192225, status=APPROVED_TEST / VERIFIED_TEST; no production write.
+- REC-015 Clean-up. DONE: temporary audit functions were removed before final Script HEAD push; TEST_ONLY smoke file remains only as a non-executable tombstone because clasp cannot delete remote files.
+- REC-016 Evidence/PR and owner merge gate. READY: recovery branch pushed through 133e431; final live regression 25/25 PASS, plus callback-context and approval-card harnesses PASS. Merge remains an owner decision.
 
 ## Known live facts requiring reconciliation
 - Update 746192225 / group message id 19 was previously observed after offset 746192224.
