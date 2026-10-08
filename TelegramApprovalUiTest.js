@@ -254,7 +254,7 @@ function bseTelegramReporterConfirmationCore_(book,context,input){
     return {production_write:false,candidate_index:candidateIndex,queue_status:status};
   }
 
-  context.reference=String(row[1]);context.action='APPROVED';context.proposalResult=parsed;
+  context.reference=String(row[0]);context.action='APPROVED';context.proposalResult=parsed;
   const outcome=bseApprovalDomain_(parsed).core(book,context);
   sheet.getRange(sheetRow,12,1,8).setValues([[String(input.callback.message.chat.id),String(input.callback.message.message_id),'REPORTER_CONFIRMED','',new Date().toISOString(),String(row[2]),'REPORTER_CONFIRMED','']]);SpreadsheetApp.flush();
   const status=bseApprovalRecomputeQueueStatus_(book,String(row[0]));bseTelegramApprovalCloseCard_(row,'REPORTER_CONFIRMED',context.actor_name);
@@ -341,7 +341,7 @@ function runBseTelegramReporterCallbackContextHarnessTests(){
   const tests=[
     {id:'normalized context has mandatory review fields',pass:true},
     {id:'approval core is available for normalized context',pass:typeof bseTelegramReporterConfirmationCore_==='function'},
-    {id:'normalized context preserves TEST-only candidate',pass:source.includes('proposalResult')}
+    {id:'normalized context preserves TEST-only candidate',pass:source.includes('proposalResult')},{id:'normalized context uses canonical queue reference, not source-key suffix',pass:source.includes('context.reference=String(row[0])')&&!source.includes('context.reference=String(row[1])')}
   ];
   const failed=tests.filter(t=>!t.pass);
   if(failed.length)throw new Error('Reporter callback context harness gagal: '+failed.map(t=>t.id).join(', '));
