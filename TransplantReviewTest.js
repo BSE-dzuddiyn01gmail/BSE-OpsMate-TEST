@@ -92,6 +92,23 @@ function bseTransplantFindMatches_(proposal,batches,allocations,reviews,statusEv
   });
   return matches.length===1?Object.assign({kind:'UNIQUE'},matches[0]):{kind:matches.length?'MULTIPLE':'NONE',matches:matches};
 }
+function bseTransplantFindPlannedMatchesByPlots_(plots,batches,allocations,reviews,statusEvents){
+  const normalized=(plots||[]).map(String).slice().sort(bseTransplantPlotCompare_);
+  if(!normalized.length||new Set(normalized).size!==normalized.length)return {kind:'NONE',matches:[]};
+  const approved=new Set((reviews||[]).filter(row=>String(row[3])==='Crop_Batch_Log'&&String(row[5])==='APPROVED').map(row=>String(row[11]))),matches=[];
+  (batches||[]).forEach(batch=>{
+    const batchId=String(batch[2]||'');if(!batchId||!approved.has(batchId))return;
+    const candidates=(allocations||[]).filter(row=>String(row[2])===batchId&&String(row[6])==='PLANNED').map(row=>({allocation_id:String(row[3]),plot_id:String(row[5])}));
+    const active=new Set((statusEvents||[]).filter(row=>String(row[4])===batchId&&String(row[8])==='ACTIVE').map(row=>String(row[5])));
+    const selected=normalized.map(plot=>candidates.find(item=>item.plot_id===plot&&!active.has(item.allocation_id)));
+    if(selected.every(Boolean))matches.push({batch_id:batchId,source_key:String(batch[0]||''),crop:String(batch[4]||''),variety:String(batch[5]||''),allocations:selected});
+  });
+  return matches.length===1?Object.assign({kind:'UNIQUE'},matches[0]):{kind:matches.length?'MULTIPLE':'NONE',matches:matches};
+}
+function bseTransplantPlannedBatchByPlotsForBook_(book,plots){
+  return bseTransplantFindPlannedMatchesByPlots_(plots,bseTransplantRowsByName_(book,'TEST_CROP_BATCH',BSE_CROP_BATCH_HEADERS),bseTransplantRowsByName_(book,'TEST_PLOT_ALLOCATION',BSE_PLOT_ALLOCATION_HEADERS),bseTransplantRowsByName_(book,'TEST_CROP_BATCH_REVIEW',BSE_CROP_BATCH_REVIEW_HEADERS),bseTransplantRowsByName_(book,'TEST_ALLOCATION_STATUS_EVENT',BSE_ALLOCATION_STATUS_EVENT_HEADERS));
+}
+
 function bseTransplantQueueGuard_(book,result){
   if(!result||!Array.isArray(result.candidates)||result.candidates.length!==1||!result.candidates[0]||result.candidates[0].target!=='Transplant_Event_Log'||result.validation!=='PASS')return result;
   let proposal;try{proposal=bseTransplantProposal_(JSON.stringify(result),String(result.candidates[0].fields.original_note||''));}catch(_){return result;}
@@ -113,7 +130,7 @@ function runBseTransplantReviewHarnessTests(){
   pass('compact M1P34 expands',()=>{if(proposal.plots.join('|')!=='M1P3|M1P4')throw new Error('plot salah');});
   pass('crop required',()=>{const bad=JSON.parse(JSON.stringify(candidate));bad.candidates[0].fields.crop='';let failed=false;try{bseTransplantProposal_(JSON.stringify(bad),note);}catch(_){failed=true;}if(!failed)throw new Error('crop kosong diterima');});
   pass('reporter metadata does not invalidate a canonical Transplant candidate',()=>{const withReporter=JSON.parse(JSON.stringify(candidate));Object.assign(withReporter.candidates[0].fields,{responsible_name:'tester',responsible_source:'REPORTER_DEFAULT',responsible_telegram_user_id:'123'});if(bseTransplantProposal_(JSON.stringify(withReporter),note).plots.join('|')!=='M1P3|M1P4')throw new Error('metadata penghantar ditolak');});
-  pass('Telegram Malaysia date fallback',()=>{if(bseTransplantMalaysiaDate_('2026-09-11T17:00:00.000Z')!=='2026-09-12')throw new Error('fallback tarikh Malaysia salah');});
+  pass('legacy Malaysia timestamp helper remains deterministic',()=>{if(bseTransplantMalaysiaDate_('2026-09-11T17:00:00.000Z')!=='2026-09-12')throw new Error('helper tarikh Malaysia salah');});
   pass('unique batch match',()=>{if(bseTransplantFindMatches_(proposal,[batch],allocations,[review],[]).kind!=='UNIQUE')throw new Error('padanan unik gagal');});
   pass('no and multiple batch match',()=>{if(bseTransplantFindMatches_(proposal,[],allocations,[review],[]).kind!=='NONE'||bseTransplantFindMatches_(proposal,[batch,batch.slice()],allocations,[review],[]).kind!=='MULTIPLE')throw new Error('padanan tiada/berganda gagal');});
   pass('planned baseline is not mutated',()=>{const before=JSON.stringify(allocations);const match=bseTransplantFindMatches_(proposal,[batch],allocations,[review],[]);const statusRows=match.allocations.map(a=>[proposal.plots.indexOf(a.plot_id),a.allocation_id,a.plot_id,'PLANNED','ACTIVE']);if(statusRows.length!==2||before!==JSON.stringify(allocations))throw new Error('baseline berubah');});

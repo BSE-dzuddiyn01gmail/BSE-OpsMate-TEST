@@ -449,11 +449,15 @@ bergantung pada Google Tasks; capability itu telah dikeluarkan oleh D-027.
 
 Frasa jelas `pindah anak pokok` menghasilkan satu proposal
 `Transplant_Event_Log` sahaja: `TRANSPLANT`, `PROPOSED`, dan
-`PROVISIONAL`. Crop wajib, variety opsyenal. Parser deterministik menerima
-token compact `M1P34` sebagai dua plot `M1P3` dan `M1P4`; format tiga atau
-lebih digit selepas `P` ditolak sebagai samar. Jika tiada `Tarikh Pindah:`
-yang sah, `event_date` datang daripada `received_at` Telegram dalam zon
-`Asia/Kuala_Lumpur`.
+`PROVISIONAL`. Parser deterministic-first menerima token compact `M1P34`
+sebagai dua plot `M1P3` dan `M1P4`; format tiga atau lebih digit selepas
+`P` ditolak sebagai samar. Untuk shorthand Telegram, crop dan variety hanya
+boleh diperoleh daripada tepat satu Crop Batch APPROVED yang memiliki semua
+allocation PLANNED tersebut; padanan tiada atau berganda menjadi `WAITING_INFO`.
+`Tarikh Pindah` ialah fakta operasi wajib: ia mesti hadir secara eksplisit dalam
+laporan atau jawapan penjelasan dan tidak boleh diandaikan daripada `received_at`
+Telegram. Shorthand tanpa tarikh berhenti sebagai `WAITING_INFO` sebelum
+Gemini/API fallback dan tiada write dibuat.
 
 Sebelum menjadi `NEEDS_HUMAN_REVIEW`, worker membandingkan crop dengan trim,
 collapse whitespace, dan case-insensitive sahaja. Tepat satu batch TEST yang
