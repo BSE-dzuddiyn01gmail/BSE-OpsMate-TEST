@@ -1,5 +1,20 @@
 /** @OnlyCurrentDoc */
 // Manual worker: one queued report per run, TEST-only; no production writer.
+function bseTelegramSeedSowingBoundaryResult_(input){
+  const sourceContext=typeof bseUnifiedSourceContext_==='function'?bseUnifiedSourceContext_(input):{original:String(input||'')};
+  const source=String(sourceContext&&sourceContext.original||'').trim();
+  if(!/\bKERJA\s+SEMAIAN\s+BENIH\b/i.test(source))return null;
+  const count=pattern=>[...source.matchAll(pattern)].length;
+  const cropCount=count(/^\s*(?:\d+\.\s*)?Jenis\s+Tanaman\s*:\s*.+?\s*$/gim);
+  const moduleCount=count(/^\s*(?:\d+\.\s*)?Modul\s*:\s*.+?\s*$/gim);
+  const dateCount=count(/^\s*(?:\d+\.\s*)?Tarikh\s+Semai\s*:\s*.+?\s*$/gim);
+  if(Math.max(cropCount,moduleCount,dateCount)<=1)return null;
+  return {validation:'NEED_INFO',production_write:false,seed_sowing_split_required:true,candidates:[{
+    target:'Crop_Batch_Log',validation:'NEED_INFO',missing:['event_date','crop','variety'],
+    fields:{project_id:'BSE_SB',system_year:2026,event_date:'',record_type:'CROP_BATCH',verification_status:'PROVISIONAL',original_note:source,batch_action:'BATCH_START',crop:'',variety:'',batch_status:'PROPOSED'}
+  }]};
+}
+
 function processBseTelegramTestQueue() {
   const book=boundTestBook_(),props=PropertiesService.getScriptProperties();
   const chat=bseRuntimeLegacyChatId_(),user=bseRuntimeLegacyUserId_(),groups=bseTelegramTestApprovalGroupIds_();
@@ -57,9 +72,12 @@ function processBseTelegramTestQueue() {
       const inventoryResult=!ecResult&&typeof bseInventoryParseMessage_==='function'?bseInventoryParseMessage_(inventoryInput,job.receivedAt):null;
       const leaveResult=!ecResult&&!inventoryResult&&typeof bseLeaveParseMessage_==='function'?bseLeaveParseMessage_(job.input,job.receivedAt):null;
       const maintenanceResult=!ecResult&&!inventoryResult&&!leaveResult&&typeof bseMaintenanceParseMessage_==='function'?bseMaintenanceParseMessage_(job.input,job.receivedAt):null;
-      const treatmentResult=!ecResult&&!inventoryResult&&!leaveResult&&!maintenanceResult&&typeof bseTreatmentListParseMessage_==='function'?bseTreatmentListParseMessage_(job.input,job.receivedAt):null;
-      const plantConditionResult=!ecResult&&!inventoryResult&&!leaveResult&&!maintenanceResult&&!treatmentResult&&typeof bsePlantConditionParseMessage_==='function'?bsePlantConditionParseMessage_(job.input,job.receivedAt):null;
-      const rawResult=ecResult||inventoryResult||leaveResult||maintenanceResult||treatmentResult||plantConditionResult||bseUnifiedProcess_(job.input,job.receivedAt);
+      // One seed-sowing message is one atomic Crop Batch. Multiple seed batches must
+      // be split by the reporter and must never fall through as Treatment traffic.
+      const seedSowingBoundaryResult=!ecResult&&!inventoryResult&&!leaveResult&&!maintenanceResult?bseTelegramSeedSowingBoundaryResult_(job.input):null;
+      const treatmentResult=!ecResult&&!inventoryResult&&!leaveResult&&!maintenanceResult&&!seedSowingBoundaryResult&&typeof bseTreatmentListParseMessage_==='function'?bseTreatmentListParseMessage_(job.input,job.receivedAt):null;
+      const plantConditionResult=!ecResult&&!inventoryResult&&!leaveResult&&!maintenanceResult&&!seedSowingBoundaryResult&&!treatmentResult&&typeof bsePlantConditionParseMessage_==='function'?bsePlantConditionParseMessage_(job.input,job.receivedAt):null;
+      const rawResult=ecResult||inventoryResult||leaveResult||maintenanceResult||seedSowingBoundaryResult||treatmentResult||plantConditionResult||bseUnifiedProcess_(job.input,job.receivedAt);
       if(typeof bseLeaveApplyReporterSnapshot_==='function')bseLeaveApplyReporterSnapshot_(rawResult,job);
       if(typeof bseMaintenanceApplyReporterSnapshot_==='function')bseMaintenanceApplyReporterSnapshot_(rawResult,job);
       if(typeof bsePlantConditionApplyReporterSnapshot_==='function')bsePlantConditionApplyReporterSnapshot_(rawResult,job);
@@ -158,6 +176,22 @@ function runBseTelegramLoggingRegressionTests(){
   console.log('TELEGRAM_LOGGING_REGRESSION: '+JSON.stringify(test));if(!pass)throw new Error('Telegram logging regression gagal.');return test;
 }
 
+function runBseTelegramSeedSowingBoundaryRegressionTests(){
+  const single='KERJA SEMAIAN BENIH\n1. Jenis Tanaman : Timun Lokal (CCB)\n2. Modul : M1 P1 P2\n3. Tarikh Semai : 10/09/2026';
+  const multi='KERJA SEMAIAN BENIH\n\n1. Jenis Tanaman : Timun Lokal (CCB)\n2. Modul : M1 P1 P2\n3. Tarikh Semai : 10/09/2026\n\n1. Jenis Tanaman : Peria (Hup Nong)\n2. Modul : M3 P3 P4\n3. Tarikh Semai : 10/09/2026';
+  const boundary=bseTelegramSeedSowingBoundaryResult_(multi),question=bseTelegramQuestion_(boundary),worker=processBseTelegramTestQueue.toString();
+  const boundaryPos=worker.indexOf('seedSowingBoundaryResult'),treatmentPos=worker.indexOf('const treatmentResult'),fallbackPos=worker.indexOf('bseUnifiedProcess_');
+  const tests=[
+    {id:'single Crop Batch remains on existing seed-sowing path',pass:bseTelegramSeedSowingBoundaryResult_(single)===null},
+    {id:'multi Crop Batch seed-sowing fails closed as Crop Batch',pass:!!boundary&&boundary.validation==='NEED_INFO'&&boundary.production_write===false&&boundary.seed_sowing_split_required===true&&boundary.candidates.length===1&&boundary.candidates[0].target==='Crop_Batch_Log'},
+    {id:'multi Crop Batch prompt asks reporter to split records',pass:/satu Crop Batch sahaja/i.test(question)&&/satu Modul/i.test(question)},
+    {id:'seed boundary is evaluated before treatment and Gemini fallback',pass:boundaryPos>=0&&treatmentPos>boundaryPos&&fallbackPos>boundaryPos}
+  ];
+  console.log('TELEGRAM_SEED_SOWING_BOUNDARY_REGRESSION: '+JSON.stringify(tests));
+  const failures=tests.filter(test=>!test.pass);if(failures.length)throw new Error('Seed-sowing boundary regression gagal: '+failures.map(test=>test.id).join(', '));
+  return tests;
+}
+
 function runBseTelegramQueueStatusRegressionTests(){
   const passResult=bseUnifiedGuard_(bseTg146694156Fixture_());
   const needInfoResult={validation:'NEED_INFO',production_write:false,candidates:[{target:'Measurement_Log',validation:'NEED_INFO',missing:['plot_id'],fields:{}}]};
@@ -233,6 +267,7 @@ function bseTelegramReportContext_(rows,current) {
 
 function bseTelegramQuestion_(result) {
   if(!result||result.validation!=='NEED_INFO'||!Array.isArray(result.candidates))return '';
+  if(result.seed_sowing_split_required===true)return 'Laporan semaian mengandungi lebih daripada satu Crop Batch. Sila hantar satu Crop Batch sahaja bagi setiap mesej: satu jenis tanaman/varieti, satu Modul, dan satu Tarikh Semai.';
   const labels={event_date:'tarikh laporan (hari/bulan/tahun)',plot_id:'plot yang betul',measurement_type:'jenis bacaan',value:'nilai bacaan',item_name:'nama bahan',quantity:'jumlah penggunaan sebenar',unit:'unit penggunaan',decision_subject:'perkara cadangan',approval_status:'status semakan',observation_facts:'fakta gejala/pemerhatian',crop:'jenis tanaman',variety:'varieti tanaman',batch_match:'batch Crop Batch dan allocation ACTIVE yang sepadan',session:'sesi Pagi atau Petang',ec_readings:'baris bacaan EC yang sah',ec_full_report:'laporan EC penuh untuk pembetulan',duplicate_scope:'scope modul/plot yang tidak berganda',module_scope:'baris scope modul hanya boleh menggunakan x : x'};
   const missing=[];
   result.candidates.forEach(c=>{if(c&&Array.isArray(c.missing))c.missing.forEach(k=>{if(labels[k])missing.push(labels[k]);});});

@@ -228,8 +228,12 @@ Telegram private chat TEST
    laluan File Evidence; mesej teks biasa yang bukan command atau sesi pembetulan
    sentiasa diteruskan ke queue laporan.
 2. `processBseTelegramTestQueue()` memproses satu laporan queue pada satu masa.
-   Ia menjalankan `bseUnifiedProcess_()` dan `bseUnifiedGuard_()`, kemudian
-   menyimpan `candidate_json`.
+   Ia menggunakan deterministic-first routing sebelum fallback Gemini, kemudian
+   `bseUnifiedGuard_()` dan menyimpan `candidate_json`. `KERJA SEMAIAN BENIH`
+   kekal satu Crop Batch atomik bagi setiap mesej. Jika satu mesej mengandungi
+   lebih daripada satu blok tanaman/Modul/Tarikh Semai, worker fail-closed dan
+   meminta pelapor memecahkannya kepada mesej berasingan; mesej itu tidak boleh
+   jatuh ke laluan Rawatan/Treatment.
 3. Final validation `NEED_INFO` sentiasa menjadi `WAITING_INFO` dan tidak layak
    untuk Google Task review. Hanya final `PASS` dengan calon actionable menjadi
    `NEEDS_HUMAN_REVIEW` dan layak untuk Google Task. Hasil dengan medan hilang
