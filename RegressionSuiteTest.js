@@ -28,6 +28,7 @@ const BSE_I011_LEGACY_GUARDS=[
   'runBseOwnerRegistryHarnessTests',
   'runBseInventoryClaimFoundationHarnessTests',
   'runBseInventoryQuantityParserRegressionHarnessTests',
+  'runBseInventoryResponsibleIsolationHarnessTests',
   'runBseTelegramCorrectionInventoryHarnessTests',
   'runBseTelegramSeedSowingBoundaryRegressionTests',
   'runBseCropBatchReviewHarnessTests',
