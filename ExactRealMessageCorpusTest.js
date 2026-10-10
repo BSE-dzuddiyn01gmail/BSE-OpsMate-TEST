@@ -65,7 +65,18 @@ function bseExactCorpusDispatch_(id,fixture){
     result=bseTreatmentListParseMessage_(text,at); route=result?'TREATMENT_LIST':'UNSUPPORTED_DETERMINISTIC';
     assertions.push(bseExactAssert_('completed treatment state',result&&result.candidates&&result.candidates.length>0&&result.candidates.every(c=>c.fields&&c.fields.event_status==='COMPLETED')));
     assertions.push(bseExactAssert_('no inferred dose unit',result&&result.candidates&&result.candidates.every(c=>!/(\bml\b|\bmg\b|\bliter\b)/i.test(String(c.fields&&c.fields.treatment_description||'')))));
-    if(id==='RM-021') assertions.push(bseExactAssert_('CADANGAN MERACUN is not proposal',result&&result.candidates.every(c=>c.fields.event_status!=='PROPOSED')));
+    if(id==='RM-011'){
+      assertions.push(bseExactAssert_('explicit report date retained',result&&result.candidates.every(c=>c.fields.event_date==='2026-09-15')));
+      assertions.push(bseExactAssert_('compact treatment plots expand canonically',result&&result.candidates[0].fields.plot_ids.join('|')==='M3P3|M3P4'&&result.candidates[1].fields.plot_ids.join('|')==='M3P1|M3P2'&&result.candidates[3].fields.plot_ids.join('|')==='M4P1|M4P2'));
+      assertions.push(bseExactAssert_('module-only M7 remains explicit missing plot',result&&result.candidates[2].fields.plot_ids.length===0&&result.candidates[2].missing.includes('plot_ids')));
+      assertions.push(bseExactAssert_('bare Gam material is preserved without invented dose',result&&result.candidates.every(c=>String(c.fields.treatment_description||'').split('\n').includes('Gam'))));
+    }
+    if(id==='RM-021'){
+      assertions.push(bseExactAssert_('CADANGAN MERACUN is not proposal',result&&result.candidates.every(c=>c.fields.event_status!=='PROPOSED')));
+      assertions.push(bseExactAssert_('two digit explicit report date retained',result&&result.candidates.every(c=>c.fields.event_date==='2026-09-10')));
+      assertions.push(bseExactAssert_('RM-021 compact plots expand canonically',result&&result.candidates[0].fields.plot_ids.join('|')==='M2P1|M2P2'&&result.candidates[1].fields.plot_ids.join('|')==='M2P3|M2P4'&&result.candidates[2].fields.plot_ids.join('|')==='M3P3|M3P4'&&result.candidates[3].fields.plot_ids.join('|')==='M3P1|M3P2'&&result.candidates[4].fields.plot_ids.join('|')==='M6P1|M6P2'&&result.candidates[6].fields.plot_ids.join('|')==='M4P1|M4P2'));
+      assertions.push(bseExactAssert_('RM-021 module-only M7 remains explicit missing plot',result&&result.candidates[5].fields.plot_ids.length===0&&result.candidates[5].missing.includes('plot_ids')));
+    }
     assertions.push(bseExactAssert_('production boundary',result&&result.production_write===false));
     return bseExactCorpusResult_(id,fixture,route,result,assertions,warnings);
   }
