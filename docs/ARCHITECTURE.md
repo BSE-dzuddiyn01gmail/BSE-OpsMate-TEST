@@ -517,6 +517,13 @@ dan OpsMate tidak boleh mereka `ml`, `g`, `L`, concentration, rate, diagnosis,
 tujuan rawatan, manager name, atau fakta rawatan lain yang tidak dinyatakan.
 Format operasi Site B seperti `M3 - P34` diparse sebagai dua plot `M3P3` dan
 `M3P4`; baris heading bernombor tidak boleh dianggap sebagai nama produk/dos.
+Setiap baris bahan di dalam treatment-list ialah fakta yang mesti dipelihara.
+Jika nama bahan hadir tanpa nilai/dos (contoh `Gam`), parser mesti menyimpan nama
+itu sebagai pending treatment item, menetapkan `WAITING_INFO`, dan meminta nilai
+bahan tersebut melalui Reply. Ia tidak boleh menggugurkan baris itu atau membuka
+kad pengesahan sehingga dos dilengkapkan. Jika tepat satu bahan masih pending,
+jawapan angka sahaja boleh melengkapkan bahan itu; jawapan bercanggah kekal
+fail-closed. Unit tidak boleh direka.
 
 `Jenis Tanaman` tidak wajib ditaip dalam laporan Rawatan apabila semua plot yang
 dilaporkan mempunyai tepat satu Crop Batch APPROVED dengan allocation efektif

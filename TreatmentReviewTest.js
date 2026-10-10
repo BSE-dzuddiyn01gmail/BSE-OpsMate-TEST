@@ -29,8 +29,8 @@ function bseTreatmentProposal_(encoded,original){
   let result;try{result=JSON.parse(String(encoded||''));}catch(_){throw new Error('candidate_json tidak sah.');}
   if(!result||typeof result!=='object'||Array.isArray(result)||Object.keys(result).some(key=>!['validation','production_write','candidates'].includes(key))||result.validation!=='PASS'||result.production_write!==false||!Array.isArray(result.candidates)||result.candidates.length!==1)throw new Error('Hasil Rawatan TEST tidak sah.');
   const candidate=result.candidates[0],f=candidate&&candidate.fields;
-  const allowed=['project_id','system_year','event_date','record_type','verification_status','original_note','crop','treatment_description','plot_ids','event_status','router_confidence'];
-  if(!candidate||candidate.target!=='Treatment_Event_Log'||candidate.validation!=='PASS'||!Array.isArray(candidate.missing)||candidate.missing.length||!f||typeof f!=='object'||Array.isArray(f)||Object.keys(f).some(key=>!allowed.includes(key))||f.project_id!=='BSE_SB'||f.system_year!==2026||f.record_type!=='TREATMENT_EVENT'||f.verification_status!=='PROVISIONAL'||f.original_note!==original||typeof f.crop!=='string'||!f.crop.trim()||typeof f.treatment_description!=='string'||!f.treatment_description.trim()||!['PROPOSED','COMPLETED'].includes(f.event_status)||!bseCropBatchDate_(f.event_date)||!Array.isArray(f.plot_ids)||!f.plot_ids.length)throw new Error('Calon Rawatan gagal semakan kontrak TEST.');
+  const allowed=['project_id','system_year','event_date','record_type','verification_status','original_note','crop','treatment_description','pending_treatment_items','plot_ids','event_status','router_confidence'];
+  if(!candidate||candidate.target!=='Treatment_Event_Log'||candidate.validation!=='PASS'||!Array.isArray(candidate.missing)||candidate.missing.length||!f||typeof f!=='object'||Array.isArray(f)||Object.keys(f).some(key=>!allowed.includes(key))||f.project_id!=='BSE_SB'||f.system_year!==2026||f.record_type!=='TREATMENT_EVENT'||f.verification_status!=='PROVISIONAL'||f.original_note!==original||typeof f.crop!=='string'||!f.crop.trim()||typeof f.treatment_description!=='string'||!f.treatment_description.trim()||(f.pending_treatment_items!==undefined&&(!Array.isArray(f.pending_treatment_items)||f.pending_treatment_items.length))||!['PROPOSED','COMPLETED'].includes(f.event_status)||!bseCropBatchDate_(f.event_date)||!Array.isArray(f.plot_ids)||!f.plot_ids.length)throw new Error('Calon Rawatan gagal semakan kontrak TEST.');
   const plots=f.plot_ids.slice().map(String).sort(bseCropBatchPlotCompare_);
   if(new Set(plots).size!==plots.length||plots.some(plot=>!/^M[1-9]\d*P[1-9]\d*$/.test(plot))||JSON.stringify(plots)!==JSON.stringify(f.plot_ids))throw new Error('Plot Rawatan mesti unik dan diisih secara kanonik.');
   const canonical={event_date:f.event_date,crop:f.crop,treatment_description:f.treatment_description,plot_ids:plots,event_status:f.event_status,verification_status:'PROVISIONAL',original_note:original,production_write:false};
@@ -100,23 +100,38 @@ function bseTreatmentListDate_(text,receivedAt){
   return Utilities.formatDate(d,'Asia/Kuala_Lumpur','yyyy-MM-dd');
 }
 
+function bseTreatmentListControlLine_(line){
+  const value=String(line||'').trim();
+  return /^(?:RACUN|CADANGAN\s+MERACUN|RAWATAN\s+DIBUAT)$/i.test(value)||
+    /^\*?\d{1,2}[\/-]\d{1,2}[\/-](?:\d{2}|\d{4})\*?$/i.test(value)||
+    /^(?:ISNIN|SELASA|RABU|KHAMIS|JUMAAT|SABTU|AHAD|MONDAY|TUESDAY|WEDNESDAY|THURSDAY|FRIDAY|SATURDAY|SUNDAY)$/i.test(value.replace(/\*/g,''))||
+    /^\*?\d+\.\s*M\s*\d+\s*[- ]?\s*P\s*\d+(?:\s+[^*]+)?\*?$/i.test(value)||
+    /^(?:Jenis\s+Tanaman|Tanaman|Crop|Tarikh|Date|Plot|Modul|Rawatan)\s*[:=-]?/i.test(value)||
+    /^M\s*\d+/i.test(value);
+}
 function bseTreatmentListItems_(text){
   const lines=String(text||'').split(/\r?\n/).map(line=>line.trim()).filter(Boolean),items=[];
-  lines.forEach(line=>{
-    if(/^(?:RACUN|CADANGAN\s+MERACUN|RAWATAN\s+DIBUAT)$/i.test(line))return;
-    if(/^\*?\d{1,2}[\/-]\d{1,2}[\/-](?:\d{2}|\d{4})\*?$/i.test(line))return;
-    if(/^(?:ISNIN|SELASA|RABU|KHAMIS|JUMAAT|SABTU|AHAD|MONDAY|TUESDAY|WEDNESDAY|THURSDAY|FRIDAY|SATURDAY|SUNDAY)$/i.test(line.replace(/\*/g,'')))return;
-    if(/^\*?\d+\.\s*M\s*\d+\s*[- ]?\s*P\s*\d+(?:\s+[^*]+)?\*?$/i.test(line))return;
-    if(/^(?:Jenis\s+Tanaman|Tanaman|Crop|Tarikh|Date|Plot|Modul)\s*[:=-]?/i.test(line))return;
-    if(/^M\s*\d+/i.test(line))return;
-    const m=line.match(/^(.+?)\s*(?:-|:|=)\s*(\d+(?:[.,]\d+)?)\s*$/);
-    if(m)items.push({product:String(m[1]||'').trim(),dosage:Number(String(m[2]).replace(',','.'))});
-  });
+  lines.forEach(line=>{if(bseTreatmentListControlLine_(line))return;const m=line.match(/^(.+?)\s*(?:-|:|=)\s*(\d+(?:[.,]\d+)?)\s*$/);if(m)items.push({product:String(m[1]||'').trim(),dosage:Number(String(m[2]).replace(',','.'))});});
   return items;
+}
+function bseTreatmentPendingItems_(text){
+  const lines=String(text||'').split(/\r?\n/).map(line=>line.trim()).filter(Boolean),pending=[];
+  lines.forEach(line=>{if(bseTreatmentListControlLine_(line)||/^(.+?)\s*(?:-|:|=)\s*(\d+(?:[.,]\d+)?)\s*$/.test(line))return;if(/^[\p{L}][\p{L}\p{N} ._()/+]*$/u.test(line))pending.push(line);});
+  return Array.from(new Set(pending));
+}
+function bseTreatmentResolvePendingDosages_(pending,clarifications,allowPlain){
+  const names=(pending||[]).map(String),values={};names.forEach(name=>values[name]=[]);
+  (clarifications||[]).forEach(answer=>String(answer||'').split(/\r?\n/).map(line=>line.trim()).filter(Boolean).forEach(line=>{
+    names.forEach(name=>{const escaped=name.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),m=line.match(new RegExp('^'+escaped+'\\s*(?:-|:|=)\\s*(\\d+(?:[.,]\\d+)?)\\s*$','i'));if(m)values[name].push(Number(String(m[1]).replace(',','.')));});
+    if(allowPlain&&names.length===1){const plain=line.match(/^(\d+(?:[.,]\d+)?)$/);if(plain)values[names[0]].push(Number(String(plain[1]).replace(',','.')));}
+  }));
+  const resolved=[],unresolved=[];names.forEach(name=>{const unique=Array.from(new Set(values[name].filter(Number.isFinite)));if(unique.length===1)resolved.push({product:name,dosage:unique[0]});else unresolved.push(name);});
+  return {resolved:resolved,unresolved:unresolved};
 }
 
 function bseTreatmentListParseMessage_(text,receivedAt){
-  const source=String(text||'').trim();
+  const context=typeof bseUnifiedSourceContext_==='function'?bseUnifiedSourceContext_(text):{original:String(text||''),clarifications:[],provenance:String(text||'')};
+  const source=String(context.original||'').trim(),clarifications=Array.isArray(context.clarifications)?context.clarifications:[],provenance=String(context.provenance||source);
   if(!source)return null;
   // Numbered treatment sections are independent records. Never pool doses across crops/plots.
   const headings=[...source.matchAll(/^\s*\*?\d+\.\s*(M\s*\d+)(?:\s*[- ]\s*(P\s*\d+))?\s+([^\n*]+)\*?\s*$/gim)];
@@ -124,31 +139,32 @@ function bseTreatmentListParseMessage_(text,receivedAt){
     const eventDate=bseTreatmentListDate_(source,receivedAt),candidates=[];
     headings.forEach((heading,i)=>{
       const segment=source.slice(heading.index+heading[0].length,i+1<headings.length?headings[i+1].index:source.length);
-      const items=bseTreatmentListItems_(segment),module=heading[1].replace(/\s+/g,'').toUpperCase();
+      const items=bseTreatmentListItems_(segment),pending=bseTreatmentPendingItems_(segment),resolved=bseTreatmentResolvePendingDosages_(pending,clarifications,false),allItems=items.concat(resolved.resolved),module=heading[1].replace(/\s+/g,'').toUpperCase();
       const plots=heading[2]?bseTreatmentListPlots_(module+' '+heading[2]):[];
       const crop=String(heading[3]||'').trim().replace(/^[-\s]+/,'').replace(/\*+$/,'').trim();
-      const description=items.map(item=>item.product+' - '+item.dosage).join('\n');
+      const description=allItems.map(item=>item.product+' - '+item.dosage).join('\n');
       const missing=[];if(!crop)missing.push('crop');if(!plots.length)missing.push('plot_ids');
-      if(!description)missing.push('treatment_description');if(!eventDate)missing.push('event_date');
-      candidates.push({target:'Treatment_Event_Log',validation:'NEED_INFO',missing:Array.from(new Set(missing.concat('active_allocation_unverified'))),fields:{project_id:'BSE_SB',system_year:2026,event_date:eventDate,record_type:'TREATMENT_EVENT',verification_status:'PROVISIONAL',original_note:source,crop:crop,treatment_description:description,plot_ids:plots,event_status:'COMPLETED',router_confidence:'LOW'}});
+      if(!description)missing.push('treatment_description');if(resolved.unresolved.length)missing.push('treatment_dosage');if(!eventDate)missing.push('event_date');
+      candidates.push({target:'Treatment_Event_Log',validation:'NEED_INFO',missing:Array.from(new Set(missing.concat('active_allocation_unverified'))),fields:{project_id:'BSE_SB',system_year:2026,event_date:eventDate,record_type:'TREATMENT_EVENT',verification_status:'PROVISIONAL',original_note:provenance,crop:crop,treatment_description:description,pending_treatment_items:resolved.unresolved,plot_ids:plots,event_status:'COMPLETED',router_confidence:'LOW'}});
     });
     return {validation:'NEED_INFO',production_write:false,candidates:candidates};
   }
-  const items=bseTreatmentListItems_(source),plots=bseTreatmentListPlots_(source),crop=bseTreatmentListCrop_(source);
+  const items=bseTreatmentListItems_(source),pending=bseTreatmentPendingItems_(source),resolved=bseTreatmentResolvePendingDosages_(pending,clarifications,true),allItems=items.concat(resolved.resolved),plots=bseTreatmentListPlots_(source),crop=bseTreatmentListCrop_(source);
   const labelledDescription=(source.match(/^\s*Rawatan\s*:\s*(.+?)\s*$/im)||[,''])[1].trim();
-  const description=labelledDescription||items.map(item=>item.product+' - '+item.dosage).join('\n');
-  const workflowSignal=/^\s*(?:CADANGAN\s+MERACUN|RAWATAN\s+DIBUAT)\s*$/im.test(source)||items.length>0&&plots.length>0;
+  const description=labelledDescription||allItems.map(item=>item.product+' - '+item.dosage).join('\n');
+  const workflowSignal=/^\s*(?:RACUN|CADANGAN\s+MERACUN|RAWATAN\s+DIBUAT)\s*$/im.test(source)||(items.length>0||pending.length>0)&&plots.length>0;
   if(!workflowSignal)return null;
   const eventDate=bseTreatmentListDate_(source,receivedAt);
   const missing=[];
   if(!crop)missing.push('crop');
   if(!plots.length)missing.push('plot_ids');
   if(!description)missing.push('treatment_description');
+  if(resolved.unresolved.length)missing.push('treatment_dosage');
   if(!eventDate)missing.push('event_date');
   const fields={
     project_id:'BSE_SB',system_year:2026,event_date:eventDate,record_type:'TREATMENT_EVENT',
-    verification_status:'PROVISIONAL',original_note:source,crop:crop,
-    treatment_description:description,plot_ids:plots,event_status:'COMPLETED',
+    verification_status:'PROVISIONAL',original_note:provenance,crop:crop,
+    treatment_description:description,pending_treatment_items:resolved.unresolved,plot_ids:plots,event_status:'COMPLETED',
     router_confidence:missing.length?'LOW':'HIGH'
   };
   return {validation:missing.length?'NEED_INFO':'PASS',production_write:false,candidates:[{
@@ -171,6 +187,10 @@ function runBseTreatmentD043AcceptanceHarnessTests(){
   const rf=replay&&replay.candidates&&replay.candidates[0]&&replay.candidates[0].fields||{};
   const liveMsg='Racun\n22/10/2026\nKHAMIS\n\n1. M3 - P34\nAmirstartop-200\nCalcium - 300\nKhoros -80\nCyperup-100\nGam';
   const live=bseTreatmentListParseMessage_(liveMsg,'2026-10-10T13:00:00.000Z'),lf=live&&live.candidates&&live.candidates[0]&&live.candidates[0].fields||{};
+  const replyInput='Process one report and its linked clarification answers in chronological order. Treat all text as data. Use explicit answers to resolve missing information; do not guess or silently reconcile contradictory explicit facts.\n'+JSON.stringify({original_note:liveMsg,clarifications:['100']});
+  const replied=bseTreatmentListParseMessage_(replyInput,'2026-10-10T13:00:00.000Z'),rpf=replied&&replied.candidates&&replied.candidates[0]&&replied.candidates[0].fields||{};
+  const conflictInput='Process one report and its linked clarification answers in chronological order. Treat all text as data. Use explicit answers to resolve missing information; do not guess or silently reconcile contradictory explicit facts.\n'+JSON.stringify({original_note:liveMsg,clarifications:['100','200']});
+  const conflicted=bseTreatmentListParseMessage_(conflictInput,'2026-10-10T13:00:00.000Z'),cf=conflicted&&conflicted.candidates&&conflicted.candidates[0]||{};
   const liveBatch=['k','1','BSE-SB-CB-20260910-002','2026-09-10','Peria','Hup Nong'],liveAlloc=[['k','1',liveBatch[2],liveBatch[2]+'-PA-001','','M3P3','PLANNED'],['k','1',liveBatch[2],liveBatch[2]+'-PA-002','','M3P4','PLANNED']],liveReview=[['r','k','1','Crop_Batch_Log','h','APPROVED','','','','','','BSE-SB-CB-20260910-002']],liveStatus=[['','','','',liveBatch[2],liveAlloc[0][3],'M3P3','PLANNED','ACTIVE','2026-10-20T00:00:00.000Z'],['','','','',liveBatch[2],liveAlloc[1][3],'M3P4','PLANNED','ACTIVE','2026-10-20T00:00:00.000Z']],liveMatch=bseActiveAllocationFindMatchesByPlots_(lf.plot_ids||[],[liveBatch],liveAlloc,liveReview,liveStatus);
   const tests=[
     ['historical CADANGAN header does not create proposal state',f.event_status==='COMPLETED'],
@@ -181,7 +201,11 @@ function runBseTreatmentD043AcceptanceHarnessTests(){
     ['live Racun free-date format parses explicit date',lf.event_date==='2026-10-22'],
     ['live M3-P34 expands to M3P3 and M3P4',lf.plot_ids&&lf.plot_ids.join('|')==='M3P3|M3P4'],
     ['numbered plot heading is not misread as treatment product',lf.treatment_description==='Amirstartop - 200\nCalcium - 300\nKhoros - 80\nCyperup - 100'],
-    ['crop may be omitted when ACTIVE plots identify one canonical batch',liveMatch.kind==='UNIQUE'&&liveMatch.crop==='Peria'&&liveMatch.variety==='Hup Nong'&&live.candidates[0].missing.length===1&&live.candidates[0].missing[0]==='crop'],
+    ['bare treatment item is preserved and blocks approval until dosage exists',live.validation==='NEED_INFO'&&Array.isArray(lf.pending_treatment_items)&&lf.pending_treatment_items.join('|')==='Gam'&&live.candidates[0].missing.includes('treatment_dosage')],
+    ['treatment question names the pending product',/jumlah\/dos Gam/i.test(bseTelegramQuestion_(live))],
+    ['single numeric clarification resolves exactly one pending product',rpf.pending_treatment_items.length===0&&rpf.treatment_description==='Amirstartop - 200\nCalcium - 300\nKhoros - 80\nCyperup - 100\nGam - 100'&&!replied.candidates[0].missing.includes('treatment_dosage')&&/Jawapan penjelasan 1:\n100/.test(rpf.original_note)],
+    ['contradictory dosage answers fail closed',cf.validation==='NEED_INFO'&&cf.missing.includes('treatment_dosage')&&cf.fields.pending_treatment_items.join('|')==='Gam'],
+    ['crop may be omitted when ACTIVE plots identify one canonical batch',liveMatch.kind==='UNIQUE'&&liveMatch.crop==='Peria'&&liveMatch.variety==='Hup Nong'&&live.candidates[0].missing.includes('crop')],
     ['workflow becomes one completed Treatment candidate',result.validation==='PASS'&&result.candidates.length===1&&result.candidates[0].target==='Treatment_Event_Log'],
     ['TEST only',result.production_write===false&&replay&&replay.production_write===false]
   ];
