@@ -253,7 +253,7 @@ Telegram private chat TEST
    one-shot selepas queue child disimpan; chat, pelapor, atau sesi yang tidak
    sepadan tidak boleh mengambil alih dan sesi ambigu menjadi `UNLINKED_REPLY`.
 4. Reviewer membuat keputusan melalui workflow Telegram/TEST yang dibenarkan.
-   Keputusan human review yang diaudit mengawal penulisan ke helaian TEST. Crop Batch menggunakan shared review core yang sama bagi wrapper Apps Script dan callback Telegram; lock dipegang oleh transaction boundary, bukan domain core.
+   Keputusan human review yang diaudit mengawal penulisan ke helaian TEST. Crop Batch menggunakan shared review core yang sama bagi wrapper Apps Script dan callback Telegram; lock dipegang oleh transaction boundary, bukan domain core. D-048 multi-record splitting tidak memecahkan dependency group Crop Batch: Crop_Batch_Log + Planting_Event_Log + semua Plot_Allocation_Log bagi satu batch kekal satu approval envelope dan satu keputusan Benar/Betulkan/Batal.
 
 ## Google Tasks dikeluarkan daripada MVP / shadow pilot
 

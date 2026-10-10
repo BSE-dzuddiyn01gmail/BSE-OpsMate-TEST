@@ -230,17 +230,3 @@ function runBseCropBatchReviewHarnessTests(){
   const failures=tests.filter(test=>!test.pass);if(failures.length)throw new Error('Crop Batch review harness gagal: '+failures.map(test=>test.id).join(', '));
   return tests;
 }
-
-// TEMP TEST_ONLY exact approval-card recovery; removed immediately after use.
-function recoverBseCropBatch253ApprovalCardTest(){
-  if(bseRuntimeEnvironmentName_()!=='PILOT_TEST')throw new Error('PILOT_TEST only');
-  const lock=LockService.getScriptLock();if(!lock.tryLock(1000))throw new Error('Queue busy');
-  try{
-    const book=boundTestBook_(),q=bseTelegramQueue_(book),rows=q.getLastRow()>1?q.getRange(2,1,q.getLastRow()-1,BSE_TG_QUEUE_HEADERS.length).getValues():[],matches=rows.filter(r=>String(r[0])==='746192253');
-    if(matches.length!==1)return {ok:false,reason:'ROW_NOT_UNIQUE',count:matches.length,production_write:false};
-    const row=matches[0]; if(String(row[6])!=='NEEDS_HUMAN_REVIEW')return {ok:false,reason:'STATUS_NOT_REVIEWABLE',status:String(row[6]||''),production_write:false};
-    let result;try{result=JSON.parse(String(row[9]||''));}catch(_){return {ok:false,reason:'CANDIDATE_JSON_INVALID',production_write:false};}
-    const domain=bseApprovalDomain_(result);if(domain.target!=='Crop_Batch_Log')return {ok:false,reason:'WRONG_DOMAIN',target:domain.target,production_write:false};
-    const outcome=bseTelegramApprovalEnsureCard_(book,row);return {ok:true,target:domain.target,outcome:outcome,production_write:false};
-  }finally{lock.releaseLock();}
-}

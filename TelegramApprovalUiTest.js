@@ -172,6 +172,13 @@ function bseApprovalCandidateEnvelope_(result,index){
   const candidate=JSON.parse(JSON.stringify(result.candidates[index]));
   return {validation:candidate.validation,production_write:false,candidates:[candidate]};
 }
+function bseApprovalEnvelopes_(result){
+  if(!result||result.production_write!==false||!Array.isArray(result.candidates)||!result.candidates.length)throw new Error('Approval envelopes tidak sah.');
+  const targets=result.candidates.map(candidate=>candidate&&candidate.target).filter(Boolean);
+  const atomicCropBatch=targets.includes('Crop_Batch_Log')&&targets.every(target=>['Crop_Batch_Log','Planting_Event_Log','Plot_Allocation_Log'].includes(target));
+  if(atomicCropBatch)return [JSON.parse(JSON.stringify(result))];
+  return result.candidates.map((_,index)=>bseApprovalCandidateEnvelope_(result,index));
+}
 function bseApprovalCandidateIndexFromSourceKey_(sourceKey){
   const m=String(sourceKey||'').match(/\|C(\d+)$/);
   return m?Number(m[1])-1:null;
@@ -196,7 +203,7 @@ function bseTelegramApprovalEnsureCard_(book,queueRow){
   if(!bseTelegramTestApprovalGroupIds_().includes(chat)||!/^\d+$/.test(reporter))return {skipped:'GROUP_OR_REPORTER_INVALID'};
   let result;try{result=JSON.parse(String(queueRow[9]||''));}catch(_){return {skipped:'CANDIDATE_JSON_INVALID'};}
   if(result.production_write!==false||result.validation!=='PASS'||!Array.isArray(result.candidates)||!result.candidates.length)return {skipped:'CANDIDATE_NOT_CONFIRMABLE'};
-  const envelopes=result.candidates.map((_,index)=>bseApprovalCandidateEnvelope_(result,index));
+  const envelopes=bseApprovalEnvelopes_(result);
   // Validate every target before creating any durable card.
   envelopes.forEach(envelope=>bseApprovalDomain_(envelope));
   const sheet=bseTelegramApprovalSheet_(book),rows=bseApprovalRows_(sheet),created=[],duplicates=[],pending=[];
@@ -268,9 +275,17 @@ function runBseMultiRecordD048ApprovalHarnessTests(){
     {target:'Inventory_Event_Log',validation:'PASS',missing:[],fields:{record_type:'INVENTORY_OUT',item_name:'Fruitka',quantity:1,unit:'set',destination:'M3P1',event_date:'2026-09-11',original_note:'M3 P1 P2 11/9/2026 F'}},
     {target:'Inventory_Event_Log',validation:'PASS',missing:[],fields:{record_type:'INVENTORY_OUT',item_name:'Fruitka',quantity:1,unit:'set',destination:'M3P2',event_date:'2026-09-11',original_note:'M3 P1 P2 11/9/2026 F'}}
   ]};
-  const e1=bseApprovalCandidateEnvelope_(sample,0),e2=bseApprovalCandidateEnvelope_(sample,1);
+  const e1=bseApprovalCandidateEnvelope_(sample,0),e2=bseApprovalCandidateEnvelope_(sample,1),inventoryEnvelopes=bseApprovalEnvelopes_(sample);
+  const cropBatch={validation:'PASS',production_write:false,candidates:[
+    {target:'Crop_Batch_Log',validation:'PASS',missing:[],fields:{}},
+    {target:'Planting_Event_Log',validation:'PASS',missing:[],fields:{}},
+    {target:'Plot_Allocation_Log',validation:'PASS',missing:[],fields:{plot_id:'M1P1'}},
+    {target:'Plot_Allocation_Log',validation:'PASS',missing:[],fields:{plot_id:'M1P2'}}
+  ]},cropEnvelopes=bseApprovalEnvelopes_(cropBatch);
   const tests=[
     {id:'one source can split into independent candidate envelopes',pass:e1.candidates.length===1&&e2.candidates.length===1&&e1.candidates[0].fields.destination==='M3P1'&&e2.candidates[0].fields.destination==='M3P2'},
+    {id:'generic multi-record still creates independent envelopes',pass:inventoryEnvelopes.length===2&&inventoryEnvelopes.every(envelope=>envelope.candidates.length===1)},
+    {id:'Crop Batch dependency group stays one atomic envelope',pass:cropEnvelopes.length===1&&cropEnvelopes[0].candidates.length===4&&bseApprovalCandidateIndexFromSourceKey_('BSE-TG-1|Crop_Batch_Log')===null},
     {id:'candidate hashes are independent',pass:bseApprovalHash_(e1)!==bseApprovalHash_(e2)},
     {id:'approval creates candidate-indexed source keys',pass:/\|C'\+\(index\+1\)/.test(source)},
     {id:'confirmation reconstructs only selected candidate',pass:/bseApprovalCandidateIndexFromSourceKey_/.test(confirm)&&/bseApprovalCandidateEnvelope_\(aggregate,candidateIndex\)/.test(confirm)},
