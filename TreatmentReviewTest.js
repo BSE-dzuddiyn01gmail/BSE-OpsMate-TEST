@@ -69,12 +69,24 @@ function runBseTreatmentReviewHarnessTests(){
 
 
 
+function bseTreatmentCompactPlots_(moduleText,plotText){
+  const module=String(moduleText||'').replace(/\s+/g,'').toUpperCase(),plot=String(plotText||'').replace(/\s+/g,'').toUpperCase();
+  const mm=module.match(/^M([1-9]\d*)$/),pm=plot.match(/^P([1-9]\d*)$/);
+  if(!mm||!pm)return {ok:false,plots:[],reason:'TREATMENT_PLOT_INVALID'};
+  const digits=pm[1];
+  if(digits.length>2||digits.length===2&&!digits.split('').every(d=>/^[1-9]$/.test(d)))return {ok:false,plots:[],reason:'TREATMENT_PLOT_AMBIGUOUS'};
+  const numbers=digits.length===2?[digits[0],digits[1]]:[digits];
+  const plots=numbers.map(number=>'M'+mm[1]+'P'+number).sort(bseCropBatchPlotCompare_);
+  if(new Set(plots).size!==plots.length)return {ok:false,plots:[],reason:'TREATMENT_PLOT_DUPLICATE'};
+  return {ok:true,plots:plots,reason:''};
+}
 function bseTreatmentListPlots_(text){
-  const source=String(text||'').toUpperCase(),plots=[];
-  const compact=source.match(/M\s*([1-9]\d*)\s*P\s*([1-9]\d*)/g)||[];
-  compact.forEach(token=>{const m=token.match(/M\s*([1-9]\d*)\s*P\s*([1-9]\d*)/);if(m)plots.push('M'+m[1]+'P'+m[2]);});
+  const source=String(text||'').toUpperCase(),plots=[];let ambiguous=false;
+  const compact=/\bM\s*([1-9]\d*)\s*P\s*([1-9]\d*)\b/g;let cm;
+  while((cm=compact.exec(source))){const parsed=bseTreatmentCompactPlots_('M'+cm[1],'P'+cm[2]);if(!parsed.ok){ambiguous=true;break;}plots.push.apply(plots,parsed.plots);}
+  if(ambiguous)return [];
   const module=source.match(/\bM\s*([1-9]\d*)\b/);
-  if(module){const re=/\bP\s*([1-9]\d*)\b/g;let m;while((m=re.exec(source)))plots.push('M'+module[1]+'P'+m[1]);}
+  if(module){const re=/\bP\s*([1-9]\d*)\b/g;let m;while((m=re.exec(source))){const parsed=bseTreatmentCompactPlots_('M'+module[1],'P'+m[1]);if(!parsed.ok)return [];plots.push.apply(plots,parsed.plots);}}
   return Array.from(new Set(plots)).sort(bseCropBatchPlotCompare_);
 }
 
@@ -84,9 +96,11 @@ function bseTreatmentListCrop_(text){
 }
 
 function bseTreatmentListDate_(text,receivedAt){
-  const source=String(text||''),m=source.match(/(?:Tarikh\s+Rawatan|Tarikh|Date)\s*[:=-]?\s*(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})/i);
+  const source=String(text||'');
+  let m=source.match(/(?:Tarikh\s+Rawatan|Tarikh|Date)\s*[:=-]?\s*(\d{1,2})[\/-](\d{1,2})[\/-](\d{2}|\d{4})/i);
+  if(!m)m=source.match(/(?:^|\n)\s*\*?\s*(\d{1,2})[\/-](\d{1,2})[\/-](\d{2}|\d{4})\s*\*?\s*(?=\r?$|\n)/m);
   if(m){
-    const day=Number(m[1]),month=Number(m[2]),year=Number(m[3]),d=new Date(Date.UTC(year,month-1,day));
+    const day=Number(m[1]),month=Number(m[2]),yearText=String(m[3]),year=yearText.length===2?2000+Number(yearText):Number(yearText),d=new Date(Date.UTC(year,month-1,day));
     if(year===2026&&d.getUTCFullYear()===year&&d.getUTCMonth()===month-1&&d.getUTCDate()===day)return year+'-'+String(month).padStart(2,'0')+'-'+String(day).padStart(2,'0');
     return '';
   }
@@ -98,14 +112,19 @@ function bseTreatmentListDate_(text,receivedAt){
 function bseTreatmentListItems_(text){
   const lines=String(text||'').split(/\r?\n/).map(line=>line.trim()).filter(Boolean),items=[];
   lines.forEach(line=>{
-    if(/^(?:CADANGAN\s+MERACUN|RAWATAN\s+DIBUAT)$/i.test(line))return;
-    if(/^(?:Jenis\s+Tanaman|Tanaman|Crop|Tarikh|Date|Plot|Modul)\s*[:=-]?/i.test(line))return;
-    if(/^M\s*\d+/i.test(line))return;
-    const m=line.match(/^(.+?)\s*(?:-|:|=)\s*(\d+(?:[.,]\d+)?)\s*$/);
-    if(m)items.push({product:String(m[1]||'').trim(),dosage:Number(String(m[2]).replace(',','.'))});
+    const clean=line.replace(/^\*+|\*+$/g,'').trim();
+    if(/^(?:RACUN|CADANGAN\s+MERACUN|RAWATAN\s+DIBUAT)$/i.test(clean))return;
+    if(/^(?:Jenis\s+Tanaman|Tanaman|Crop|Tarikh|Date|Plot|Modul)\s*[:=-]?/i.test(clean))return;
+    if(/^(?:MONDAY|TUESDAY|WEDNESDAY|THURSDAY|FRIDAY|SATURDAY|SUNDAY|ISNIN|SELASA|RABU|KHAMIS|JUMAAT|SABTU|AHAD)$/i.test(clean))return;
+    if(/^\d{1,2}[\/-]\d{1,2}[\/-](?:\d{2}|\d{4})$/.test(clean))return;
+    if(/^M\s*\d+/i.test(clean))return;
+    const m=clean.match(/^(.+?)\s*(?:-|:|=)\s*(\d+(?:[.,]\d+)?)\s*$/);
+    if(m){items.push({product:String(m[1]||'').trim(),dosage:String(m[2]||'').trim()});return;}
+    if(/^[A-Za-z][A-Za-z0-9+().\/ ]{0,80}$/.test(clean))items.push({product:clean,dosage:''});
   });
   return items;
 }
+function bseTreatmentListDescription_(items){return (items||[]).map(item=>String(item&&item.dosage||'').trim()?String(item.product||'').trim()+' - '+String(item.dosage).trim():String(item&&item.product||'').trim()).filter(Boolean).join('\n');}
 
 function bseTreatmentListParseMessage_(text,receivedAt){
   const source=String(text||'').trim();
@@ -117,18 +136,18 @@ function bseTreatmentListParseMessage_(text,receivedAt){
     headings.forEach((heading,i)=>{
       const segment=source.slice(heading.index+heading[0].length,i+1<headings.length?headings[i+1].index:source.length);
       const items=bseTreatmentListItems_(segment),module=heading[1].replace(/\s+/g,'').toUpperCase();
-      const plot=heading[2]?module+heading[2].replace(/\s+/g,'').toUpperCase():'';
+      const parsedPlots=heading[2]?bseTreatmentCompactPlots_(module,heading[2]):{ok:true,plots:[],reason:'TREATMENT_PLOT_MISSING'};
       const crop=String(heading[3]||'').trim().replace(/^[-\s]+/,'').replace(/\*+$/,'').trim();
-      const description=items.map(item=>item.product+' - '+item.dosage).join('\n');
-      const missing=[];if(!crop)missing.push('crop');if(!plot)missing.push('plot_ids');
+      const description=bseTreatmentListDescription_(items);
+      const missing=[];if(!crop)missing.push('crop');if(!parsedPlots.ok||!parsedPlots.plots.length)missing.push('plot_ids');
       if(!description)missing.push('treatment_description');if(!eventDate)missing.push('event_date');
-      candidates.push({target:'Treatment_Event_Log',validation:'NEED_INFO',missing:Array.from(new Set(missing.concat('active_allocation_unverified'))),fields:{project_id:'BSE_SB',system_year:2026,event_date:eventDate,record_type:'TREATMENT_EVENT',verification_status:'PROVISIONAL',original_note:source,crop:crop,treatment_description:description,plot_ids:plot?[plot]:[],event_status:'COMPLETED',router_confidence:'LOW'}});
+      candidates.push({target:'Treatment_Event_Log',validation:'NEED_INFO',missing:Array.from(new Set(missing.concat('active_allocation_unverified'))),fields:{project_id:'BSE_SB',system_year:2026,event_date:eventDate,record_type:'TREATMENT_EVENT',verification_status:'PROVISIONAL',original_note:source,crop:crop,treatment_description:description,plot_ids:parsedPlots.ok?parsedPlots.plots:[],event_status:'COMPLETED',router_confidence:'LOW'}});
     });
     return {validation:'NEED_INFO',production_write:false,candidates:candidates};
   }
   const items=bseTreatmentListItems_(source),plots=bseTreatmentListPlots_(source),crop=bseTreatmentListCrop_(source);
   const labelledDescription=(source.match(/^\s*Rawatan\s*:\s*(.+?)\s*$/im)||[,''])[1].trim();
-  const description=labelledDescription||items.map(item=>item.product+' - '+item.dosage).join('\n');
+  const description=labelledDescription||bseTreatmentListDescription_(items);
   const workflowSignal=/^\s*(?:CADANGAN\s+MERACUN|RAWATAN\s+DIBUAT)\s*$/im.test(source)||items.length>0&&plots.length>0;
   if(!workflowSignal)return null;
   const eventDate=bseTreatmentListDate_(source,receivedAt);
@@ -173,6 +192,12 @@ function runBseTreatmentD043AcceptanceHarnessTests(){
     ['dosage values are preserved without invented units',f.treatment_description==='Acerio - 30\nAbamectin - 20'&&!/(ml|mg|g|l|liter)/i.test(f.treatment_description)],
     ['RAWATAN DIBUAT labelled description is preserved',replay&&replay.validation==='PASS'&&rf.treatment_description==='Semburan racun kulat'&&rf.event_status==='COMPLETED'&&rf.event_date==='2026-09-22'&&rf.plot_ids.join('|')==='M2P1'],
     ['workflow becomes one completed Treatment candidate',result.validation==='PASS'&&result.candidates.length===1&&result.candidates[0].target==='Treatment_Event_Log'],
+    ['standalone explicit DD/MM/YYYY wins over received date',bseTreatmentListDate_('*15/09/2026*','2026-10-10T11:50:34.000Z')==='2026-09-15'],
+    ['standalone explicit DD/MM/YY is accepted for system year',bseTreatmentListDate_('*10/9/26*','2026-09-21T04:00:00.000Z')==='2026-09-10'],
+    ['compact treatment P34 expands to P3 and P4',bseTreatmentCompactPlots_('M3','P34').plots.join('|')==='M3P3|M3P4'],
+    ['compact treatment P12 expands to P1 and P2',bseTreatmentCompactPlots_('M4','P12').plots.join('|')==='M4P1|M4P2'],
+    ['three digit compact treatment plot remains ambiguous',bseTreatmentCompactPlots_('M3','P345').ok===false],
+    ['bare treatment material is preserved without invented dose',bseTreatmentListDescription_(bseTreatmentListItems_('Acerio - 300\nGam'))==='Acerio - 300\nGam'],
     ['TEST only',result.production_write===false&&replay&&replay.production_write===false]
   ];
   const failures=tests.filter(t=>!t[1]);if(failures.length)throw new Error('D-043 treatment harness gagal: '+failures.map(t=>t[0]).join(', '));return tests;

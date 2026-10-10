@@ -500,11 +500,18 @@ menjadi proposal. Rule ini khusus kepada workflow BSE tersebut dan tidak boleh
 digeneralisasi kepada mesej rawatan lain tanpa signal workflow yang sah.
 
 Tarikh eksplisit yang sah digunakan apabila ada; jika tiada, `event_date`
-datang daripada tarikh mesej Telegram. Dos/nilai produk disimpan tepat seperti
-dihantar. Unit dos tidak wajib dan OpsMate tidak boleh mereka `ml`, `g`, `L`,
-concentration, rate, diagnosis, tujuan rawatan, manager name, atau fakta rawatan
-lain yang tidak dinyatakan. Fakta wajib lain yang benar-benar hilang menjadi
-`WAITING_INFO` / minimum clarification, bukan inference.
+datang daripada tarikh mesej Telegram. Format treatment-list sebenar menerima
+tarikh berdiri sendiri `DD/MM/YYYY` atau `DD/MM/YY`, termasuk balutan bold
+Telegram. Token compact dua digit mengikuti kontrak plot kanonik sedia ada:
+`P12` bermaksud `P1 + P2` dan `P34` bermaksud `P3 + P4`; tiga atau lebih
+digit kekal samar dan menjadi `WAITING_INFO`. Section modul tanpa plot seperti
+`M7 - Peria` kekal tidak boleh diteka dan mesti meminta plot yang hilang.
+Dos/nilai produk disimpan tepat seperti dihantar. Bahan eksplisit tanpa nilai,
+contohnya `Gam`, dikekalkan sebagai bahan tanpa mereka dos. Unit dos tidak wajib
+dan OpsMate tidak boleh mereka `ml`, `g`, `L`, concentration, rate,
+diagnosis, tujuan rawatan, manager name, atau fakta rawatan lain yang tidak
+dinyatakan. Fakta wajib lain yang benar-benar hilang menjadi `WAITING_INFO` /
+minimum clarification, bukan inference.
 
 Matcher ACTIVE umum yang dikongsi dengan Census membaca batch approved, crop
 normalisasi sempit, baseline `TEST_PLOT_ALLOCATION`, dan status efektif ledger
