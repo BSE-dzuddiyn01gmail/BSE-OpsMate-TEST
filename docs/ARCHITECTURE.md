@@ -510,18 +510,30 @@ manager-approved dan sudah dibuat di plot. Wording sejarah/copy seperti
 menjadi proposal. Rule ini khusus kepada workflow BSE tersebut dan tidak boleh
 digeneralisasi kepada mesej rawatan lain tanpa signal workflow yang sah.
 
-Tarikh eksplisit yang sah digunakan apabila ada; jika tiada, `event_date`
-datang daripada tarikh mesej Telegram. Dos/nilai produk disimpan tepat seperti
-dihantar. Unit dos tidak wajib dan OpsMate tidak boleh mereka `ml`, `g`, `L`,
-concentration, rate, diagnosis, tujuan rawatan, manager name, atau fakta rawatan
-lain yang tidak dinyatakan. Fakta wajib lain yang benar-benar hilang menjadi
-`WAITING_INFO` / minimum clarification, bukan inference.
+Tarikh eksplisit yang sah digunakan apabila ada, termasuk baris tarikh bebas
+seperti `22/10/2026`; jika tiada, `event_date` datang daripada tarikh mesej
+Telegram. Dos/nilai produk disimpan tepat seperti dihantar. Unit dos tidak wajib
+dan OpsMate tidak boleh mereka `ml`, `g`, `L`, concentration, rate, diagnosis,
+tujuan rawatan, manager name, atau fakta rawatan lain yang tidak dinyatakan.
+Format operasi Site B seperti `M3 - P34` diparse sebagai dua plot `M3P3` dan
+`M3P4`; baris heading bernombor tidak boleh dianggap sebagai nama produk/dos.
+Setiap baris bahan di dalam treatment-list ialah fakta yang mesti dipelihara.
+Jika nama bahan hadir tanpa nilai/dos (contoh `Gam`), parser mesti menyimpan nama
+itu sebagai pending treatment item, menetapkan `WAITING_INFO`, dan meminta nilai
+bahan tersebut melalui Reply. Ia tidak boleh menggugurkan baris itu atau membuka
+kad pengesahan sehingga dos dilengkapkan. Jika tepat satu bahan masih pending,
+jawapan angka sahaja boleh melengkapkan bahan itu; jawapan bercanggah kekal
+fail-closed. Unit tidak boleh direka.
 
-Matcher ACTIVE umum yang dikongsi dengan Census membaca batch approved, crop
-normalisasi sempit, baseline `TEST_PLOT_ALLOCATION`, dan status efektif ledger
-transplant. Semua plot mesti berada dalam satu batch unik serta efektif `ACTIVE`;
-PLANNED, batch tiada/berganda, crop tidak sepadan, atau plot tidak kanonik
-menjadi `WAITING_INFO` dengan `batch_match`, tanpa write.
+`Jenis Tanaman` tidak wajib ditaip dalam laporan Rawatan apabila semua plot yang
+dilaporkan mempunyai tepat satu Crop Batch APPROVED dengan allocation efektif
+`ACTIVE`. Dalam keadaan itu crop diambil daripada rekod batch aktif yang sudah
+menjadi authority; ia bukan inference bebas. Jika padanan ACTIVE tiada atau
+berganda, sistem mesti `WAITING_INFO` dan meminta clarification minimum. Jika
+crop dinyatakan secara eksplisit, matcher kekal memerlukan crop itu sepadan.
+Matcher ACTIVE membaca batch approved, baseline `TEST_PLOT_ALLOCATION`, dan
+status efektif ledger transplant; PLANNED, batch tiada/berganda, crop bercanggah,
+atau plot tidak kanonik tidak boleh menghasilkan write.
 
 Human confirmation kekal boundary rekod TEST. Menu `Lulus Rawatan ikut rujukan`
 dan `Tolak Rawatan ikut rujukan` menggunakan `ScriptLock`, hash stabil, dan

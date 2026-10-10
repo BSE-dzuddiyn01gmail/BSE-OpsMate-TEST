@@ -74,9 +74,13 @@ function bseActiveAllocationEffectiveStatuses_(statusEvents){
   const latest={};statusEvents.forEach((row,index)=>{const allocationId=String(row[5]||''),stamp=Date.parse(String(row[9]||'')),value=Number.isFinite(stamp)?stamp:-1,prior=latest[allocationId];if(allocationId&&(!prior||value>prior.value||value===prior.value&&index>prior.index))latest[allocationId]={status:String(row[8]||''),value:value,index:index};});
   return latest;
 }
+function bseActiveAllocationFindMatchesByPlots_(plotIds,batches,allocations,reviews,statusEvents){
+  const approved=new Set(reviews.filter(row=>String(row[3])==='Crop_Batch_Log'&&String(row[5])==='APPROVED').map(row=>String(row[11]))),effective=bseActiveAllocationEffectiveStatuses_(statusEvents),matches=[];
+  batches.forEach(batch=>{const batchId=String(batch[2]||'');if(!batchId||!approved.has(batchId))return;const selected=plotIds.map(plotId=>{const row=allocations.find(allocation=>String(allocation[2])===batchId&&String(allocation[5])===plotId&&String(allocation[6])==='PLANNED');if(!row||!effective[String(row[3])]||effective[String(row[3])].status!=='ACTIVE')return null;return {allocation_id:String(row[3]),plot_id:plotId};});if(selected.every(Boolean))matches.push({batch_id:batchId,crop:String(batch[4]||''),variety:String(batch[5]||''),allocations:selected});});
+  return matches.length===1?Object.assign({kind:'UNIQUE'},matches[0]):{kind:matches.length?'MULTIPLE':'NONE',matches:matches};
+}
 function bseActiveAllocationFindMatches_(cropValue,plotIds,batches,allocations,reviews,statusEvents){
-  const crop=bseTransplantNormalizeCrop_(cropValue),approved=new Set(reviews.filter(row=>String(row[3])==='Crop_Batch_Log'&&String(row[5])==='APPROVED').map(row=>String(row[11]))),effective=bseActiveAllocationEffectiveStatuses_(statusEvents),matches=[];
-  batches.forEach(batch=>{const batchId=String(batch[2]||'');if(!batchId||!approved.has(batchId)||bseTransplantNormalizeCrop_(batch[4])!==crop)return;const selected=plotIds.map(plotId=>{const row=allocations.find(allocation=>String(allocation[2])===batchId&&String(allocation[5])===plotId&&String(allocation[6])==='PLANNED');if(!row||!effective[String(row[3])]||effective[String(row[3])].status!=='ACTIVE')return null;return {allocation_id:String(row[3]),plot_id:plotId};});if(selected.every(Boolean))matches.push({batch_id:batchId,allocations:selected});});
+  const crop=bseTransplantNormalizeCrop_(cropValue),base=bseActiveAllocationFindMatchesByPlots_(plotIds,batches,allocations,reviews,statusEvents),all=base.kind==='UNIQUE'?[base]:(base.matches||[]),matches=all.filter(match=>bseTransplantNormalizeCrop_(match.crop)===crop);
   return matches.length===1?Object.assign({kind:'UNIQUE'},matches[0]):{kind:matches.length?'MULTIPLE':'NONE',matches:matches};
 }
 function bseCensusEffectiveStatuses_(statusEvents){return bseActiveAllocationEffectiveStatuses_(statusEvents);}
