@@ -33,65 +33,67 @@ function bsePromptCropBatchReference_(title){
 }
 
 function bseReviewTelegramCropBatchByReference_(decision,reference,note){
+  const actor=bseCropBatchReviewer_();
+  return bseReviewWithLock_({reference:reference,action:decision,actor_type:'APPS_SCRIPT',actor_id:actor,actor_name:actor,reason:String(note||''),source_channel:'APPS_SCRIPT'},bseCropBatchReviewCore_);
+}
+
+function bseCropBatchReviewCore_(book,reviewContext){
+  bseReviewContextValidate_(reviewContext);
+  const decision=reviewContext.action,reference=reviewContext.reference,note=reviewContext.reason;
   bseCropBatchRequireDecision_(decision,note);
   if(!/^BSE-TG-\d+$/.test(reference))throw new Error('Rujukan mesti tepat dalam format BSE-TG-<update_id>.');
-  const lock=LockService.getScriptLock();
-  if(!lock.tryLock(10000))throw new Error('Barisan sedang dikemas kini. Cuba semula.');
-  try{
-    const book=boundTestBook_(),queue=bseTelegramQueue_(book),updateId=reference.slice(7);
-    const rows=bseCropBatchRows_(queue,BSE_TG_QUEUE_HEADERS.length);
-    const matches=rows.map((row,index)=>({row:row,sheetRow:index+2})).filter(item=>String(item.row[0])===updateId);
-    if(matches.length!==1)throw new Error('Rujukan mesti sepadan dengan tepat satu baris TELEGRAM_TEST_QUEUE.');
-    const selected=matches[0],status=String(selected.row[6]||'');
-    const root=bseCropBatchRoot_(rows,selected.row);
-    const proposal=bseCropBatchProposal_(selected.row[9],root.provenance);
-    const sourceKey='BSE-TG-'+root.updateId+'|Crop_Batch_Log';
-    const payloadHash=bseCropBatchHash_(proposal.canonical);
-    const expectedStatus=decision==='APPROVED'?'CROP_BATCH_APPROVED_TEST':'CROP_BATCH_REJECTED_TEST';
-    const reviewer=bseCropBatchReviewer_(),stamp=new Date().toISOString();
-    const reviewSheet=book.getSheetByName('TEST_CROP_BATCH_REVIEW')?bseCropBatchSheet_(book,'TEST_CROP_BATCH_REVIEW',BSE_CROP_BATCH_REVIEW_HEADERS):null;
-    const batchSheet=book.getSheetByName('TEST_CROP_BATCH')?bseCropBatchSheet_(book,'TEST_CROP_BATCH',BSE_CROP_BATCH_HEADERS):null;
-    const eventSheet=book.getSheetByName('TEST_PLANTING_EVENT')?bseCropBatchSheet_(book,'TEST_PLANTING_EVENT',BSE_PLANTING_EVENT_HEADERS):null;
-    const allocationSheet=book.getSheetByName('TEST_PLOT_ALLOCATION')?bseCropBatchSheet_(book,'TEST_PLOT_ALLOCATION',BSE_PLOT_ALLOCATION_HEADERS):null;
-    const reviews=reviewSheet?bseCropBatchRows_(reviewSheet,BSE_CROP_BATCH_REVIEW_HEADERS.length):[];
-    const batches=batchSheet?bseCropBatchRows_(batchSheet,BSE_CROP_BATCH_HEADERS.length):[];
-    const events=eventSheet?bseCropBatchRows_(eventSheet,BSE_PLANTING_EVENT_HEADERS.length):[];
-    const allocations=allocationSheet?bseCropBatchRows_(allocationSheet,BSE_PLOT_ALLOCATION_HEADERS.length):[];
-    const prior=reviews.find(row=>String(row[1])===sourceKey);
-    const duplicate=bseCropBatchExistingDecision_(prior&&{payload_hash:prior[4],decision:prior[5],batch_id:prior[11]},decision,payloadHash);
-    if(duplicate){
-      if(decision==='APPROVED')bseCropBatchAssertApprovedRows_(batches,events,allocations,sourceKey,payloadHash,proposal.plots,duplicate.batch_id);
-      else if(batches.some(row=>String(row[0])===sourceKey)||events.some(row=>String(row[0])===sourceKey)||allocations.some(row=>String(row[0])===sourceKey))throw new Error('Audit REJECTED bercanggah dengan rekod Crop Batch TEST.');
-      if(status===expectedStatus)return {source_key:sourceKey,decision:decision,duplicate:true,production_write:false};
-      if(status!=='NEEDS_HUMAN_REVIEW')throw new Error('Status queue tidak konsisten dengan audit Crop Batch sedia ada.');
-      queue.getRange(selected.sheetRow,7).setValue(expectedStatus);SpreadsheetApp.flush();
-      return {source_key:sourceKey,decision:decision,duplicate:true,production_write:false};
-    }
-    if(status!=='NEEDS_HUMAN_REVIEW')throw new Error('Baris queue bukan NEEDS_HUMAN_REVIEW.');
-    if(batches.some(row=>String(row[0])===sourceKey)||events.some(row=>String(row[0])===sourceKey)||allocations.some(row=>String(row[0])===sourceKey))throw new Error('Konflik rekod Crop Batch TEST sedia ada.');
-    // Validate every destination header before the first APPROVED write.
-    const reviewOut=reviewSheet||bseCropBatchSheet_(book,'TEST_CROP_BATCH_REVIEW',BSE_CROP_BATCH_REVIEW_HEADERS);
-    let batchId='';
-    if(decision==='APPROVED'){
-      batchId=bseCropBatchNextId_(batches,proposal.batch.fields.event_date);
-      const batchOut=batchSheet||bseCropBatchSheet_(book,'TEST_CROP_BATCH',BSE_CROP_BATCH_HEADERS);
-      const eventOut=eventSheet||bseCropBatchSheet_(book,'TEST_PLANTING_EVENT',BSE_PLANTING_EVENT_HEADERS);
-      const allocationOut=allocationSheet||bseCropBatchSheet_(book,'TEST_PLOT_ALLOCATION',BSE_PLOT_ALLOCATION_HEADERS);
-      const batch=proposal.batch.fields,event=proposal.event.fields;
-      bseCropBatchAppend_(batchOut,[sourceKey,updateId,batchId,batch.event_date,batch.crop,batch.variety,batch.batch_action,batch.batch_status,batch.verification_status,root.provenance,stamp,reviewer,payloadHash]);
-      bseCropBatchAppend_(eventOut,[sourceKey,updateId,batchId,Utilities.getUuid(),event.event_date,event.event_type,event.crop,event.variety,event.event_status,event.verification_status,root.provenance,stamp,reviewer,payloadHash]);
-      proposal.allocations.forEach((allocation,index)=>{
-        const fields=allocation.fields;
-        bseCropBatchAppend_(allocationOut,[sourceKey,updateId,batchId,batchId+'-PA-'+String(index+1).padStart(3,'0'),fields.event_date,fields.plot_id,fields.allocation_status,fields.verification_status,root.provenance,stamp,reviewer,payloadHash]);
-      });
-      SpreadsheetApp.flush();
-    }
-    bseCropBatchAppend_(reviewOut,[Utilities.getUuid(),sourceKey,updateId,'Crop_Batch_Log',payloadHash,decision,reviewer,String(note||'').trim(),stamp,status,JSON.stringify(proposal.canonical),batchId]);
-    SpreadsheetApp.flush();
+  const queue=bseTelegramQueue_(book),updateId=reference.slice(7);
+  const rows=bseCropBatchRows_(queue,BSE_TG_QUEUE_HEADERS.length);
+  const matches=rows.map((row,index)=>({row:row,sheetRow:index+2})).filter(item=>String(item.row[0])===updateId);
+  if(matches.length!==1)throw new Error('Rujukan mesti sepadan dengan tepat satu baris TELEGRAM_TEST_QUEUE.');
+  const selected=matches[0],status=String(selected.row[6]||'');
+  const root=bseCropBatchRoot_(rows,selected.row);
+  const proposal=bseCropBatchProposal_(selected.row[9],root.provenance);
+  const sourceKey='BSE-TG-'+root.updateId+'|Crop_Batch_Log';
+  const payloadHash=bseCropBatchHash_(proposal.canonical);
+  const expectedStatus=decision==='APPROVED'?'CROP_BATCH_APPROVED_TEST':'CROP_BATCH_REJECTED_TEST';
+  const reviewer=bseReviewContextActorLabel_(reviewContext),stamp=new Date().toISOString();
+  const reviewSheet=book.getSheetByName('TEST_CROP_BATCH_REVIEW')?bseCropBatchSheet_(book,'TEST_CROP_BATCH_REVIEW',BSE_CROP_BATCH_REVIEW_HEADERS):null;
+  const batchSheet=book.getSheetByName('TEST_CROP_BATCH')?bseCropBatchSheet_(book,'TEST_CROP_BATCH',BSE_CROP_BATCH_HEADERS):null;
+  const eventSheet=book.getSheetByName('TEST_PLANTING_EVENT')?bseCropBatchSheet_(book,'TEST_PLANTING_EVENT',BSE_PLANTING_EVENT_HEADERS):null;
+  const allocationSheet=book.getSheetByName('TEST_PLOT_ALLOCATION')?bseCropBatchSheet_(book,'TEST_PLOT_ALLOCATION',BSE_PLOT_ALLOCATION_HEADERS):null;
+  const reviews=reviewSheet?bseCropBatchRows_(reviewSheet,BSE_CROP_BATCH_REVIEW_HEADERS.length):[];
+  const batches=batchSheet?bseCropBatchRows_(batchSheet,BSE_CROP_BATCH_HEADERS.length):[];
+  const events=eventSheet?bseCropBatchRows_(eventSheet,BSE_PLANTING_EVENT_HEADERS.length):[];
+  const allocations=allocationSheet?bseCropBatchRows_(allocationSheet,BSE_PLOT_ALLOCATION_HEADERS.length):[];
+  const prior=reviews.find(row=>String(row[1])===sourceKey);
+  const duplicate=bseCropBatchExistingDecision_(prior&&{payload_hash:prior[4],decision:prior[5],batch_id:prior[11]},decision,payloadHash);
+  if(duplicate){
+    if(decision==='APPROVED')bseCropBatchAssertApprovedRows_(batches,events,allocations,sourceKey,payloadHash,proposal.plots,duplicate.batch_id);
+    else if(batches.some(row=>String(row[0])===sourceKey)||events.some(row=>String(row[0])===sourceKey)||allocations.some(row=>String(row[0])===sourceKey))throw new Error('Audit REJECTED bercanggah dengan rekod Crop Batch TEST.');
+    if(status===expectedStatus)return {source_key:sourceKey,decision:decision,duplicate:true,production_write:false};
+    if(status!=='NEEDS_HUMAN_REVIEW')throw new Error('Status queue tidak konsisten dengan audit Crop Batch sedia ada.');
     queue.getRange(selected.sheetRow,7).setValue(expectedStatus);SpreadsheetApp.flush();
-    console.log('CROP_BATCH_REVIEW_SAVED: '+JSON.stringify({source_key:sourceKey,decision:decision,production_write:false}));
-    return {source_key:sourceKey,batch_id:batchId,decision:decision,duplicate:false,production_write:false};
-  }finally{lock.releaseLock();}
+    return {source_key:sourceKey,decision:decision,duplicate:true,production_write:false};
+  }
+  if(status!=='NEEDS_HUMAN_REVIEW')throw new Error('Baris queue bukan NEEDS_HUMAN_REVIEW.');
+  if(batches.some(row=>String(row[0])===sourceKey)||events.some(row=>String(row[0])===sourceKey)||allocations.some(row=>String(row[0])===sourceKey))throw new Error('Konflik rekod Crop Batch TEST sedia ada.');
+  const reviewOut=reviewSheet||bseCropBatchSheet_(book,'TEST_CROP_BATCH_REVIEW',BSE_CROP_BATCH_REVIEW_HEADERS);
+  let batchId='';
+  if(decision==='APPROVED'){
+    batchId=bseCropBatchNextId_(batches,proposal.batch.fields.event_date);
+    const batchOut=batchSheet||bseCropBatchSheet_(book,'TEST_CROP_BATCH',BSE_CROP_BATCH_HEADERS);
+    const eventOut=eventSheet||bseCropBatchSheet_(book,'TEST_PLANTING_EVENT',BSE_PLANTING_EVENT_HEADERS);
+    const allocationOut=allocationSheet||bseCropBatchSheet_(book,'TEST_PLOT_ALLOCATION',BSE_PLOT_ALLOCATION_HEADERS);
+    const batch=proposal.batch.fields,event=proposal.event.fields;
+    bseCropBatchAppend_(batchOut,[sourceKey,updateId,batchId,batch.event_date,batch.crop,batch.variety,batch.batch_action,batch.batch_status,batch.verification_status,root.provenance,stamp,reviewer,payloadHash]);
+    bseCropBatchAppend_(eventOut,[sourceKey,updateId,batchId,Utilities.getUuid(),event.event_date,event.event_type,event.crop,event.variety,event.event_status,event.verification_status,root.provenance,stamp,reviewer,payloadHash]);
+    proposal.allocations.forEach((allocation,index)=>{
+      const fields=allocation.fields;
+      bseCropBatchAppend_(allocationOut,[sourceKey,updateId,batchId,batchId+'-PA-'+String(index+1).padStart(3,'0'),fields.event_date,fields.plot_id,fields.allocation_status,fields.verification_status,root.provenance,stamp,reviewer,payloadHash]);
+    });
+    SpreadsheetApp.flush();
+  }
+  bseCropBatchAppend_(reviewOut,[Utilities.getUuid(),sourceKey,updateId,'Crop_Batch_Log',payloadHash,decision,reviewer,String(note||'').trim(),stamp,status,JSON.stringify(proposal.canonical),batchId]);
+  SpreadsheetApp.flush();
+  queue.getRange(selected.sheetRow,7).setValue(expectedStatus);SpreadsheetApp.flush();
+  console.log('CROP_BATCH_REVIEW_SAVED: '+JSON.stringify({source_key:sourceKey,decision:decision,production_write:false}));
+  return {source_key:sourceKey,batch_id:batchId,decision:decision,duplicate:false,production_write:false};
 }
 
 function bseCropBatchRequireDecision_(decision,note){
@@ -223,7 +225,22 @@ function runBseCropBatchReviewHarnessTests(){
   pass('batch ID date and serial',()=>{const id=bseCropBatchNextId_([['','', 'BSE-SB-CB-20260910-002']], '2026-09-10');if(id!=='BSE-SB-CB-20260910-003')throw new Error('ID tidak betul');});
   pass('idempotency and conflicts',()=>{if(!bseCropBatchExistingDecision_({payload_hash:'h',decision:'APPROVED',batch_id:'B'},'APPROVED','h').duplicate)throw new Error('bukan duplicate');let decisionConflict=false,hashConflict=false;try{bseCropBatchExistingDecision_({payload_hash:'h',decision:'APPROVED'},'REJECTED','h');}catch(_){decisionConflict=true;}try{bseCropBatchExistingDecision_({payload_hash:'h',decision:'APPROVED'},'APPROVED','other');}catch(_){hashConflict=true;}if(!decisionConflict||!hashConflict)throw new Error('konflik diterima');});
   pass('repeat approve returns existing batch without new rows',()=>{const sourceKey='BSE-TG-146694145|Crop_Batch_Log',batchId='BSE-SB-CB-20260910-001',hash=bseCropBatchHash_(proposal.canonical);const batches=[[sourceKey,'146694145',batchId,'2026-09-10','Timun Lokal','CCB','BATCH_START','PROPOSED','PROVISIONAL',note,'','',hash]],events=[[sourceKey,'146694145',batchId,'event-1','2026-09-10','SEED_SOWING','Timun Lokal','CCB','PROPOSED','PROVISIONAL',note,'','',hash]],allocations=proposal.plots.map((plot,index)=>[sourceKey,'146694145',batchId,'allocation-'+index,'2026-09-10',plot,'PLANNED','PROVISIONAL',note,'','',hash]);const before=JSON.stringify({batches:batches,events:events,allocations:allocations});const duplicate=bseCropBatchExistingDecision_({payload_hash:hash,decision:'APPROVED',batch_id:batchId},'APPROVED',hash);bseCropBatchAssertApprovedRows_(batches,events,allocations,sourceKey,hash,proposal.plots,duplicate.batch_id);if(!duplicate.duplicate||duplicate.batch_id!==batchId||before!==JSON.stringify({batches:batches,events:events,allocations:allocations}))throw new Error('approve ulangan mengubah atau menggandakan row');});
+  pass('Telegram approval uses shared Crop Batch core',()=>{const wrapper=bseReviewTelegramCropBatchByReference_.toString(),core=bseCropBatchReviewCore_.toString(),domain=bseApprovalDomain_(valid);if(domain.target!=='Crop_Batch_Log'||domain.core!==bseCropBatchReviewCore_||!/bseReviewWithLock_/.test(wrapper)||/LockService|SpreadsheetApp\.getUi|Session\./.test(core))throw new Error('Crop Batch review core tidak serasi dengan Telegram approval');});
   console.log('CROP_BATCH_REVIEW_HARNESS: '+JSON.stringify(tests));
   const failures=tests.filter(test=>!test.pass);if(failures.length)throw new Error('Crop Batch review harness gagal: '+failures.map(test=>test.id).join(', '));
   return tests;
+}
+
+// TEMP TEST_ONLY exact approval-card recovery; removed immediately after use.
+function recoverBseCropBatch253ApprovalCardTest(){
+  if(bseRuntimeEnvironmentName_()!=='PILOT_TEST')throw new Error('PILOT_TEST only');
+  const lock=LockService.getScriptLock();if(!lock.tryLock(1000))throw new Error('Queue busy');
+  try{
+    const book=boundTestBook_(),q=bseTelegramQueue_(book),rows=q.getLastRow()>1?q.getRange(2,1,q.getLastRow()-1,BSE_TG_QUEUE_HEADERS.length).getValues():[],matches=rows.filter(r=>String(r[0])==='746192253');
+    if(matches.length!==1)return {ok:false,reason:'ROW_NOT_UNIQUE',count:matches.length,production_write:false};
+    const row=matches[0]; if(String(row[6])!=='NEEDS_HUMAN_REVIEW')return {ok:false,reason:'STATUS_NOT_REVIEWABLE',status:String(row[6]||''),production_write:false};
+    let result;try{result=JSON.parse(String(row[9]||''));}catch(_){return {ok:false,reason:'CANDIDATE_JSON_INVALID',production_write:false};}
+    const domain=bseApprovalDomain_(result);if(domain.target!=='Crop_Batch_Log')return {ok:false,reason:'WRONG_DOMAIN',target:domain.target,production_write:false};
+    const outcome=bseTelegramApprovalEnsureCard_(book,row);return {ok:true,target:domain.target,outcome:outcome,production_write:false};
+  }finally{lock.releaseLock();}
 }
