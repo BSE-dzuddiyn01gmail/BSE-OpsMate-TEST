@@ -230,10 +230,13 @@ Telegram private chat TEST
 2. `processBseTelegramTestQueue()` memproses satu laporan queue pada satu masa.
    Ia menggunakan deterministic-first routing sebelum fallback Gemini, kemudian
    `bseUnifiedGuard_()` dan menyimpan `candidate_json`. `KERJA SEMAIAN BENIH`
-   kekal satu Crop Batch atomik bagi setiap mesej. Jika satu mesej mengandungi
-   lebih daripada satu blok tanaman/Modul/Tarikh Semai, worker fail-closed dan
-   meminta pelapor memecahkannya kepada mesej berasingan; mesej itu tidak boleh
-   jatuh ke laluan Rawatan/Treatment.
+   canonical diparse deterministic-first dan tidak memerlukan Gemini/API key:
+   jenis tanaman/varieti, satu baris Modul kanonik, serta Tarikh Semai membentuk
+   tepat satu Crop Batch, satu SEED_SOWING event, dan allocation PLANNED bagi
+   setiap plot eksplisit. Ia kekal satu Crop Batch atomik bagi setiap mesej. Jika
+   satu mesej mengandungi lebih daripada satu blok tanaman/Modul/Tarikh Semai,
+   worker fail-closed dan meminta pelapor memecahkannya kepada mesej berasingan;
+   mesej itu tidak boleh jatuh ke laluan Rawatan/Treatment atau Gemini fallback.
 3. Final validation `NEED_INFO` sentiasa menjadi `WAITING_INFO` dan tidak layak
    untuk Google Task review. Hanya final `PASS` dengan calon actionable menjadi
    `NEEDS_HUMAN_REVIEW` dan layak untuk Google Task. Hasil dengan medan hilang
@@ -250,7 +253,7 @@ Telegram private chat TEST
    one-shot selepas queue child disimpan; chat, pelapor, atau sesi yang tidak
    sepadan tidak boleh mengambil alih dan sesi ambigu menjadi `UNLINKED_REPLY`.
 4. Reviewer membuat keputusan melalui workflow Telegram/TEST yang dibenarkan.
-   Keputusan human review yang diaudit mengawal penulisan ke helaian TEST.
+   Keputusan human review yang diaudit mengawal penulisan ke helaian TEST. Crop Batch menggunakan shared review core yang sama bagi wrapper Apps Script dan callback Telegram; lock dipegang oleh transaction boundary, bukan domain core. D-048 multi-record splitting tidak memecahkan dependency group Crop Batch: Crop_Batch_Log + Planting_Event_Log + semua Plot_Allocation_Log bagi satu batch kekal satu approval envelope dan satu keputusan Benar/Betulkan/Batal.
 
 ## Google Tasks dikeluarkan daripada MVP / shadow pilot
 

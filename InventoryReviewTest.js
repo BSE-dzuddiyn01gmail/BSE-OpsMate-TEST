@@ -418,13 +418,21 @@ function bseInventoryApplyReporterSnapshot_(result, job) {
 
 function bseInventoryApplyResponsibleSnapshot_(result, job) {
   if (!result || !Array.isArray(result.candidates) || !job) return result;
+  const supportedTargets=new Set(['Inventory_Event_Log','Input_Usage_Log','Claim_Request_Log','Asset_Proposal_Log']);
   result.candidates.forEach(candidate => {
-    if (!candidate) return;
+    if (!candidate || !supportedTargets.has(String(candidate.target||''))) return;
     const fields=candidate.fields||(candidate.fields={}), declared=String(fields.responsible_name||'').trim();
     if (declared) { fields.responsible_name=declared; fields.responsible_source='DECLARED'; delete fields.responsible_telegram_user_id; }
     else { const id=String(job.reporterTelegramUserId||'').trim(); fields.responsible_name=String(job.reporterName||job.reporterUsername||(id?'Telegram '+id:'')).trim(); fields.responsible_source='REPORTER_DEFAULT'; fields.responsible_telegram_user_id=id; }
   });
   return result;
+}
+
+function runBseInventoryResponsibleIsolationHarnessTests(){
+  const crop={validation:'PASS',production_write:false,candidates:[{target:'Crop_Batch_Log',validation:'PASS',missing:[],fields:{crop:'Timun'}}]},inventory={validation:'PASS',production_write:false,candidates:[{target:'Inventory_Event_Log',validation:'PASS',missing:[],fields:{}}]},job={reporterTelegramUserId:'77',reporterName:'Pelapor Sah',reporterUsername:'sah'};
+  const cropBefore=JSON.stringify(crop);bseInventoryApplyResponsibleSnapshot_(crop,job);bseInventoryApplyResponsibleSnapshot_(inventory,job);
+  const f=inventory.candidates[0].fields,tests=[{id:'non-inventory candidate remains byte-equivalent',pass:JSON.stringify(crop)===cropBefore},{id:'inventory candidate receives reporter responsible snapshot',pass:f.responsible_name==='Pelapor Sah'&&f.responsible_source==='REPORTER_DEFAULT'&&f.responsible_telegram_user_id==='77'},{id:'allowlist excludes Crop Batch',pass:/supportedTargets/.test(bseInventoryApplyResponsibleSnapshot_.toString())&&!/Crop_Batch_Log/.test(bseInventoryApplyResponsibleSnapshot_.toString())}];
+  const bad=tests.filter(t=>!t.pass);if(bad.length)throw new Error('Responsible isolation harness gagal: '+bad.map(t=>t.id).join(', '));return tests;
 }
 
 function bseInventoryValidateResult_(result, receivedAt, reference) {
