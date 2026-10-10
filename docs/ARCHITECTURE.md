@@ -230,10 +230,13 @@ Telegram private chat TEST
 2. `processBseTelegramTestQueue()` memproses satu laporan queue pada satu masa.
    Ia menggunakan deterministic-first routing sebelum fallback Gemini, kemudian
    `bseUnifiedGuard_()` dan menyimpan `candidate_json`. `KERJA SEMAIAN BENIH`
-   kekal satu Crop Batch atomik bagi setiap mesej. Jika satu mesej mengandungi
-   lebih daripada satu blok tanaman/Modul/Tarikh Semai, worker fail-closed dan
-   meminta pelapor memecahkannya kepada mesej berasingan; mesej itu tidak boleh
-   jatuh ke laluan Rawatan/Treatment.
+   canonical diparse deterministic-first dan tidak memerlukan Gemini/API key:
+   jenis tanaman/varieti, satu baris Modul kanonik, serta Tarikh Semai membentuk
+   tepat satu Crop Batch, satu SEED_SOWING event, dan allocation PLANNED bagi
+   setiap plot eksplisit. Ia kekal satu Crop Batch atomik bagi setiap mesej. Jika
+   satu mesej mengandungi lebih daripada satu blok tanaman/Modul/Tarikh Semai,
+   worker fail-closed dan meminta pelapor memecahkannya kepada mesej berasingan;
+   mesej itu tidak boleh jatuh ke laluan Rawatan/Treatment atau Gemini fallback.
 3. Final validation `NEED_INFO` sentiasa menjadi `WAITING_INFO` dan tidak layak
    untuk Google Task review. Hanya final `PASS` dengan calon actionable menjadi
    `NEEDS_HUMAN_REVIEW` dan layak untuk Google Task. Hasil dengan medan hilang
