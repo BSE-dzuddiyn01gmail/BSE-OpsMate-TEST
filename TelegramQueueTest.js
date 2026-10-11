@@ -17,7 +17,7 @@ function receiveBseTelegramTest() {
     const queue=bseTelegramQueue_(book);
     const offsetText=props.getProperty('BSE_TELEGRAM_OFFSET')||'0';
     if(!/^\d+$/.test(offsetText))throw new Error('Offset Telegram tidak sah.');
-    const updates=bseTelegramApi_('getUpdates',{offset:Number(offsetText),limit:20,timeout:0,allowed_updates:['message','callback_query']});
+    const updates=bseTelegramApi_('getUpdates',{offset:Number(offsetText),limit:20,timeout:0,allowed_updates:['message','edited_message','callback_query']});
     if(!Array.isArray(updates))throw new Error('Respons updates tidak sah.');
     const saved=queue.getLastRow()>1?queue.getRange(2,1,queue.getLastRow()-1,BSE_TG_QUEUE_HEADERS.length).getValues():[];
     const seen=new Set(saved.map(r=>String(r[0])));
@@ -25,12 +25,24 @@ function receiveBseTelegramTest() {
     for(const update of updates) {
       if(!Number.isSafeInteger(update.update_id))throw new Error('Update ID tidak sah.');
       if(update.callback_query){if(typeof bseTelegramEvidenceIsCallback_==='function'&&bseTelegramEvidenceIsCallback_(update))bseTelegramEvidencePersistCallback_(book,update);else if(typeof bseTelegramRegistrationIsCallback_==='function'&&bseTelegramRegistrationIsCallback_(update))bseTelegramRegistrationPersistCallback_(book,update);else bseTelegramApprovalPersistCallback_(book,update);props.setProperty('BSE_TELEGRAM_OFFSET',String(update.update_id+1));continue;}
-      const m=update.message;
+      const m=update.message||update.edited_message,edited=!!update.edited_message;
       const privateStart=m&&m.chat&&m.from&&m.chat.type==='private'&&String(m.chat.id)===String(m.from.id)&&bseTelegramPrivateOptInCommand_(m.text,me.username);
       const allowedPrivate=m&&m.chat&&m.from&&m.chat.type==='private'&&String(m.chat.id)===chat&&String(m.from.id)===user;
       const allowedGroup=m&&m.chat&&m.from&&['group','supergroup'].includes(m.chat.type)&&groups.includes(String(m.chat.id));
       const sourceChat=m&&m.chat?String(m.chat.id):'',reporter=m&&m.from?String(m.from.id):'',replyId=m&&m.reply_to_message?String(m.reply_to_message.message_id):'';
       const sourceMessageDate=m&&Number.isSafeInteger(Number(m.date))?new Date(Number(m.date)*1000).toISOString():'';
+      if(edited){
+        const match=bseTelegramEditedWaitingInfoMatch_(saved,sourceChat,reporter,String(m&&m.message_id||''));
+        if(match&&typeof m.text==='string'&&m.text.trim()&&!m.text.startsWith('/')&&m.text.length<=12000){
+          const prior=match.row.slice(),meta=bseTelegramEditedMetadata_(prior[16],update,m,prior[4]),sheetRow=match.index+2,receivedAt=new Date().toISOString();
+          queue.getRange(sheetRow,5,1,3).setValues([[m.text,receivedAt,'QUEUED']]);
+          queue.getRange(sheetRow,10,1,4).setValues([['',0,'','']]);
+          queue.getRange(sheetRow,16,1,2).setValues([['',meta]]);SpreadsheetApp.flush();
+          prior[4]=m.text;prior[5]=receivedAt;prior[6]='QUEUED';prior[9]='';prior[10]=0;prior[11]='';prior[12]='';prior[15]='';prior[16]=meta;saved[match.index]=prior;added++;
+          console.log('TELEGRAM_EDIT_REQUEUED: '+JSON.stringify({update_id:String(update.update_id),queue_update_id:String(prior[0]),message_id:String(prior[3]),production_write:false}));
+        }else console.log('TELEGRAM_EDIT_IGNORED: '+JSON.stringify({update_id:String(update.update_id),message_id:String(m&&m.message_id||''),reason:'NO_SINGLE_WAITING_INFO_CLARIFICATION',production_write:false}));
+        props.setProperty('BSE_TELEGRAM_OFFSET',String(update.update_id+1));continue;
+      }
       const rejectPromptReply=replyId&&bseTelegramApprovalRejectPromptMatch_(book,sourceChat,reporter,replyId);
       const inventoryClarificationReply=replyId&&typeof bseInventoryFindClarificationPrompt_==='function'&&bseInventoryFindClarificationPrompt_(book,sourceChat,reporter,replyId);
       const inventoryClarificationPrompt=inventoryClarificationReply||(!replyId&&typeof bseInventoryFindActiveClarificationPrompt_==='function'&&bseInventoryFindActiveClarificationPrompt_(book,sourceChat,reporter));
@@ -144,6 +156,8 @@ function bseTelegramQueue_(book) {
   return sheet;
 }
 function bseTelegramCell_(v){return typeof v==='string'&&/^\s*[=+@-]/.test(v)?"'"+v:v;}
+function bseTelegramEditedWaitingInfoMatch_(rows,chatId,userId,messageId){const matches=(rows||[]).map((row,index)=>({row:row,index:index})).filter(item=>String(item.row[1])===String(chatId)&&String(item.row[2])===String(userId)&&String(item.row[3])===String(messageId)&&String(item.row[6])==='WAITING_INFO'&&String(item.row[14]||'').trim()&&!(rows||[]).some(reply=>String(reply[14])===String(item.row[0])));return matches.length===1?matches[0]:null;}
+function bseTelegramEditedMetadata_(rawMeta,update,message,priorText){let meta={};try{meta=JSON.parse(String(rawMeta||'{}'));}catch(_){meta={};}meta.edited_message=true;meta.edited_update_id=String(update&&update.update_id||'');meta.edited_at=message&&Number.isSafeInteger(Number(message.edit_date))?new Date(Number(message.edit_date)*1000).toISOString():new Date().toISOString();meta.previous_text=String(priorText||'');return JSON.stringify(meta);}
 function bseTelegramFindActiveWaitingInfo_(rows,chatId,userId){
   const active=(rows||[]).filter(row=>String(row[1])===String(chatId)&&String(row[2])===String(userId)&&String(row[6])==='WAITING_INFO'&&/^\d+$/.test(String(row[15]||''))&&!rows.some(reply=>String(reply[14])===String(row[0])));
   return active.length===1?active[0]:null;
@@ -184,6 +198,19 @@ function runBseTelegramCallbackProcessorHarnessTests(){
     {id:'one pending callback per processor call with no Tasks or domain write',pass:/SpreadsheetApp\.flush\(\);return;/.test(processor)&&!/Tasks\.|bseTreatmentReviewCore_|bseMeasurementReviewCore_/.test(processor)}
   ];
   console.log('CALLBACK_PROCESSOR_HARNESS: '+JSON.stringify(tests));const failures=tests.filter(test=>!test.pass);if(failures.length)throw new Error('Callback processor harness gagal: '+failures.map(test=>test.id).join(', '));return tests;
+}
+
+function runBseTelegramEditedMessageHarnessTests(){
+  const receiver=receiveBseTelegramTest.toString(),waiting=['746192270','-536','913','124','15/10/2026','','WAITING_INFO','','','','','','','123','746192269','126','{}',''],terminal=waiting.slice(),child=['746192271','-536','913','127','20/10/2026','','QUEUED','','','','','','','126','746192270','','{}',''];terminal[6]='REPORTER_CONFIRMED';
+  const match=bseTelegramEditedWaitingInfoMatch_([waiting],'-536','913','124'),blocked=bseTelegramEditedWaitingInfoMatch_([terminal],'-536','913','124'),blockedAfterChild=bseTelegramEditedWaitingInfoMatch_([waiting,child],'-536','913','124'),meta=JSON.parse(bseTelegramEditedMetadata_('{}',{update_id:746192271},{edit_date:1760187600},'15/10/2026'));
+  const tests=[
+    {id:'receiver requests edited_message updates',pass:/allowed_updates:\['message','edited_message','callback_query'\]/.test(receiver)},
+    {id:'edited clarification resolves by same chat user message id',pass:match&&match.index===0&&String(match.row[14])==='746192269'},
+    {id:'terminal or non-WAITING_INFO row cannot be edited in place',pass:blocked===null},
+    {id:'clarification with a child reply cannot be rewritten',pass:blockedAfterChild===null},
+    {id:'edited clarification is requeued in place before generic append path',pass:receiver.indexOf('if(edited)')>=0&&receiver.indexOf("setValues([[m.text,receivedAt,'QUEUED']])")>receiver.indexOf('if(edited)')&&receiver.indexOf('if(edited)')<receiver.indexOf('const row=queue.getLastRow()+1')},
+    {id:'edit metadata preserves prior text and edited update id',pass:meta.edited_message===true&&meta.edited_update_id==='746192271'&&meta.previous_text==='15/10/2026'}
+  ];const failures=tests.filter(test=>!test.pass);if(failures.length)throw new Error('Telegram edited-message harness gagal: '+failures.map(test=>test.id).join(', '));return tests;
 }
 
 function runBseTelegramInventoryClarificationReplyHarnessTests(){

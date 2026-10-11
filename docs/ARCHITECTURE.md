@@ -240,11 +240,17 @@ Telegram private chat TEST
 3. Final validation `NEED_INFO` sentiasa menjadi `WAITING_INFO` dan tidak layak
    untuk Google Task review. Hanya final `PASS` dengan calon actionable menjadi
    `NEEDS_HUMAN_REVIEW` dan layak untuk Google Task. Hasil dengan medan hilang
-   menjadi `WAITING_INFO`; jawapan Telegram yang
-   dipautkan diproses semula bersama laporan asal. Jika jawapan menyumbang fakta
-    calon, `original_note` audit menyimpan laporan asal dan semua jawapan ikut
-    turutan; konflik crop atau variety semaian menjadi `NEEDS_INFO`, bukan PASS.
-    Hasil lengkap yang memerlukan semakan menjadi `NEEDS_HUMAN_REVIEW`.
+   menjadi `WAITING_INFO`; jawapan Telegram yang dipautkan diproses semula bersama
+   laporan asal. Jika jawapan clarification yang masih `WAITING_INFO` diedit di
+   Telegram, receiver boleh menggantikan **row clarification yang sama** sahaja
+   apabila chat, reporter, dan `message_id` sama, row itu mempunyai parent, belum
+   mempunyai child reply, dan belum terminal/approved. Versi lama disimpan dalam
+   audit metadata (`previous_text` + edited update id), row di-requeue, dan tiada
+   clarification kedua dicipta. Edit selepas aliran bergerak ke child reply atau
+   terminal state diabaikan fail-closed. Jika jawapan menyumbang fakta calon,
+   `original_note` audit menyimpan laporan asal dan semua jawapan ikut turutan;
+   konflik crop atau variety semaian menjadi `NEEDS_INFO`, bukan PASS. Hasil
+   lengkap yang memerlukan semakan menjadi `NEEDS_HUMAN_REVIEW`.
    Untuk kad kelulusan `✏️ Betulkan`, callback owner mencipta sesi pembetulan
    tahan lama pada `TEST_TELEGRAM_APPROVAL_UI`, kemudian prompt dihantar sebagai
    reply kepada mesej laporan asal. Mesej biasa seterusnya diterima hanya jika
@@ -514,7 +520,13 @@ APPROVED yang mempunyai allocation efektif `ACTIVE` bagi semua plot tersebut;
 ini ialah lookup authority, bukan inference bebas. Jika crop dinyatakan, ia
 mesti sepadan secara trim/collapse-whitespace/case-insensitive. Batch
 hilang/berganda, crop bercanggah, allocation `PLANNED`, kapasiti tiada, atau
-format samar menjadi `WAITING_INFO`, tanpa write.
+format samar menjadi `WAITING_INFO`, tanpa write. **Banci sebelum transplant /
+ACTIVE tidak dibenarkan.** Padanan mesti dinilai `as-of` `Tarikh Banci` dengan
+join `TEST_ALLOCATION_STATUS_EVENT.transplant_event_id` ke
+`TEST_TRANSPLANT_EVENT.event_date`; tarikh banci sebelum tarikh transplant
+menjadi `WAITING_INFO` dengan permintaan `Tarikh Banci sebenar pada atau selepas
+plot menjadi ACTIVE`. Sistem tidak boleh melemahkan guard hanya kerana allocation
+tersebut ACTIVE pada masa semasa.
 
 Selepas APPROVED, confirmation untuk Banci mesti dibina daripada read-back row
 canonical yang baru ditulis, bukan receipt generik. Kad Telegram yang ditutup dan
