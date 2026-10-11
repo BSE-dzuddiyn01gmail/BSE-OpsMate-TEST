@@ -48,8 +48,13 @@ Scope lock platform yang diluluskan untuk roadmap ialah:
     Bentuk "minggu ke-X bulan" bukan format canonical kerana window
     Jumaat-Khamis boleh melintasi sempadan bulan;
 - File Evidence: gambar/dokumen/video -> caption -> kategori dicadang ->
-  pengesahan manusia -> Google Drive + metadata + retrieval. v1.0 tidak
-  merangkumi OCR, Vision, atau transkripsi;
+  pengesahan manusia -> Google Drive + metadata + retrieval.
+- **OCR minimum PoC** diluluskan sebagai tambahan kecil atas permintaan operasi:
+  image/photo evidence sahaja, extract plain text sahaja, text OCR sentiasa
+  `NON_CANONICAL` sehingga manusia mengesahkan, tiada document understanding,
+  tiada table reconstruction, tiada handwriting guarantee, tiada auto-write ke
+  domain record, dan tiada Vision diagnosis. OCR failure mesti fail-safe dan tidak
+  menghalang penyimpanan/retrieval Evidence asal;
 - inventori/claim hanya log rujukan, bukan rekod stok atau kewangan rasmi.
 - `TEST_CLAIM_LOG` menggunakan header kanonik yang mengekalkan identiti Telegram
   penuntut tepat selepas `claimant`; migrasi TEST yang dikenali menyusun data
@@ -519,6 +524,38 @@ hanya menulis audit. Identity dedup ialah rujukan Telegram asal +
 `Transplant_Event_Log`; hash payload kanonik bersama batch ID menolak konflik
 dan menjadikan retry idempotent. Tiada reviewer/writer Fasa 2C-1 memanggil
 Google Tasks atau menulis production.
+
+
+### Post-D-050 scope lock 2026-10-11
+
+Keputusan owner selepas PILOT_TEST reporting stabilization:
+
+1. **Plant Replacement / Sulam = APPROVED NEXT FEATURE.**
+   Ia mesti menjadi domain/event berasingan daripada Plant Condition dan Plant Census.
+   Wording seperti `sulam`, `ganti anak pokok`, `tambah anak pokok`, atau
+   `replacement` kekal tidak boleh diproses oleh Plant Condition. Feature ini
+   dirancang sebagai `Plant_Replacement_Event_Log` dengan sekurang-kurangnya
+   event date, plot, crop, explicit replacement count, reporter/source lineage,
+   review status, evidence refs, dan `production_write:false`. Event sulam tidak
+   boleh mengubah Plant Census secara automatik; banci kekal authority bagi current
+   observed population.
+
+2. **Baki 2C-2 yang tidak pasti dan seluruh 2C-3 = DEFERRED_BY_LOCKED_SCOPE.**
+   Tiada pembangunan dibuat hanya untuk melengkapkan nombor fasa. Ia hanya dibuka
+   semula jika ada keperluan operasi BSE yang jelas atau defect/pilot evidence sebenar.
+
+3. **Plot decision change semasa Transplant = KNOWN GAP / separate capability.**
+   Current Transplant hanya boleh mengaktifkan allocation `PLANNED` yang tepat,
+   melalui ledger `PLANNED -> ACTIVE`, tanpa mutate baseline
+   `TEST_PLOT_ALLOCATION`. Jika plot sebenar berubah ketika transplant, sistem
+   semasa mesti berhenti `WAITING_INFO`; ia tidak boleh silently memindahkan
+   allocation. Jika diperlukan oleh pilot, bina `Plot Allocation Change / Reallocation`
+   event yang diaudit sebelum Transplant mengaktifkan plot baharu. Capability ini
+   berasingan daripada Plant Replacement.
+
+4. Selepas autonomous Daily Morning Digest LIVE PASS, kerja seterusnya yang diluluskan
+   ialah Plant Replacement, kemudian OCR minimum PoC jika masih diperlukan oleh BSE.
+   Friday Weekly Digest autonomous proof diteruskan pada first scheduled Friday run.
 
 ### Fasa 2C-2A: Banci Pokok TEST — regression dan runtime PASS
 

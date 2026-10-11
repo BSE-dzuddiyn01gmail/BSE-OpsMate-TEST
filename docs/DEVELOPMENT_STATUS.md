@@ -36,7 +36,7 @@
 | I-011 regression | `3a3770c` | TEST runtime PASS: `runBseI011ImplementationOnly` 17/17 PASS dan `runBseI011FullRegression` 22/22 PASS, 0 FAIL, `production_write:false`. Kedua-dua bukti runtime dibuat melalui custom-function TEST_ONLY dalam workbook `Kerani_AI_BSE_SB_TEST`, dibaca semula secara bebas, kemudian sheet probe dan wrapper sementara dibuang. |
 | Real-message field test | branch `test/real-message-field` | TEST runtime PASS 13/13 menggunakan pola mesej operasi BSE sebenar: claim petrol, Baja In, Baja Out F/N multi-record, `ambil baja` tanpa item/kuantiti, stock count dripper, leave `20 September`, maintenance paip, plant condition, image-only disease guard, transplant guard, dan treatment list. Full regression selepas perubahan kekal 22/22 PASS; `production_write:false`. Dua gap yang ditemui semasa field test dibetulkan: tarikh cuti nama bulan dan split F+N merentas plot. |
 
-Fasa 2C-2A dan 2C-2B ialah sebahagian 2C-2. Per stable ZASS D-050, first-pilot MVP scope telah dibekukan; baki 2C-2 yang tidak dinyatakan secara eksplisit dan Fasa 2C-3 kekal `DEFERRED`.
+Fasa 2C-2A dan 2C-2B ialah sebahagian 2C-2. Per stable ZASS D-050 dan owner lock 2026-10-11, baki 2C-2 yang tidak pasti serta seluruh Fasa 2C-3 kekal `DEFERRED_BY_LOCKED_SCOPE` dan tidak akan dibina tanpa keperluan operasi baharu yang jelas. Plant Replacement/Sulam diluluskan secara eksplisit sebagai next feature berasingan; OCR minimum PoC turut diluluskan sebagai capability kecil selepas scheduler proof.
 Semua checkpoint di atas kekal TEST-only;
 ia bukan bukti bahawa production-ready, pilot accepted, atau final handover telah
 dicapai.
