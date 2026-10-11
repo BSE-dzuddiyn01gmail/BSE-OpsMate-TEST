@@ -204,7 +204,7 @@ function bseUnifiedRun_(test) {
     const raw=bseUnifiedProcess_(test.input);
     const rawFailures=bseUnifiedValidate_(test.id,raw,test.input);
     console.log(test.id+'_MODEL_'+(rawFailures.length?'FAIL: '+rawFailures.join('; '):'PASS'));
-    const parsed=bseUnifiedGuard_(raw);
+    const parsed=bseUnifiedGuard_(raw,{source_input:test.input});
     const failures=bseUnifiedValidate_(test.id,parsed,test.input);
     console.log(test.id+'_UNIFIED_'+(failures.length?'FAIL: '+failures.join('; '):'PASS'));
     const key=(PropertiesService.getScriptProperties().getProperty('GEMINI_API_KEY')||'').trim();
@@ -834,6 +834,9 @@ function bseUnifiedGuardTreatment_(r,sourceNote,receivedAt){
 function bseUnifiedGuard_(raw,context) {
   const r=JSON.parse(JSON.stringify(raw));
   if(!r || !Array.isArray(r.candidates))return r;
+  const sourceInput=String(context&&context.source_input||((r.candidates[0]&&r.candidates[0].fields||{}).original_note||''));
+  const operationDecision=typeof bseOperationDecisionDeterministicResult_==='function'?bseOperationDecisionDeterministicResult_(sourceInput):null;
+  if(operationDecision)return operationDecision;
   const required={Measurement_Log:['event_date','plot_id','measurement_type','value'],Observation_Log:['event_date','plot_id','observation_facts'],Operation_Log:['event_date','plot_id'],Input_Usage_Log:['event_date','item_name','quantity','unit'],Decision_Approval_Log:['event_date','decision_subject','approval_status'],Crop_Batch_Log:['event_date','batch_action','crop','variety','batch_status'],Planting_Event_Log:['event_date','event_type','crop','variety','event_status'],Plot_Allocation_Log:['event_date','plot_id','allocation_status'],Transplant_Event_Log:['event_date','event_type','crop','plot_ids','event_status'],Plant_Census_Log:['event_date','crop','census_entries'],Treatment_Event_Log:['event_date','crop','treatment_description','plot_ids','event_status']};
   const observationHypothesisOnly=c=>c&&c.target==='Observation_Log'&&bseObservationHypothesisOnly_(c.fields);
   for(const c of r.candidates) {

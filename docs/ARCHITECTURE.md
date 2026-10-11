@@ -411,12 +411,16 @@ yang dinyatakan penghantar dan tidak boleh diisi oleh inference sistem. Jika
 penghantar tidak menyatakan punca, nilai canonical kekal string kosong dan UI
 memaparkan `tidak dinyatakan`.
 
-Target yang masih memerlukan generalisasi tersendiri ialah:
+`Operation_Log` dan `Decision_Approval_Log` kini turut mempunyai generalisasi
+PILOT_TEST tersendiri. Kedua-duanya menggunakan reporter `Benar` / `Betulkan` /
+`Batal`, writer TEST idempotent, audit berasingan, canonical read-back dan
+candidate-indexed D-048 cards apabila satu mesej menghasilkan lebih daripada satu
+rekod. Pengesahan penghantar terhadap `Decision_Approval_Log` hanya mengesahkan
+ketepatan rekod yang dilaporkan; ia **tidak** menukar `PROPOSED` atau `PENDING`
+menjadi kelulusan Manager dan tidak boleh mereka `approved_by` atau
+`approval_date`.
 
-- `Operation_Log`
-- `Decision_Approval_Log`
-
-`Input_Usage_Log` sudah ditangani melalui boundary Inventory semasa. Setiap
+`Input_Usage_Log` kekal sebagai canonical farm fact bagi penggunaan input sebenar. Selepas reporter mengesahkan rekod itu, mapper eksplisit menurunkannya kepada derived inventory movement `INVENTORY_OUT` dengan `movement_type=USAGE_CONSUMPTION`. Inventory writer menyimpan derived stock movement secara TEST-only dan membawa lineage kembali kepada canonical Input Usage source key. Inventory tidak menjadi authority bagi fakta penggunaan asal, dan `INPUT_USAGE` bukan domain inventory mentah. Setiap
 target baharu tetap memerlukan validator kontrak sendiri, TEST log sendiri,
 audit keputusan yang idempotent, dan status queue yang tidak menyiratkan
 kelulusan target lain. Tiada generalisasi boleh menambah production writer

@@ -37,6 +37,8 @@ const BSE_I011_LEGACY_GUARDS=[
   'runBseCensusConfirmationSummaryHarnessTests',
   'runBseEcLeachateConfirmationSummaryHarnessTests',
   'runBseObservationTelegramApprovalHarnessTests',
+  'runBseOperationDecisionTelegramApprovalHarnessTests',
+  'runBseInputUsageInventoryMappingHarnessTests',
   'runBseTelegramRecordRetrievalHarnessTests',
   'runBseCropBatchReviewHarnessTests',
   'runBseTelegramQueueStatusRegressionTests',
