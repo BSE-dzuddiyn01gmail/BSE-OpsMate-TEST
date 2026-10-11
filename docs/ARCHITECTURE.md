@@ -148,8 +148,10 @@ merekodkan kontrak implementasi TEST dan bukan sumber ZASS yang kedua.
   `Benar` / `Betulkan` / `Batal` dalam chat asal. Hanya selepas `Benar`, fail
   asal disimpan ke Drive TEST bersama metadata/audit; `Batal` tidak menghasilkan
   Drive write atau makluman group.
-- PM submission hanya dibenarkan untuk `REGISTERED_ACTIVE`; ia menggunakan kad
-  pengesahan PM. Selepas `Benar`, owner/admin menerima butiran PM dan group
+- PM submission hanya dibenarkan untuk `REGISTERED_ACTIVE` atau owner/admin aktif;
+  ia menggunakan kad pengesahan dalam chat PM sumber yang sama. Kad tetap terikat
+  kepada penghantar asal + source chat; PM tidak menukar visibility menjadi group.
+  Selepas `Benar`, owner/admin menerima butiran PM dan group
   lalai menerima makluman minimum dengan nama penghantar sahaja—tanpa caption,
   kategori, rujukan, nama fail, pautan Drive, atau kandungan. Fail dan butiran
   private kekal diketahui oleh penghantar serta owner/admin sahaja.
@@ -199,7 +201,10 @@ merekodkan kontrak implementasi TEST dan bukan sumber ZASS yang kedua.
   asal dan pembetulan tidak pernah digabungkan sebagai set bacaan yang sama.
   EC yang dihantar dari group ialah `FIELD_OPERATION` standard untuk retrieval
   ahli aktif yang dibenarkan; penghantaran PM kekal `PRIVATE_SUBMISSION` dan
-  tertakluk kepada polisi asal penghantar/owner.
+  tertakluk kepada polisi asal penghantar/owner. Selepas `Benar`, confirmation
+  EC mesti dibina daripada read-back `TEST_EC_LEACHATE` canonical, bukan receipt
+  generik atau echo candidate. Reporter menerima tarikh, sesi dan setiap scope
+  yang disimpan (`x:x`, `AK`, atau numeric) supaya hasil write boleh disemak terus.
 
 Butiran pelaksanaan, dependency, dan status roadmap direkodkan dalam
 `docs/DEVELOPMENT_STATUS.md`.
