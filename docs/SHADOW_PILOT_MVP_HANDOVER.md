@@ -32,9 +32,10 @@ replacement capability diluluskan berasingan kemudian.
 Shadow pilot hanya bermula selepas semua perkara berikut lengkap:
 
 1. Fasa 2C-2B Rawatan sebenar mencapai regression dan runtime `TEST PASS`.
-2. Project Owner memutuskan bagi baki 2C-2, 2C-3, dan Fasa 3–8 sama ada:
-   - dibina hingga `TEST PASS`; atau
-   - ditangguhkan.
+2. Project Owner telah memutuskan bahawa baki 2C-2 yang tidak pasti dan seluruh
+   2C-3 kekal `DEFERRED_BY_LOCKED_SCOPE`. Plant Replacement/Sulam ialah
+   pengecualian yang diluluskan sebagai next feature berasingan. Fasa 3-8 kekal
+   tidak diaktifkan melainkan ada keputusan owner yang eksplisit.
 3. Setiap penangguhan direkod dalam architecture bersama sebab, risiko,
    dependency, dan syarat pengaktifan semula.
 4. Flow yang dipilih untuk MVP telah committed, pushed, dan mempunyai bukti
