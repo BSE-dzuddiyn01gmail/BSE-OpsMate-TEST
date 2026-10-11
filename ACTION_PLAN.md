@@ -1,12 +1,17 @@
 # ACTION PLAN — OpsMate BSE Site B Recovery
 
 ## Current true milestone
-RECOVERY SOURCE MERGED AND VERIFIED. PR #9 is merged to canonical `main`; PILOT_TEST Apps Script HEAD matches canonical source. Telegram E2E proof is TEST-only and remains non-production.
+PILOT_TEST TECHNICAL READINESS VERIFIED (2026-10-11). Canonical `main` includes PR #37 and the current supported first-pilot domain flows. Live PILOT_TEST evidence, independent Sheet read-back, schema/source reconciliation and regression are current. This is **not** BSE pilot acceptance, production readiness, or final handover.
 
 ## Locked safety
 `production_write:false`; `official_bse_write:false`; `BSE_TELEGRAM_AUTOMATION=OFF`; no Google Tasks; no official BSE write; no Telegram retry unless independently proven safe.
 
 ## Evidence snapshot
+- Final technical-readiness reconciliation (2026-10-11): canonical main at merge commit `1cdf56f` (PR #37). Runtime reports `PILOT_TEST`, workbook/evidence bindings present, automation OFF, `production_write:false`, and `official_bse_write:false`.
+- Independent approval/callback read-back: no approval row remains `OPEN`; all 24 persisted callback rows are `PROCESSED`.
+- Schema audit: 48/48 registered PILOT_TEST sheets `CURRENT`. Source-key audit: `CURRENT`, `issues:[]`.
+- Latest multi-record live proof `BSE-TG-746192279`: Operation, canonical Input Usage, and Decision Approval all reached `REPORTER_CONFIRMED`; Input Usage derived exactly one TEST `INVENTORY_OUT / USAGE_CONSUMPTION` movement with lineage; Decision remains `PENDING` with no invented Manager approval.
+- Final regression after the Input Usage architecture correction: 38/38 PASS, `failed:0`, `production_write:false`.
 - Canonical `origin/main`: `5ce1dda` (PR #9, #10 and #11 merged). Dirty local main at `1723678` is preserved untouched.
 - PR #9 merged 12 recovery commits from `recovery/pilot-source-reconcile`.
 - Canonical source was pushed to PILOT_TEST Apps Script HEAD; no Apps Script version or deployment was created or updated.
@@ -31,6 +36,8 @@ RECOVERY SOURCE MERGED AND VERIFIED. PR #9 is merged to canonical `main`; PILOT_
 - REC-023: DONE — stale incorrect card 37 and its queue were explicitly discarded; independent read-back confirmed no TEST inventory record for BSE-TG-746192232.
 - REC-024: DONE — final read-only pilot readiness audit passed: no approval card remains OPEN, all persisted callbacks are processed, runtime remains safely bound to PILOT_TEST, and full regression is 26/26 PASS.
 - REC-025: DONE — PILOT_TEST stability cycle (2026-10-08) passed with independent Sheet read-back. Cycle 1 Benar: BSE-TG-746192241 produced exactly one `Baja NPK` `1.25 kg` inventory TEST record after reporter confirmation. Cycle 2 Betulkan: BSE-TG-746192243 (`0.40 kg`) entered correction state; replacement BSE-TG-746192245 (`0.60 kg`) produced exactly one confirmed TEST record with original-plus-correction provenance, while the root created no domain record. Cycle 3 Batal: BSE-TG-746192247 (`2.00 kg`) reached `DISCARDED_BY_REPORTER` with no inventory record. A controlled receive/worker retry with no new Telegram message created no queue, approval card, callback, or inventory duplicate. Final runtime audit retained `PILOT_TEST`, automation `OFF`, `production_write:false`, `official_bse_write:false`; full regression 26/26 PASS.
+
+- REC-026: DONE — final PILOT_TEST technical-readiness reconciliation (2026-10-11): PR #37 merged; no OPEN approval card; all persisted callbacks PROCESSED; schema 48/48 CURRENT; source-key audit CURRENT with no issues; latest multi-record Operation/Input Usage/Decision proof reconciled; full regression 38/38 PASS. State remains TEST-only and does not assert BSE pilot acceptance or production readiness.
 
 ## Current operational state
 - `PILOT_TEST` only; automation OFF; manual receive/worker execution only.
