@@ -240,11 +240,17 @@ Telegram private chat TEST
 3. Final validation `NEED_INFO` sentiasa menjadi `WAITING_INFO` dan tidak layak
    untuk Google Task review. Hanya final `PASS` dengan calon actionable menjadi
    `NEEDS_HUMAN_REVIEW` dan layak untuk Google Task. Hasil dengan medan hilang
-   menjadi `WAITING_INFO`; jawapan Telegram yang
-   dipautkan diproses semula bersama laporan asal. Jika jawapan menyumbang fakta
-    calon, `original_note` audit menyimpan laporan asal dan semua jawapan ikut
-    turutan; konflik crop atau variety semaian menjadi `NEEDS_INFO`, bukan PASS.
-    Hasil lengkap yang memerlukan semakan menjadi `NEEDS_HUMAN_REVIEW`.
+   menjadi `WAITING_INFO`; jawapan Telegram yang dipautkan diproses semula bersama
+   laporan asal. Jika jawapan clarification yang masih `WAITING_INFO` diedit di
+   Telegram, receiver boleh menggantikan **row clarification yang sama** sahaja
+   apabila chat, reporter, dan `message_id` sama, row itu mempunyai parent, belum
+   mempunyai child reply, dan belum terminal/approved. Versi lama disimpan dalam
+   audit metadata (`previous_text` + edited update id), row di-requeue, dan tiada
+   clarification kedua dicipta. Edit selepas aliran bergerak ke child reply atau
+   terminal state diabaikan fail-closed. Jika jawapan menyumbang fakta calon,
+   `original_note` audit menyimpan laporan asal dan semua jawapan ikut turutan;
+   konflik crop atau variety semaian menjadi `NEEDS_INFO`, bukan PASS. Hasil
+   lengkap yang memerlukan semakan menjadi `NEEDS_HUMAN_REVIEW`.
    Untuk kad kelulusan `✏️ Betulkan`, callback owner mencipta sesi pembetulan
    tahan lama pada `TEST_TELEGRAM_APPROVAL_UI`, kemudian prompt dihantar sebagai
    reply kepada mesej laporan asal. Mesej biasa seterusnya diterima hanya jika
@@ -478,20 +484,54 @@ Google Tasks atau menulis production.
 
 ### Fasa 2C-2A: Banci Pokok TEST — regression dan runtime PASS
 
-Laporan hanya diterima apabila mempunyai baris jelas `BANCI POKOK`, satu
-`Jenis Tanaman: <crop>`, dan satu atau lebih baris tepat
-`M<module>P<plot>: <integer> pokok`. Setiap plot mesti mempunyai kiraan sendiri;
-`0 pokok` ialah fakta sah dan tetap melalui human review. Tarikh banci diambil
-daripada `received_at` Telegram dalam zon `Asia/Kuala_Lumpur`, kerana format
-laporan 2C-2A tidak mewajibkan tarikh eksplisit.
+Banci mempunyai dua bentuk deterministic-first yang sah. Bentuk kanonik ialah
+baris jelas `BANCI POKOK`, satu `Jenis Tanaman: <crop>`, dan satu atau lebih
+baris tepat `M<module>P<plot>: <integer> pokok`. Bentuk operasi Site B sebenar
+boleh menggunakan `REKOD BANCI POKOK`, `Modul : M<n> P<n>`, `Tanaman : <crop>`,
+serta fakta `Mati : <integer>` dan `Sakit : <integer>`. Signal Banci yang jelas
+mesti menang sebelum parser Rawatan dan tidak boleh ditafsir sebagai nama bahan.
+
+Untuk format operasi `REKOD BANCI POKOK`, pengguna tidak perlu melaporkan
+`Hidup`. Sistem mengira **anggaran pokok sihat** secara deterministic:
+`design_capacity_polybag(plot) - Mati - Sakit`. Kapasiti ialah plot-specific
+copy yang dikunci daripada `BSE_SiteB_Canonical_Baseline.xlsx`; canonical
+external baseline kekal authority. Standard plot = 2,808, tetapi special plot
+mesti menggunakan nilai sendiri (contoh `M3P4 = 2,313`, `M7P1 = 408`,
+`M7P2 = 464`). Plot tanpa kapasiti VERIFIED tidak boleh menggunakan nilai
+standard secara fallback dan mesti `WAITING_INFO` / MISSING. Jika `Mati + Sakit`
+melebihi kapasiti, sistem fail-closed dan meminta semakan fakta.
+
+Nilai hasil derivasi disimpan dalam compatibility field `living_plant_count`
+bersama `plot_capacity_polybag` dan
+`living_count_method=ESTIMATED_CAPACITY_MINUS_DEAD_MINUS_SICK`, supaya UI dan
+retrieval wajib melabelkannya sebagai **anggaran**, bukan kiraan hidup sebenar.
+Format kanonik legacy yang memang menyatakan jumlah hidup secara eksplisit kekal
+disokong sebagai reported living count. `reported_dead_count`,
+`reported_sick_count`, `plot_capacity_polybag`, dan `living_count_method` ialah
+kolum additive di hujung `TEST_PLANT_CENSUS`; indeks legacy tidak berubah.
+Tarikh banci diambil daripada `Tarikh Banci` jika eksplisit, atau daripada
+`received_at` Telegram dalam zon `Asia/Kuala_Lumpur`; `Date Transplant` tidak
+boleh digunakan sebagai tarikh banci.
 
 Guard dan matcher membaca sahaja `TEST_CROP_BATCH`, `TEST_PLOT_ALLOCATION`,
-`TEST_CROP_BATCH_REVIEW`, dan `TEST_ALLOCATION_STATUS_EVENT`. Crop dipadankan
-secara trim, collapse whitespace, dan case-insensitive. Semua plot mesti berada
-dalam satu batch TEST yang diluluskan dan setiap allocation mesti efektif
-`ACTIVE` menurut ledger transplant; batch tiada/berganda, crop tidak sepadan,
-allocation `PLANNED`, atau format samar menjadi `WAITING_INFO` dengan
-`batch_match`, tanpa write.
+`TEST_CROP_BATCH_REVIEW`, dan `TEST_ALLOCATION_STATUS_EVENT`. Jika input operasi
+tidak menyatakan crop, crop boleh diambil hanya daripada tepat satu Crop Batch
+APPROVED yang mempunyai allocation efektif `ACTIVE` bagi semua plot tersebut;
+ini ialah lookup authority, bukan inference bebas. Jika crop dinyatakan, ia
+mesti sepadan secara trim/collapse-whitespace/case-insensitive. Batch
+hilang/berganda, crop bercanggah, allocation `PLANNED`, kapasiti tiada, atau
+format samar menjadi `WAITING_INFO`, tanpa write. **Banci sebelum transplant /
+ACTIVE tidak dibenarkan.** Padanan mesti dinilai `as-of` `Tarikh Banci` dengan
+join `TEST_ALLOCATION_STATUS_EVENT.transplant_event_id` ke
+`TEST_TRANSPLANT_EVENT.event_date`; tarikh banci sebelum tarikh transplant
+menjadi `WAITING_INFO` dengan permintaan `Tarikh Banci sebenar pada atau selepas
+plot menjadi ACTIVE`. Sistem tidak boleh melemahkan guard hanya kerana allocation
+tersebut ACTIVE pada masa semasa.
+
+Selepas APPROVED, confirmation untuk Banci mesti dibina daripada read-back row
+canonical yang baru ditulis, bukan receipt generik. Kad Telegram yang ditutup dan
+receipt reporter mesti memaparkan sekurang-kurangnya plot, crop, tarikh, Mati,
+Sakit, kapasiti yang digunakan, anggaran pokok sihat, dan formula kiraan.
 
 Menu `Lulus Banci Pokok ikut rujukan` dan `Tolak Banci Pokok ikut rujukan`
 memerlukan `BSE-TG-<update_id>`. APPROVED menggunakan `ScriptLock`, hash payload
