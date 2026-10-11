@@ -55,7 +55,8 @@ function installBseDailyMorningDigest(){
   const created=bseDailyDigestEnsureNextTrigger_();
   props.setProperty(BSE_DAILY_DIGEST_TRIGGER_UID_PROPERTY,created.trigger_uid);
   props.setProperty(BSE_DAILY_DIGEST_ENABLED_PROPERTY,'ON');
-  bseDailyDigestConfigAuditSheet_(SpreadsheetApp.getActiveSpreadsheet()).appendRow([new Date().toISOString(),bseRuntimeEnvironmentName_(),'ON',BSE_DAILY_DIGEST_TIME,created.next.toISOString(),created.trigger_uid,false]);
+  const book=boundTestBook_();
+  bseDailyDigestConfigAuditSheet_(book).appendRow([new Date().toISOString(),bseRuntimeEnvironmentName_(),'ON',BSE_DAILY_DIGEST_TIME,created.next.toISOString(),created.trigger_uid,false]);
   SpreadsheetApp.flush();
   console.log('DAILY_DIGEST_ON: next='+created.next.toISOString()+' / '+BSE_DAILY_DIGEST_TIME+' MYT; production_write=false');
   return {enabled:true,time_myt:BSE_DAILY_DIGEST_TIME,next_run_utc:created.next.toISOString(),trigger_uid:created.trigger_uid,production_write:false};
@@ -103,8 +104,9 @@ function bseDailyMorningDigestTick(){
   if(props.getProperty(BSE_DAILY_DIGEST_ENABLED_PROPERTY)!=='ON')return {skipped:'OFF',production_write:false};
   if(bseRuntimeEnvironmentName_()!=='PILOT_TEST')throw new Error('Daily digest tick hanya dibenarkan dalam PILOT_TEST.');
   bseTelegramAutomationBook_();
+  const book=boundTestBook_();
   let result;
-  try{result=bseDailyMorningDigestSend_(SpreadsheetApp.getActiveSpreadsheet(),new Date());}
+  try{result=bseDailyMorningDigestSend_(book,new Date());}
   finally{const created=bseDailyDigestEnsureNextTrigger_();PropertiesService.getScriptProperties().setProperty(BSE_DAILY_DIGEST_TRIGGER_UID_PROPERTY,created.trigger_uid);}
   return result;
 }
@@ -122,7 +124,8 @@ function runBseDailyMorningDigestHarnessTests(){
     {id:'dedup is per date and private chat',pass:bseDailyDigestAlreadySent_(rows,'2026-10-10','913')&&!bseDailyDigestAlreadySent_(rows,'2026-10-11','913')},
     {id:'uses canonical report renderer and PM owner registry',pass:/bseTelegramReportRetrieve_/.test(source)&&/bseTestOwnerRows_/.test(source)&&/private_chat_id/.test(source)},
     {id:'does not enable general Telegram automation',pass:!/BSE_TELEGRAM_AUTOMATION.*ON/.test(source)&&!/bseTelegramTick\(/.test(source)},
-    {id:'PILOT_TEST and production boundary explicit',pass:/PILOT_TEST/.test(source)&&/production_write:false/.test(source)}
+    {id:'PILOT_TEST and production boundary explicit',pass:/PILOT_TEST/.test(source)&&/production_write:false/.test(source)},
+    {id:'all digest sheet access uses runtime-mapped book',pass:installBseDailyMorningDigest.toString().includes('const book=boundTestBook_()')&&bseDailyMorningDigestTick.toString().includes('const book=boundTestBook_()')&&!source.includes('bseDailyMorningDigestSend_(SpreadsheetApp.getActiveSpreadsheet')}
   ];
   const failures=tests.filter(t=>!t.pass);if(failures.length)throw new Error('Daily digest harness gagal: '+failures.map(t=>t.id).join(', '));
   return tests;
