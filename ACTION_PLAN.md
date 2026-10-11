@@ -1,16 +1,20 @@
 # ACTION PLAN — OpsMate BSE Site B Recovery
 
 ## Current true milestone
-RECOVERY SOURCE MERGED AND VERIFIED. PR #9 is merged to canonical `main`; PILOT_TEST Apps Script HEAD matches canonical source. Telegram E2E proof is TEST-only and remains non-production.
+PILOT_TEST technical implementation is current on canonical `main` at `4cfcc40`.
+Daily Morning Digest and Friday Weekly Digest schedulers are installed and independently
+verified in PILOT_TEST. General Telegram receive/worker polling remains OFF.
+Scheduled autonomous-delivery proof is still pending; therefore pilot acceptance,
+production readiness, and final handover remain NOT ACHIEVED.
 
 ## Locked safety
 `production_write:false`; `official_bse_write:false`; `BSE_TELEGRAM_AUTOMATION=OFF`; no Google Tasks; no official BSE write; no Telegram retry unless independently proven safe.
 
 ## Evidence snapshot
-- Canonical `origin/main`: `5ce1dda` (PR #9, #10 and #11 merged). Dirty local main at `1723678` is preserved untouched.
+- Canonical `origin/main`: `4cfcc40` (PR #42 merged). Dirty primary repo remains preserved untouched.
 - PR #9 merged 12 recovery commits from `recovery/pilot-source-reconcile`.
 - Canonical source was pushed to PILOT_TEST Apps Script HEAD; no Apps Script version or deployment was created or updated.
-- Live Apps Script full regression after cleanup: 25/25 PASS, `failed:0`, `production_write:false`.
+- Latest full PILOT_TEST regression: 38/38 PASS, failed:0, `production_write:false`.
 - Independent pull/byte audit after the canonical push: 42/42 canonical files match.
 - Telegram proof: BSE-TG-746192225 and BSE-TG-746192227 each produced exactly one TEST inventory event. The latest manual flow received once, sent ACK `26`, sent approval card `28`, processed the `Benar` callback, and reached `APPROVED_TEST / VERIFIED_TEST` with queue `REPORTER_CONFIRMED`; no production write.
 - REC-018 cleanup: `TEST_ONLY_PILOT_E2E_SMOKE.gs` was deleted from the active PILOT_TEST Apps Script editor, independently read back as absent, and removed from the executor mirror. Canonical Git did not track this tombstone.
@@ -33,9 +37,14 @@ RECOVERY SOURCE MERGED AND VERIFIED. PR #9 is merged to canonical `main`; PILOT_
 - REC-025: DONE — PILOT_TEST stability cycle (2026-10-08) passed with independent Sheet read-back. Cycle 1 Benar: BSE-TG-746192241 produced exactly one `Baja NPK` `1.25 kg` inventory TEST record after reporter confirmation. Cycle 2 Betulkan: BSE-TG-746192243 (`0.40 kg`) entered correction state; replacement BSE-TG-746192245 (`0.60 kg`) produced exactly one confirmed TEST record with original-plus-correction provenance, while the root created no domain record. Cycle 3 Batal: BSE-TG-746192247 (`2.00 kg`) reached `DISCARDED_BY_REPORTER` with no inventory record. A controlled receive/worker retry with no new Telegram message created no queue, approval card, callback, or inventory duplicate. Final runtime audit retained `PILOT_TEST`, automation `OFF`, `production_write:false`, `official_bse_write:false`; full regression 26/26 PASS.
 
 ## Current operational state
-- `PILOT_TEST` only. General Telegram receive/worker polling automation kekal OFF dan manual; dedicated reporting scheduler dipisahkan daripada polling. Daily Morning Digest 08:01 MYT ialah ON/verified. Friday Weekly Digest 07:59 MYT telah diimplementasi dan menunggu trigger installation verification.
+- `PILOT_TEST` only. General Telegram receive/worker polling automation kekal OFF dan manual. Dedicated reporting schedulers dipisahkan daripada polling. Daily Morning Digest 08:01 MYT = ON/verified (trigger UID `2910103434482941952`). Friday Weekly Digest 07:59 MYT = ON/verified (trigger UID `4372146794230972416`). Scheduled autonomous-delivery proof masih PENDING.
 - User `913757987` is registered as active TEST owner/admin.
 - No Google Tasks, production writer, production deployment, or official BSE integration is enabled.
+
+## Next real pilot gate
+- Observe and independently verify the first scheduled Daily Morning Digest delivery at 08:01 MYT without any manual trigger.
+- Then observe and independently verify the first scheduled Friday Weekly Digest delivery at 07:59 MYT.
+- A scheduler installation/configuration PASS is not equivalent to autonomous delivery PASS.
 
 ## Known limits
 - Apps Script cloud logs remain unavailable through clasp because its project configuration lacks a GCP project ID; this is a diagnostic gap only.

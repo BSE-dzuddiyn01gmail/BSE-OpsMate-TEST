@@ -45,12 +45,15 @@ dicapai.
 
 | Trek | Urutan kerja bergantung | Status semasa |
 |---|---|---|
-| A. Domain / pilot entry | 2C-2A -> 2C-2B -> MVP scope freeze -> PILOT_TEST | 2C-2A TEST PASS; 2C-2B dedicated TEST runtime PASS; stable D-050 first-pilot scope freeze complete; PILOT_TEST storage/data binding + runtime isolation PASS. `PTR-20261006-002` = 10/10 boundary-correct PASS; `PTR-20261006-003` dependency Crop/Transplant/Census review paths + cleanup PASS. Comparator set yang sebelum ini `OPEN_CONTROLLED` kini fully classified sebagai bound / bound-with-gap / source-record / `LEGACY_MISSING` tanpa rekaan. Automation masih OFF; next real pilot gate ialah Telegram PILOT_TEST binding + end-to-end smoke/confirmation/reconciliation sebelum final PILOT_TEST acceptance. |
+| A. Domain / pilot entry | 2C-2A -> 2C-2B -> MVP scope freeze -> PILOT_TEST | Domain/review runtime paths, File Evidence, Claim, Observation, Operation, Decision, Input Usage, PM retrieval/history/report, Daily Morning Digest, dan Friday Weekly Digest telah mencapai TEST/PILOT_TEST technical PASS yang berkaitan. Daily 08:01 MYT dan Friday 07:59 MYT schedulers ialah ON/verified. General Telegram receive/worker polling kekal OFF. Next real pilot gate ialah scheduled autonomous-delivery proof, kemudian documented BSE pilot acceptance; production gate kekal berasingan. |
 | B. Platform | File Evidence architecture -> registration gate -> File Evidence TEST -> PM retrieval -> owner/admin registry + Telegram human review -> text reporting | Registration gate, intake/Drive Evidence, dan PM retrieval telah diimplementasi serta runtime-tested dalam TEST. Google Tasks/Task List telah dikeluarkan daripada MVP/shadow pilot oleh D-027; tiada replacement reminder tersirat. |
 
-Tiada waktu scheduler laporan ditetapkan dalam dokumen ini. Ia mesti diputuskan
-berasingan semasa reka bentuk/pilot reporting, bersama timezone, penerima, dan
-kaedah pemulihan kegagalan.
+Scheduler reporting telah dikunci dan dipasang dalam PILOT_TEST:
+- Daily Morning Digest: 08:01 MYT setiap hari, laporan hari sebelumnya, PM owner/admin.
+- Friday Weekly Digest: 07:59 MYT setiap Jumaat, window 7 hari lengkap Jumaat-Khamis,
+  PM kepada owner/admin/REGISTERED_ACTIVE user mengikut visibility filtering.
+Kedua-dua config/trigger installation telah independently verified; autonomous scheduled
+delivery masih perlu dibuktikan sebelum status boleh dinaikkan kepada LIVE PASS untuk scheduler.
 
 ## Syarat selesai dan production gate
 
