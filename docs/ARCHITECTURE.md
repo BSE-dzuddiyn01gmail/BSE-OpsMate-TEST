@@ -485,25 +485,41 @@ boleh menggunakan `REKOD BANCI POKOK`, `Modul : M<n> P<n>`, `Tanaman : <crop>`,
 serta fakta `Mati : <integer>` dan `Sakit : <integer>`. Signal Banci yang jelas
 mesti menang sebelum parser Rawatan dan tidak boleh ditafsir sebagai nama bahan.
 
-`living_plant_count` tetap fakta wajib bagi rekod Banci yang boleh diluluskan.
-Jika format operasi menyatakan `Mati`/`Sakit` tetapi tidak menyatakan `Hidup`,
-nama domain serta nilai Mati/Sakit dipelihara dan queue menjadi `WAITING_INFO`;
-bot meminta jumlah pokok hidup bagi plot tersebut melalui Reply. Nilai hidup
-tidak boleh dihitung daripada layout, Mati, Sakit, atau fakta lain. Selepas
-clarification lengkap, ketiga-tiga fakta boleh disimpan bersama dalam
-`TEST_PLANT_CENSUS`; `reported_dead_count` dan `reported_sick_count` ialah kolum
-optional additive di hujung schema supaya indeks legacy tidak berubah. `0 pokok`
-ialah fakta sah. Tarikh banci diambil daripada `Tarikh Banci` jika eksplisit,
-atau daripada `received_at` Telegram dalam zon `Asia/Kuala_Lumpur`; `Date
-Transplant` tidak boleh digunakan sebagai tarikh banci.
+Untuk format operasi `REKOD BANCI POKOK`, pengguna tidak perlu melaporkan
+`Hidup`. Sistem mengira **anggaran pokok sihat** secara deterministic:
+`design_capacity_polybag(plot) - Mati - Sakit`. Kapasiti ialah plot-specific
+copy yang dikunci daripada `BSE_SiteB_Canonical_Baseline.xlsx`; canonical
+external baseline kekal authority. Standard plot = 2,808, tetapi special plot
+mesti menggunakan nilai sendiri (contoh `M3P4 = 2,313`, `M7P1 = 408`,
+`M7P2 = 464`). Plot tanpa kapasiti VERIFIED tidak boleh menggunakan nilai
+standard secara fallback dan mesti `WAITING_INFO` / MISSING. Jika `Mati + Sakit`
+melebihi kapasiti, sistem fail-closed dan meminta semakan fakta.
+
+Nilai hasil derivasi disimpan dalam compatibility field `living_plant_count`
+bersama `plot_capacity_polybag` dan
+`living_count_method=ESTIMATED_CAPACITY_MINUS_DEAD_MINUS_SICK`, supaya UI dan
+retrieval wajib melabelkannya sebagai **anggaran**, bukan kiraan hidup sebenar.
+Format kanonik legacy yang memang menyatakan jumlah hidup secara eksplisit kekal
+disokong sebagai reported living count. `reported_dead_count`,
+`reported_sick_count`, `plot_capacity_polybag`, dan `living_count_method` ialah
+kolum additive di hujung `TEST_PLANT_CENSUS`; indeks legacy tidak berubah.
+Tarikh banci diambil daripada `Tarikh Banci` jika eksplisit, atau daripada
+`received_at` Telegram dalam zon `Asia/Kuala_Lumpur`; `Date Transplant` tidak
+boleh digunakan sebagai tarikh banci.
 
 Guard dan matcher membaca sahaja `TEST_CROP_BATCH`, `TEST_PLOT_ALLOCATION`,
-`TEST_CROP_BATCH_REVIEW`, dan `TEST_ALLOCATION_STATUS_EVENT`. Crop dipadankan
-secara trim, collapse whitespace, dan case-insensitive. Semua plot mesti berada
-dalam satu batch TEST yang diluluskan dan setiap allocation mesti efektif
-`ACTIVE` menurut ledger transplant; batch tiada/berganda, crop tidak sepadan,
-allocation `PLANNED`, atau format samar menjadi `WAITING_INFO` dengan
-`batch_match`, tanpa write.
+`TEST_CROP_BATCH_REVIEW`, dan `TEST_ALLOCATION_STATUS_EVENT`. Jika input operasi
+tidak menyatakan crop, crop boleh diambil hanya daripada tepat satu Crop Batch
+APPROVED yang mempunyai allocation efektif `ACTIVE` bagi semua plot tersebut;
+ini ialah lookup authority, bukan inference bebas. Jika crop dinyatakan, ia
+mesti sepadan secara trim/collapse-whitespace/case-insensitive. Batch
+hilang/berganda, crop bercanggah, allocation `PLANNED`, kapasiti tiada, atau
+format samar menjadi `WAITING_INFO`, tanpa write.
+
+Selepas APPROVED, confirmation untuk Banci mesti dibina daripada read-back row
+canonical yang baru ditulis, bukan receipt generik. Kad Telegram yang ditutup dan
+receipt reporter mesti memaparkan sekurang-kurangnya plot, crop, tarikh, Mati,
+Sakit, kapasiti yang digunakan, anggaran pokok sihat, dan formula kiraan.
 
 Menu `Lulus Banci Pokok ikut rujukan` dan `Tolak Banci Pokok ikut rujukan`
 memerlukan `BSE-TG-<update_id>`. APPROVED menggunakan `ScriptLock`, hash payload
