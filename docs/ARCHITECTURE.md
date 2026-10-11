@@ -58,7 +58,11 @@ pilot. `EnvironmentTest.js` memegang kontrak environment berikut:
   sepadan dengan binding pilot yang dikunci;
 - property Telegram group/chat PILOT_TEST berasingan daripada TEST, dan output
   Telegram PILOT_TEST dilabel `[PILOT TEST]`;
-- pemasangan automation trigger ditolak semasa controlled setup/replay;
+- general Telegram polling automation kekal ditolak semasa controlled setup/replay;
+  pengecualian terhad yang diluluskan pada 2026-10-11 ialah dedicated
+  Daily Morning Digest scheduler 08:01 MYT. Ia tidak menghidupkan
+  `BSE_TELEGRAM_AUTOMATION`, hanya membaca canonical TEST facts dan menghantar
+  ke PM owner/admin dengan dedup harian;
 - semua environment kekal `production_write:false` dan
   `official_bse_write:false`.
 
