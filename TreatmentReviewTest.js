@@ -133,6 +133,7 @@ function bseTreatmentListParseMessage_(text,receivedAt){
   const context=typeof bseUnifiedSourceContext_==='function'?bseUnifiedSourceContext_(text):{original:String(text||''),clarifications:[],provenance:String(text||'')};
   const source=String(context.original||'').trim(),clarifications=Array.isArray(context.clarifications)?context.clarifications:[],provenance=String(context.provenance||source);
   if(!source)return null;
+  if(/^\s*(?:\d+\.\s*)?(?:REKOD\s+)?BANCI\s+POKOK\s*$/im.test(source))return null;
   // Numbered treatment sections are independent records. Never pool doses across crops/plots.
   const headings=[...source.matchAll(/^\s*\*?\d+\.\s*(M\s*\d+)(?:\s*[- ]\s*(P\s*\d+))?\s+([^\n*]+)\*?\s*$/gim)];
   if(headings.length>1){

@@ -478,12 +478,24 @@ Google Tasks atau menulis production.
 
 ### Fasa 2C-2A: Banci Pokok TEST — regression dan runtime PASS
 
-Laporan hanya diterima apabila mempunyai baris jelas `BANCI POKOK`, satu
-`Jenis Tanaman: <crop>`, dan satu atau lebih baris tepat
-`M<module>P<plot>: <integer> pokok`. Setiap plot mesti mempunyai kiraan sendiri;
-`0 pokok` ialah fakta sah dan tetap melalui human review. Tarikh banci diambil
-daripada `received_at` Telegram dalam zon `Asia/Kuala_Lumpur`, kerana format
-laporan 2C-2A tidak mewajibkan tarikh eksplisit.
+Banci mempunyai dua bentuk deterministic-first yang sah. Bentuk kanonik ialah
+baris jelas `BANCI POKOK`, satu `Jenis Tanaman: <crop>`, dan satu atau lebih
+baris tepat `M<module>P<plot>: <integer> pokok`. Bentuk operasi Site B sebenar
+boleh menggunakan `REKOD BANCI POKOK`, `Modul : M<n> P<n>`, `Tanaman : <crop>`,
+serta fakta `Mati : <integer>` dan `Sakit : <integer>`. Signal Banci yang jelas
+mesti menang sebelum parser Rawatan dan tidak boleh ditafsir sebagai nama bahan.
+
+`living_plant_count` tetap fakta wajib bagi rekod Banci yang boleh diluluskan.
+Jika format operasi menyatakan `Mati`/`Sakit` tetapi tidak menyatakan `Hidup`,
+nama domain serta nilai Mati/Sakit dipelihara dan queue menjadi `WAITING_INFO`;
+bot meminta jumlah pokok hidup bagi plot tersebut melalui Reply. Nilai hidup
+tidak boleh dihitung daripada layout, Mati, Sakit, atau fakta lain. Selepas
+clarification lengkap, ketiga-tiga fakta boleh disimpan bersama dalam
+`TEST_PLANT_CENSUS`; `reported_dead_count` dan `reported_sick_count` ialah kolum
+optional additive di hujung schema supaya indeks legacy tidak berubah. `0 pokok`
+ialah fakta sah. Tarikh banci diambil daripada `Tarikh Banci` jika eksplisit,
+atau daripada `received_at` Telegram dalam zon `Asia/Kuala_Lumpur`; `Date
+Transplant` tidak boleh digunakan sebagai tarikh banci.
 
 Guard dan matcher membaca sahaja `TEST_CROP_BATCH`, `TEST_PLOT_ALLOCATION`,
 `TEST_CROP_BATCH_REVIEW`, dan `TEST_ALLOCATION_STATUS_EVENT`. Crop dipadankan
