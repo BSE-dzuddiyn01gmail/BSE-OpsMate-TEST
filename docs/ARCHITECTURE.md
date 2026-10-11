@@ -396,21 +396,31 @@ sejarah sumber ke GitHub. Kedua-duanya ialah tindakan berasingan.
 
 ## Sempadan semasa dan Fasa 2
 
-Fasa 1 hanya meliputi `Measurement_Log`. Google Tasks tidak lagi berada
-dalam architecture semasa; keputusan human review kekal authority. Rujukan yang
-mempunyai lebih daripada satu calon tidak boleh diluluskan melalui vertical slice ini.
+Vertical slice asal Fasa 1 bermula dengan `Measurement_Log`; PILOT_TEST semasa
+sudah mempunyai beberapa domain writer TEST dan D-048 membolehkan approval
+per-candidate bagi laporan multi-record yang disokong. Google Tasks tidak lagi
+berada dalam architecture semasa; keputusan human review kekal authority.
 
-Fasa 2 perlu menggeneralisasikan semakan mengikut calon bagi:
+Generalisasi semakan mengikut calon kini sudah meliputi `Observation_Log` dalam
+PILOT_TEST: satu calon Observation boleh menghasilkan kad Telegram reporter
+`Benar` / `Betulkan` / `Batal`, writer TEST idempotent, audit
+`TEST_OBSERVATION_REVIEW`, log `TEST_OBSERVATION_LOG`, canonical read-back
+confirmation, dan PM `/retrieve`. `observation_facts` hanya menyimpan fakta
+fizikal yang dilaporkan; `suspected_cause` hanya boleh mengandungi ketidakpastian
+yang dinyatakan penghantar dan tidak boleh diisi oleh inference sistem. Jika
+penghantar tidak menyatakan punca, nilai canonical kekal string kosong dan UI
+memaparkan `tidak dinyatakan`.
 
-- `Observation_Log`
+Target yang masih memerlukan generalisasi tersendiri ialah:
+
 - `Operation_Log`
-- `Input_Usage_Log`
 - `Decision_Approval_Log`
 
-Setiap target memerlukan validator kontrak sendiri, TEST log sendiri, audit
-keputusan yang idempotent, dan status queue yang tidak menyiratkan kelulusan
-target lain. Tiada generalisasi boleh menambah production writer tanpa reka
-bentuk, ujian, dan kelulusan eksplisit yang berasingan.
+`Input_Usage_Log` sudah ditangani melalui boundary Inventory semasa. Setiap
+target baharu tetap memerlukan validator kontrak sendiri, TEST log sendiri,
+audit keputusan yang idempotent, dan status queue yang tidak menyiratkan
+kelulusan target lain. Tiada generalisasi boleh menambah production writer
+tanpa reka bentuk, ujian, dan kelulusan eksplisit yang berasingan.
 
 Pemerhatian aset seperti Kolam 1 bukan `plot_id` dan bukan sebahagian daripada
 workflow Fasa 1. Ia menerima status unsupported sebelum Gemini. Fasa 2
