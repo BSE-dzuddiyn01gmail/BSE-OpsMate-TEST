@@ -726,7 +726,7 @@ function bseInventoryReviewCore_(book, reviewContext) {
   }
   if (reviewSheet) reviewSheet.appendRow([Utilities.getUuid(), sourceKey, eventId, proposal.domain, context.action, context.actor_name, String(context.reason || ''), stamp, 'NEEDS_HUMAN_REVIEW', payloadHash, context.owner_id || '', context.actor_id || '', context.actor_name, proposal.original_note]);
   if (book && typeof book.getSheetByName === 'function') {
-    const queue = book.getSheetByName('TELEGRAM_TEST_QUEUE');
+    const queue = context.suppress_queue_status===true ? null : book.getSheetByName('TELEGRAM_TEST_QUEUE');
     if (queue && context.reference) {
       const rows = queue.getLastRow() > 1 ? queue.getRange(2, 1, queue.getLastRow() - 1, BSE_TG_QUEUE_HEADERS.length).getValues() : [];
       const index = rows.findIndex(row => 'BSE-TG-' + String(row[0]) === String(context.reference));
