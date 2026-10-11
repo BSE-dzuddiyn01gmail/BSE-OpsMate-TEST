@@ -33,10 +33,10 @@ RECOVERY SOURCE MERGED AND VERIFIED. PR #9 is merged to canonical `main`; PILOT_
 - REC-025: DONE — PILOT_TEST stability cycle (2026-10-08) passed with independent Sheet read-back. Cycle 1 Benar: BSE-TG-746192241 produced exactly one `Baja NPK` `1.25 kg` inventory TEST record after reporter confirmation. Cycle 2 Betulkan: BSE-TG-746192243 (`0.40 kg`) entered correction state; replacement BSE-TG-746192245 (`0.60 kg`) produced exactly one confirmed TEST record with original-plus-correction provenance, while the root created no domain record. Cycle 3 Batal: BSE-TG-746192247 (`2.00 kg`) reached `DISCARDED_BY_REPORTER` with no inventory record. A controlled receive/worker retry with no new Telegram message created no queue, approval card, callback, or inventory duplicate. Final runtime audit retained `PILOT_TEST`, automation `OFF`, `production_write:false`, `official_bse_write:false`; full regression 26/26 PASS.
 
 ## Current operational state
-- `PILOT_TEST` only; automation OFF; manual receive/worker execution only.
+- `PILOT_TEST` only. General Telegram receive/worker polling automation kekal OFF dan manual; dedicated reporting scheduler dipisahkan daripada polling. Daily Morning Digest 08:01 MYT ialah ON/verified. Friday Weekly Digest 07:59 MYT telah diimplementasi dan menunggu trigger installation verification.
 - User `913757987` is registered as active TEST owner/admin.
 - No Google Tasks, production writer, production deployment, or official BSE integration is enabled.
 
 ## Known limits
 - Apps Script cloud logs remain unavailable through clasp because its project configuration lacks a GCP project ID; this is a diagnostic gap only.
-- Automation remains intentionally OFF. Any automation enablement, Apps Script version/deployment update, or production promotion requires explicit owner authorization.
+- General Telegram receive/worker automation remains intentionally OFF. Dedicated reporting schedulers are separately governed; production promotion, Apps Script version/deployment update, or official BSE write still requires explicit owner authorization.

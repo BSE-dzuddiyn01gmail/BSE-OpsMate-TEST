@@ -29,9 +29,24 @@ Scope lock platform yang diluluskan untuk roadmap ialah:
   MVP tidak menjamin automatic pending-review reminder dan tidak boleh menggantinya
   secara senyap dengan subsystem lain;
 - retrieval hanya diterima dalam PM bot daripada user berdaftar dan aktif;
-  permintaan retrieval dalam group ditolak dengan arahan minimum untuk PM;
-- reporting text-only: daily delta, Friday Report A (provisional + approved),
-  dan Report B (approved-only). Waktu scheduler belum diputuskan;
+  permintaan retrieval dalam group ditolak dengan arahan minimum untuk PM.
+  Owner/admin boleh melihat canonical history yang dibenarkan sepenuhnya;
+  user aktif hanya melihat rekod yang mereka laporkan sendiri atau rekod
+  `GROUP_STANDARD`. `PRIVATE_SUBMISSION`, `INVENTORY_CLAIM`,
+  `ADMIN_DOCUMENT`, dan kategori restricted lain kekal default-deny kepada
+  user lain;
+- reporting text-only dikunci seperti berikut:
+  - Daily Morning Digest: **08:01 MYT setiap hari**, canonical history hari
+    sebelumnya + komen Gemini berasingan/non-canonical, PM owner/admin;
+  - Friday Weekly Digest: **07:59 MYT setiap Jumaat**, window **7 hari lengkap
+    sebelumnya (Jumaat lepas -> Khamis semalam)**, weekly canonical history
+    + komen Gemini berasingan/non-canonical, PM kepada semua owner/admin/user
+    TEST yang aktif mengikut visibility/access boundary;
+  - weekly retrieval menggunakan command `/history` yang sama. Bentuk canonical:
+    `/history YYYY-MM`, `/history week last`, dan
+    `/history week YYYY-MM-DD` dengan tarikh mula wajib Jumaat.
+    Bentuk "minggu ke-X bulan" bukan format canonical kerana window
+    Jumaat-Khamis boleh melintasi sempadan bulan;
 - File Evidence: gambar/dokumen/video -> caption -> kategori dicadang ->
   pengesahan manusia -> Google Drive + metadata + retrieval. v1.0 tidak
   merangkumi OCR, Vision, atau transkripsi;
