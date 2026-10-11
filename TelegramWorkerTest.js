@@ -140,7 +140,8 @@ function processBseTelegramTestQueue() {
       const censusResult=!ecResult&&!inventoryResult&&!leaveResult&&!maintenanceResult&&!seedSowingResult&&!transplantResult&&typeof bseTelegramCensusDeterministicResult_==='function'?bseTelegramCensusDeterministicResult_(job.input,job.receivedAt):null;
       const treatmentResult=!ecResult&&!inventoryResult&&!leaveResult&&!maintenanceResult&&!seedSowingResult&&!transplantResult&&!censusResult&&typeof bseTreatmentListParseMessage_==='function'?bseTreatmentListParseMessage_(job.input,job.receivedAt):null;
       const plantConditionResult=!ecResult&&!inventoryResult&&!leaveResult&&!maintenanceResult&&!seedSowingResult&&!transplantResult&&!censusResult&&!treatmentResult&&typeof bsePlantConditionParseMessage_==='function'?bsePlantConditionParseMessage_(job.input,job.receivedAt):null;
-      const rawResult=ecResult||inventoryResult||leaveResult||maintenanceResult||seedSowingResult||transplantResult||censusResult||treatmentResult||plantConditionResult||bseUnifiedProcess_(job.input,job.receivedAt);
+      const operationDecisionResult=!ecResult&&!inventoryResult&&!leaveResult&&!maintenanceResult&&!seedSowingResult&&!transplantResult&&!censusResult&&!treatmentResult&&!plantConditionResult&&typeof bseOperationDecisionDeterministicResult_==='function'?bseOperationDecisionDeterministicResult_(job.input):null;
+      const rawResult=ecResult||inventoryResult||leaveResult||maintenanceResult||seedSowingResult||transplantResult||censusResult||treatmentResult||plantConditionResult||operationDecisionResult||bseUnifiedProcess_(job.input,job.receivedAt);
       if(typeof bseLeaveApplyReporterSnapshot_==='function')bseLeaveApplyReporterSnapshot_(rawResult,job);
       if(typeof bseMaintenanceApplyReporterSnapshot_==='function')bseMaintenanceApplyReporterSnapshot_(rawResult,job);
       if(typeof bsePlantConditionApplyReporterSnapshot_==='function')bsePlantConditionApplyReporterSnapshot_(rawResult,job);
@@ -205,7 +206,7 @@ function processBseTelegramTestQueue() {
 
 // Pure result path used by the worker before candidate_json is persisted.
 function bseTelegramWorkerFinalizeResult_(book,rawResult,job){
-  const guarded=bseUnifiedGuard_(rawResult,{received_at:job.receivedAt,queue_reference:'BSE-TG-'+job.id,root_reference:'BSE-TG-'+(job.rootId||job.id)});
+  const guarded=bseUnifiedGuard_(rawResult,{received_at:job.receivedAt,queue_reference:'BSE-TG-'+job.id,root_reference:'BSE-TG-'+(job.rootId||job.id),source_input:job.input});
   if(guarded&&Array.isArray(guarded.candidates))guarded.candidates.forEach(c=>{if(c&&c.fields)c.fields.original_note=job.provenance;});
   const result=bseTreatmentQueueGuard_(book,bseCensusQueueGuard_(book,bseTransplantQueueGuard_(book,guarded)));
   if(!result||result.production_write!==false||!Array.isArray(result.candidates)||!result.candidates.length||!['PASS','NEED_INFO','REJECTED','CONFLICT'].includes(result.validation))throw new Error('Invalid output');
