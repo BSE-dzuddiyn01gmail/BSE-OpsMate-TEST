@@ -247,7 +247,7 @@ function bseImageProcessingOpenCard_(book,index,row){
     sheet.getRange(index+2,15).setValue('REVIEW_OPEN');
     sheet.getRange(index+2,22,1,2).setValues([[token,String(sent.message_id)]]);
     const evidence=bseEvidenceFindById_(book,String(row[1]));
-    if(evidence)evidence.sheet.getRange(evidence.index+2,17,1,3).setValues([['IMAGE_REVIEW_OPEN',token,String(sent.message_id)]]);
+    if(evidence)bseTelegramEvidenceSheet_(book).getRange(evidence.index+2,17,1,3).setValues([['IMAGE_REVIEW_OPEN',token,String(sent.message_id)]]);
     SpreadsheetApp.flush();
     return true;
   }catch(error){
@@ -262,13 +262,21 @@ function processBseImageProcessingQueueTest(){
   let item=null;
   for(let i=0;i<rows.length;i++){
     const status=String(rows[i][14]);
-    if(['QUEUED','REVIEW_CARD_PENDING'].includes(status)){item={row:rows[i],index:i};break;}
+    if(['QUEUED','PROCESSING_DONE','REVIEW_CARD_PENDING'].includes(status)){item={row:rows[i],index:i};break;}
   }
   if(!item)return {processed:0,failed:0,production_write:false};
   const row=item.row,index=item.index;
-  if(String(row[14])==='REVIEW_CARD_PENDING'){
+  if(['PROCESSING_DONE','REVIEW_CARD_PENDING'].includes(String(row[14]))){
+    if(String(row[14])==='PROCESSING_DONE'){
+      const evidence=bseEvidenceFindById_(book,String(row[1]));
+      if(evidence){
+        const category=String(row[18]||'UNCLASSIFIED_TEST'),visibility=bseImageProcessingVisibility_(evidence.row[2],category);
+        bseTelegramEvidenceSheet_(book).getRange(evidence.index+2,15,1,3).setValues([[category,visibility,'IMAGE_PROCESSING_DONE']]);
+        SpreadsheetApp.flush();
+      }
+    }
     const ok=bseImageProcessingOpenCard_(book,index,row);
-    return {processed:ok?1:0,failed:ok?0:1,card_retry:true,production_write:false};
+    return {processed:ok?1:0,failed:ok?0:1,card_retry:true,resumed_from:String(row[14]),production_write:false};
   }
   sheet.getRange(index+2,15).setValue('PROCESSING');SpreadsheetApp.flush();
   let result=null,lastError='',attempts=0;
@@ -286,7 +294,7 @@ function processBseImageProcessingQueueTest(){
     sheet.getRange(index+2,15,1,2).setValues([['PROCESSING_FAILED',attempts]]);
     sheet.getRange(index+2,27).setValue(lastError||'IMAGE_PROCESSING_ERROR');
     const evidence=bseEvidenceFindById_(book,String(row[1]));
-    if(evidence)evidence.sheet.getRange(evidence.index+2,17).setValue('IMAGE_PROCESSING_FAILED');
+    if(evidence)bseTelegramEvidenceSheet_(book).getRange(evidence.index+2,17).setValue('IMAGE_PROCESSING_FAILED');
     SpreadsheetApp.flush();
     try{
       bseTelegramApi_('sendMessage',{
@@ -307,7 +315,7 @@ function processBseImageProcessingQueueTest(){
   const evidence=bseEvidenceFindById_(book,String(row[1]));
   if(evidence){
     const visibility=bseImageProcessingVisibility_(evidence.row[2],category);
-    evidence.sheet.getRange(evidence.index+2,15,1,3).setValues([[category,visibility,'IMAGE_PROCESSING_DONE']]);
+    bseTelegramEvidenceSheet_(book).getRange(evidence.index+2,15,1,3).setValues([[category,visibility,'IMAGE_PROCESSING_DONE']]);
   }
   SpreadsheetApp.flush();
   const latest=sheet.getRange(index+2,1,1,BSE_IMAGE_PROCESSING_HEADERS.length).getValues()[0];
@@ -380,7 +388,7 @@ function bseImageProcessingCallback_(callback){
       sheet.getRange(rowIndex,15).setValue('DISCARDED_BY_REPORTER');
       sheet.getRange(rowIndex,26).setValue(new Date().toISOString());
       const evidence=bseEvidenceFindById_(book,String(row[1]));
-      if(evidence)evidence.sheet.getRange(evidence.index+2,17,1,6).setValues([['DISCARDED_BY_REPORTER',String(evidence.row[17]||''),String(evidence.row[18]||''),'','',new Date().toISOString()]]);
+      if(evidence)bseTelegramEvidenceSheet_(book).getRange(evidence.index+2,17,1,6).setValues([['DISCARDED_BY_REPORTER',String(evidence.row[17]||''),String(evidence.row[18]||''),'','',new Date().toISOString()]]);
       try{
         bseTelegramApi_('editMessageReplyMarkup',{chat_id:chat,message_id:Number(row[22]),reply_markup:{inline_keyboard:[]}});
         bseTelegramApi_('editMessageText',{chat_id:chat,message_id:Number(row[22]),text:'[PILOT TEST]\n'+bseImageProcessingModeLabel_(row[8])+' dibuang.\nRujukan: '+row[1]+'\nGambar tidak disimpan ke Drive.'});
@@ -397,7 +405,7 @@ function bseImageProcessingCallback_(callback){
       SpreadsheetApp.flush();
     }
     const category=String(row[18]||'UNCLASSIFIED_TEST'),visibility=bseImageProcessingVisibility_(evidence.row[2],category),stamp=new Date().toISOString();
-    evidence.sheet.getRange(evidence.index+2,15,1,7).setValues([[
+    bseTelegramEvidenceSheet_(book).getRange(evidence.index+2,15,1,7).setValues([[
       category,visibility,'CONFIRMED_TEST',String(evidence.row[17]||''),String(row[22]||''),driveId,stamp
     ]]);
     sheet.getRange(rowIndex,15).setValue('CONFIRMED_TEST');
@@ -466,7 +474,7 @@ function bseImageProcessingCorrectionReceive_(book,m){
   const evidence=bseEvidenceFindById_(book,String(item.r[1]));
   if(evidence){
     const visibility=bseImageProcessingVisibility_(evidence.row[2],category);
-    evidence.sheet.getRange(evidence.index+2,15,1,3).setValues([[category,visibility,'IMAGE_PROCESSING_DONE']]);
+    bseTelegramEvidenceSheet_(book).getRange(evidence.index+2,15,1,3).setValues([[category,visibility,'IMAGE_PROCESSING_DONE']]);
   }
   SpreadsheetApp.flush();
   const latest=sheet.getRange(item.i+2,1,1,BSE_IMAGE_PROCESSING_HEADERS.length).getValues()[0];
@@ -485,10 +493,12 @@ function runBseImageProcessingHarnessTests(){
     {id:'caption commands are image_to_text and image_analysis only',pass:bseImageProcessingCaptionCommand_('/image_to_text')==='IMAGE_TO_TEXT'&&bseImageProcessingCaptionCommand_('/image_analysis')==='IMAGE_ANALYSIS'&&!bseImageProcessingCaptionCommand_('/ocr')&&!bseImageProcessingCaptionCommand_('/image-to-text')},
     {id:'PHOTO queues before Drive write',pass:/PHOTO/.test(receive)&&/IMAGE_PROCESSING_PENDING/.test(receive)&&!/bseTelegramEvidenceStoreDrive_/.test(receive)},
     {id:'heavy processing retries once then fails cleanly',pass:/attempt<=2/.test(worker)&&/PROCESSING_FAILED/.test(worker)&&/gagal selepas 1 retry/.test(worker)},
+    {id:'durable PROCESSING_DONE resumes to review card without model rerun',pass:/PROCESSING_DONE/.test(worker)&&/resumed_from/.test(worker)&&worker.indexOf("['PROCESSING_DONE','REVIEW_CARD_PENDING']")<worker.indexOf("bseImageProcessingModelCall_")},
     {id:'image to text forbids reconstructed markdown tables',pass:/OCR_FORMAT_REJECTED/.test(model)&&/Markdown tables/.test(prompt)&&/Do not normalize dates/.test(prompt)},
     {id:'image analysis remains noncanonical and non-diagnostic',pass:/NON_CANONICAL/.test(bseImageProcessingCardText_.toString())&&/Do not make a definitive diagnosis/.test(prompt)&&prompt.includes('mungkin/berkemungkinan')},
     {id:'Benar is the only Drive write path',pass:callback.includes("m[2]==='R'")&&callback.includes("m[2]==='C'")&&callback.indexOf('bseTelegramEvidenceStoreDrive_')>callback.indexOf("m[2]==='R'")},
     {id:'Betulkan can change category record and data',pass:/Kategori/.test(correction)&&/Rekod/.test(correction)&&/Data/.test(correction)&&/CORRECTION_WAITING_INFO/.test(callback)},
+    {id:'Evidence writes reacquire canonical Evidence sheet',pass:!/evidence\.sheet/.test(bseImageProcessingOpenCard_.toString()+worker+callback+correction)&&/bseTelegramEvidenceSheet_\(book\)\.getRange/.test(bseImageProcessingOpenCard_.toString()+worker+callback+correction)},
     {id:'no domain or production writer',pass:!/ReviewCore_|production_write\s*:\s*true/.test(receive+'\n'+worker+'\n'+model+'\n'+callback+'\n'+correction)}
   ];
   const failed=tests.filter(t=>!t.pass);
