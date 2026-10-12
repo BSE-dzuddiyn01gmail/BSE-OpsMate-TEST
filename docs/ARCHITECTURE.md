@@ -50,11 +50,14 @@ Scope lock platform yang diluluskan untuk roadmap ialah:
 - File Evidence: gambar/dokumen/video -> caption -> kategori dicadang ->
   pengesahan manusia -> Google Drive + metadata + retrieval.
 - **OCR minimum PoC** diluluskan sebagai tambahan kecil atas permintaan operasi:
-  image/photo evidence sahaja, extract plain text sahaja, text OCR sentiasa
-  `NON_CANONICAL` sehingga manusia mengesahkan, tiada document understanding,
-  tiada table reconstruction, tiada handwriting guarantee, tiada auto-write ke
-  domain record, dan tiada Vision diagnosis. OCR failure mesti fail-safe dan tidak
-  menghalang penyimpanan/retrieval Evidence asal;
+  image/photo Evidence yang sudah `CONFIRMED_TEST` sahaja. Pengguna meminta
+  `/ocr BSE-EV-...` melalui PM; output pertama disimpan sebagai
+  `PROPOSED_NON_CANONICAL` dan dipaparkan sebagai plain text sahaja. Pengguna
+  mesti mengesahkan melalui `/ocr confirm BSE-EV-...` sebelum text menjadi
+  metadata `OCR_CONFIRMED_TEST`; `/ocr discard ...` membuang hasil OCR
+  tanpa menjejaskan Evidence asal. Tiada document understanding, table reconstruction,
+  handwriting guarantee, domain auto-write, atau Vision diagnosis. OCR failure
+  mesti fail-safe dan tidak menghalang penyimpanan/retrieval Evidence asal;
 - inventori/claim hanya log rujukan, bukan rekod stok atau kewangan rasmi.
 - `TEST_CLAIM_LOG` menggunakan header kanonik yang mengekalkan identiti Telegram
   penuntut tepat selepas `claimant`; migrasi TEST yang dikenali menyusun data

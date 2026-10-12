@@ -23,7 +23,8 @@ const BSE_I011_HARNESSES=[
   'runBsePlantConditionApprovalD045HarnessTests',
   'runBsePlantReplacementAcceptanceHarnessTests',
   'runBsePlantReplacementApprovalHarnessTests',
-  'runBsePlantReplacementRouterHarnessTests'
+  'runBsePlantReplacementRouterHarnessTests',
+  'runBseEvidenceOcrHarnessTests'
 ];
 
 const BSE_I011_LEGACY_GUARDS=[
