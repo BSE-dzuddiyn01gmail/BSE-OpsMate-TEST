@@ -46,10 +46,13 @@ function bseEvidenceOcrExtract_(telegramFileId,mimeType){
   const bytes=fileResponse.getBlob().getBytes();
   if(bytes.length>10*1024*1024)throw new Error('Imej terlalu besar untuk OCR minimum PoC.');
   const prompt=[
-    'OCR ONLY. Extract visible printed text from this image.',
-    'Return plain text only, preserving line breaks where useful.',
-    'Do not interpret, summarize, classify, diagnose, infer missing words, reconstruct tables, or add commentary.',
-    'If text is unreadable, return exactly: [UNREADABLE]'
+    'OCR ONLY. Transcribe only text that is visibly present in this image.',
+    'Return ordinary plain text only. Do not use Markdown, code fences, bullet formatting, or pipe characters to represent columns.',
+    'For forms or tables, read visible text in natural reading order, one ordinary text line at a time. Do not reconstruct a table, invent blank cells, align columns, or infer missing values.',
+    'Do not interpret, summarize, classify, diagnose, normalize dates, correct spelling, calculate totals, or infer missing words/numbers.',
+    'Handwriting may be transcribed when visibly legible, but do not guess unclear handwriting.',
+    'If a token is genuinely unreadable, write [UNREADABLE] at that position.',
+    'If the entire image has no readable text, return exactly: [UNREADABLE]'
   ].join('\n');
   const payload={contents:[{role:'user',parts:[{text:prompt},{inlineData:{mimeType:String(mimeType||'image/jpeg'),data:Utilities.base64Encode(bytes)}}]}],generationConfig:{temperature:0,maxOutputTokens:2048}};
   let response;
@@ -59,6 +62,7 @@ function bseEvidenceOcrExtract_(telegramFileId,mimeType){
   let data;try{data=JSON.parse(response.getContentText());}catch(_){throw new Error('OCR response bukan JSON.');}
   const answer=data.candidates&&data.candidates[0],text=(answer&&answer.content&&answer.content.parts||[]).filter(p=>typeof p.text==='string').map(p=>p.text).join('').trim();
   if(!text)throw new Error('OCR tidak menghasilkan text.');
+  if(text.includes('```')||text.split(/\r?\n/).filter(line=>/^\s*\|.*\|\s*$/.test(line)).length>=2)throw new Error('OCR_FORMAT_REJECTED: output bukan plain text.');
   return {text:text.slice(0,12000),model:model};
 }
 function bseEvidenceOcrRetrieve_(book,message){
@@ -104,7 +108,7 @@ function runBseEvidenceOcrHarnessTests(){
   const extract=bseEvidenceOcrExtract_.toString(),retrieve=bseEvidenceOcrRetrieve_.toString(),tests=[
     {id:'command supports extract confirm discard only',pass:bseEvidenceOcrCommand_('/ocr BSE-EV-156-AQADUxRr').action==='EXTRACT'&&bseEvidenceOcrCommand_('/ocr confirm BSE-EV-156-AQADUxRr').action==='CONFIRM'&&bseEvidenceOcrCommand_('/ocr discard BSE-EV-156-AQADUxRr').action==='DISCARD'&&!bseEvidenceOcrCommand_('/ocr anything else')},
     {id:'confirmed PHOTO Evidence required',pass:/CONFIRMED_TEST/.test(retrieve)&&/PHOTO/.test(retrieve)&&/image\\\//.test(retrieve)},
-    {id:'OCR is plain-text extraction only',pass:/OCR ONLY/.test(extract)&&/Do not interpret/.test(extract)&&/reconstruct tables/.test(extract)&&/diagnose/.test(extract)},
+    {id:'OCR is plain-text extraction only',pass:/OCR ONLY/.test(extract)&&/Do not interpret/.test(extract)&&/reconstruct a table/.test(extract)&&/OCR_FORMAT_REJECTED/.test(extract)&&/Markdown/.test(extract)},
     {id:'Gemini fixed model and inline image only',pass:/gemini-3\.1-flash-lite/.test(extract)&&/inlineData/.test(extract)&&/getFile/.test(extract)&&!/DriveApp/.test(extract)},
     {id:'human confirmation required before confirmed metadata',pass:/PROPOSED_NON_CANONICAL/.test(retrieve)&&/OCR_CONFIRMED_TEST/.test(retrieve)&&/cmd\.action==='CONFIRM'/.test(retrieve)},
     {id:'no domain or production writer',pass:!/ReviewCore_|production_write\s*:\s*true/.test(extract+'\n'+retrieve)}
