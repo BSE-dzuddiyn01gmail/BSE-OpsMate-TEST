@@ -534,11 +534,14 @@ Keputusan owner selepas PILOT_TEST reporting stabilization:
    Ia mesti menjadi domain/event berasingan daripada Plant Condition dan Plant Census.
    Wording seperti `sulam`, `ganti anak pokok`, `tambah anak pokok`, atau
    `replacement` kekal tidak boleh diproses oleh Plant Condition. Feature ini
-   dirancang sebagai `Plant_Replacement_Event_Log` dengan sekurang-kurangnya
-   event date, plot, crop, explicit replacement count, reporter/source lineage,
-   review status, evidence refs, dan `production_write:false`. Event sulam tidak
-   boleh mengubah Plant Census secara automatik; banci kekal authority bagi current
-   observed population.
+   menggunakan `Plant_Replacement_Event_Log` dengan event date, plot, crop,
+   explicit positive replacement count, reporter/source lineage, review status,
+   evidence refs, dan `production_write:false`. Event sulam tidak boleh mengubah
+   Plant Census secara automatik; banci kekal authority bagi current observed population.
+   **Implementation status 2026-10-12:** PILOT_TEST technical/runtime PASS; parser
+   deterministic-first, ACTIVE-allocation as-of guard, dedicated idempotent TEST writer,
+   review audit, retrieval/history integration, and schema are implemented. Telegram
+   end-to-end live proof remains PENDING.
 
 2. **Baki 2C-2 yang tidak pasti dan seluruh 2C-3 = DEFERRED_BY_LOCKED_SCOPE.**
    Tiada pembangunan dibuat hanya untuk melengkapkan nombor fasa. Ia hanya dibuka
