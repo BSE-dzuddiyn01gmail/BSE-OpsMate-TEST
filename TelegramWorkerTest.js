@@ -78,6 +78,10 @@ function runBseTelegramTransplantDeterministicHarnessTests(){
 
 function processBseTelegramTestQueue() {
   const book=boundTestBook_(),props=PropertiesService.getScriptProperties();
+  if(typeof processBseImageProcessingQueueTest==='function'){
+    const imageResult=processBseImageProcessingQueueTest();
+    if(imageResult&&(imageResult.processed||imageResult.failed)){console.log('IMAGE_PROCESSING_WORKER: '+JSON.stringify(imageResult));return imageResult;}
+  }
   const chat=bseRuntimeLegacyChatId_(),user=bseRuntimeLegacyUserId_(),groups=bseTelegramTestApprovalGroupIds_();
   if((!chat||chat!==user)&&!groups.length)throw new Error('Konfigurasi chat '+bseRuntimeEnvironmentLabel_()+' atau group approval belum lengkap.');
   const lock=LockService.getScriptLock();

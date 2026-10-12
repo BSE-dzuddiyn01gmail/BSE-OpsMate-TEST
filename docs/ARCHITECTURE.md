@@ -49,15 +49,27 @@ Scope lock platform yang diluluskan untuk roadmap ialah:
     Jumaat-Khamis boleh melintasi sempadan bulan;
 - File Evidence: gambar/dokumen/video -> caption -> kategori dicadang ->
   pengesahan manusia -> Google Drive + metadata + retrieval.
-- **OCR minimum PoC** diluluskan sebagai tambahan kecil atas permintaan operasi:
-  image/photo Evidence yang sudah `CONFIRMED_TEST` sahaja. Pengguna meminta
-  `/ocr BSE-EV-...` melalui PM; output pertama disimpan sebagai
-  `PROPOSED_NON_CANONICAL` dan dipaparkan sebagai plain text sahaja. Pengguna
-  mesti mengesahkan melalui `/ocr confirm BSE-EV-...` sebelum text menjadi
-  metadata `OCR_CONFIRMED_TEST`; `/ocr discard ...` membuang hasil OCR
-  tanpa menjejaskan Evidence asal. Tiada document understanding, table reconstruction,
-  handwriting guarantee, domain auto-write, atau Vision diagnosis. OCR failure
-  mesti fail-safe dan tidak menghalang penyimpanan/retrieval Evidence asal;
+- **Image processing TEST** menggantikan UX `/ocr` lama. Pengguna attach PHOTO
+  dengan caption `/image_to_text` atau `/image_analysis`. Receiver hanya menyimpan
+  Telegram file identity + Evidence metadata TEST dan queue processing; gambar belum
+  ditulis ke Drive pada tahap ini. Worker menjalankan Gemini di background dan hanya
+  membuat **1 retry** selepas kegagalan pertama. Jika kedua-dua cubaan gagal, status
+  menjadi `PROCESSING_FAILED`, bot menghantar ringkasan error bersih, dan tiada Drive
+  atau domain write dibuat.
+- `/image_to_text` menghasilkan transkripsi plain-text `NON_CANONICAL`; Markdown table,
+  code fence, normalization tarikh, calculation, dan guessing handwriting dilarang.
+  `/image_analysis` menghasilkan komen Gemini `NON_CANONICAL` dengan visible facts
+  dipisahkan daripada inference; ia tidak boleh membuat diagnosis/punca/approval atau
+  physical-action claim secara definitif. Kedua-dua mode memberi cadangan `category`
+  dan `suggested_record_type` sahaja.
+- Kad review image processing menggunakan `Benar` / `Betulkan` / `Buang`. Hanya
+  `Benar` menyimpan gambar ke folder Evidence Drive TEST dan menukar metadata kepada
+  `CONFIRMED_TEST`; `Betulkan` membolehkan penghantar mengubah kategori, cadangan jenis
+  rekod dan data/text sebelum kad baharu dibuka; `Buang` menamatkan aliran tanpa Drive
+  write. Walaupun pengguna menekan `Benar`, hasil image processing kekal metadata
+  Evidence dan **tidak auto-write domain record**. Ini mengekalkan authority sedia ada:
+  contohnya `Observation_Log.suspected_cause` hanya boleh berasal daripada fakta/punca
+  yang dinyatakan dan disahkan manusia, bukan inference Gemini.
 - inventori/claim hanya log rujukan, bukan rekod stok atau kewangan rasmi.
 - `TEST_CLAIM_LOG` menggunakan header kanonik yang mengekalkan identiti Telegram
   penuntut tepat selepas `claimant`; migrasi TEST yang dikenali menyusun data
