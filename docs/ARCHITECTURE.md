@@ -583,7 +583,7 @@ Keputusan owner selepas PILOT_TEST reporting stabilization:
    Tiada pembangunan dibuat hanya untuk melengkapkan nombor fasa. Ia hanya dibuka
    semula jika ada keperluan operasi BSE yang jelas atau defect/pilot evidence sebenar.
 
-3. **Plot decision change semasa Transplant = REALLOCATION TECHNICAL/RUNTIME PASS; Telegram live proof pending.**
+3. **Plot decision change semasa Transplant = TELEGRAM E2E LIVE VERIFIED (PILOT_TEST).**
    Baseline `TEST_PLOT_ALLOCATION` kekal immutable. Jika laporan Transplant menyebut
    crop yang jelas tetapi destination plot tidak sama dengan plan, sistem mencari
    source allocation `PLANNED` yang sah dan destination mesti tiada plan/effective
@@ -601,6 +601,21 @@ Keputusan owner selepas PILOT_TEST reporting stabilization:
    latest allocation-status ledger, jadi source plot tidak lagi dianggap ACTIVE dan
    destination menjadi current plot. `Batal` adalah audit-only dan tidak meminta sebab
    kedua. Semua path kekal TEST-only dan `production_write:false`.
+
+   **Live proof 2026-10-15:** root `BSE-TG-746192336` (Timun, destination M1P3) entered
+   `WAITING_INFO` because M1P1 and M1P2 were both PLANNED. Reply-linked child
+   `BSE-TG-746192338` with canonical source `M1P1` resolved deterministically to
+   M1P1 -> M1P3 and opened approval card message 256 with the old plan, reported
+   destination and exact effect. Reporter selected `Batal`; Telegram confirmed
+   `DISCARDED_BY_REPORTER` at 15/10/2026 06:13 MYT and callback `746192339`
+   reached `PROCESSED`. Approval UI and child queue both read back
+   `DISCARDED_BY_REPORTER`; no second rejection-reason prompt was created.
+   Independent Sheet read-back confirmed zero matching Reallocation, Transplant and
+   Allocation Status events, while baseline M1P1/M1P2 Plot Allocation rows remained
+   unchanged. A live-only defect discovered during this proof (`source_plot` being
+   lost by worker finalization and downgraded to `batch_match`) was fixed with
+   regression coverage in commit `e4fbb7d`; targeted reallocation harness 8/8 and
+   full regression 47/47 PASS.
 
 4. Selepas autonomous Daily Morning Digest LIVE PASS, kerja seterusnya yang diluluskan
    ialah Plant Replacement, kemudian OCR minimum PoC jika masih diperlukan oleh BSE.
