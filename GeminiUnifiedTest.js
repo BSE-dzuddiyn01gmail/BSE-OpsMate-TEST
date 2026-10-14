@@ -751,7 +751,8 @@ function bseUnifiedGuardTransplant_(r,sourceContext,receivedAt){
   const candidate=transplants[0],fields=candidate&&candidate.fields;
   const hasText=key=>fields&&typeof fields[key]==='string'&&fields[key].trim();
   const eventDate=explicitDate.date;
-  const deterministicOnlyMissing=candidate&&Array.isArray(candidate.missing)&&candidate.missing.every(key=>key==='event_date'||key==='plot_ids'||key==='batch_match');
+  const sourcePlotClarification=candidate&&Array.isArray(candidate.missing)&&candidate.missing.includes('source_plot');
+  const deterministicOnlyMissing=candidate&&Array.isArray(candidate.missing)&&candidate.missing.every(key=>key==='event_date'||key==='plot_ids'||key==='batch_match'||key==='source_plot');
   const valid=candidates.length===1&&transplants.length===1&&candidate&&['PASS','NEED_INFO'].includes(candidate.validation)&&deterministicOnlyMissing&&fields&&
     fields.project_id==='BSE_SB'&&fields.system_year===2026&&fields.record_type==='TRANSPLANT_EVENT'&&fields.verification_status==='PROVISIONAL'&&fields.event_type==='TRANSPLANT'&&fields.event_status==='PROPOSED'&&hasText('crop')&&
     typeof fields.variety==='string'&&parsed.ok&&explicitDate.ok&&eventDate;
@@ -760,7 +761,9 @@ function bseUnifiedGuardTransplant_(r,sourceContext,receivedAt){
     candidates.forEach(c=>{if(!c||!c.fields)return;c.validation='NEED_INFO';c.missing=Array.isArray(c.missing)?c.missing.slice():[];if(!parsed.ok)c.missing.push('plot_id');if(!hasText('crop'))c.missing.push('batch_match');if(!explicitDate.ok||!eventDate)c.missing.push('event_date');c.missing=Array.from(new Set(c.missing));});
     return;
   }
-  fields.event_date=eventDate;fields.plot_ids=parsed.plots;candidates.forEach(c=>{c.validation='PASS';c.missing=[];});r.validation='PASS';
+  fields.event_date=eventDate;fields.plot_ids=parsed.plots;
+  if(sourcePlotClarification){candidate.validation='NEED_INFO';candidate.missing=['source_plot'];r.validation='NEED_INFO';return;}
+  candidates.forEach(c=>{c.validation='PASS';c.missing=[];});r.validation='PASS';
 }
 
 function bsePlantCensusSource_(input){
@@ -851,9 +854,11 @@ function bseUnifiedGuard_(raw,context) {
     // The schema asks Gemini for an array, but the guard derives missing from
     // fields so a malformed omitted list cannot turn complete data into NEED_INFO.
     if(!Array.isArray(c.missing))c.missing=[];
-    // `missing` is derived from actual fields. A model-reported missing value
-    // is stale once a linked reply has supplied that field, so do not inherit it.
-    c.missing=missing;
+    // source_plot is a deterministic control-field used only to disambiguate
+    // transplant reallocation. Preserve it across the generic schema guard;
+    // all other model-reported missing values remain derived from actual fields.
+    const controlMissing=c.target==='Transplant_Event_Log'&&c.missing.includes('source_plot')?['source_plot']:[];
+    c.missing=Array.from(new Set(missing.concat(controlMissing)));
     const date=c.fields.event_date;
     const outOfYear=typeof date==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(date)&&date.slice(0,4)!=='2026';
     if(outOfYear)c.validation='REJECTED';
