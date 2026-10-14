@@ -174,9 +174,10 @@ function bseImageProcessingFetchBytes_(telegramFileId){
   return bytes;
 }
 function bseImageProcessingModelCall_(mode,telegramFileId,mimeType,userInstruction){
-  const props=PropertiesService.getScriptProperties(),key=String(props.getProperty('GEMINI_API_KEY')||'').trim(),model=String(props.getProperty('GEMINI_MODEL')||'').trim();
+  const props=PropertiesService.getScriptProperties(),key=String(props.getProperty('GEMINI_API_KEY')||'').trim(),preferredModel=String(props.getProperty('GEMINI_MODEL')||'').trim();
+  const models=[preferredModel,'gemini-3.5-flash-lite'].filter((v,i,a)=>v&&a.indexOf(v)===i);
   if(!key)throw new Error('IMAGE_MODEL_KEY_MISSING');
-  if(model!=='gemini-3.1-flash-lite')throw new Error('IMAGE_MODEL_NAME_INVALID');
+  if(!preferredModel||preferredModel!=='gemini-3.1-flash-lite')throw new Error('IMAGE_MODEL_NAME_INVALID');
   const bytes=bseImageProcessingFetchBytes_(telegramFileId);
   const payload={
     contents:[{role:'user',parts:[
@@ -190,15 +191,21 @@ function bseImageProcessingModelCall_(mode,telegramFileId,mimeType,userInstructi
       responseJsonSchema:bseImageProcessingModelSchema_()
     }
   };
-  let response;
-  try{
-    response=UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/'+model+':generateContent',{
-      method:'post',contentType:'application/json',
-      headers:{'x-goog-api-key':key},muteHttpExceptions:true,followRedirects:false,
-      payload:JSON.stringify(payload)
-    });
-  }catch(_){throw new Error('IMAGE_MODEL_NETWORK_ERROR');}
-  const status=response.getResponseCode();
+  let response=null,status=0,modelUsed='';
+  for(let mi=0;mi<models.length;mi++){
+    modelUsed=models[mi];
+    try{
+      response=UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/'+modelUsed+':generateContent',{
+        method:'post',contentType:'application/json',
+        headers:{'x-goog-api-key':key},muteHttpExceptions:true,followRedirects:false,
+        payload:JSON.stringify(payload)
+      });
+    }catch(_){response=null;status=0;}
+    status=response?response.getResponseCode():0;
+    if(status===200)break;
+    if(![0,429,500,502,503,504].includes(status))break;
+  }
+  if(!response)throw new Error('IMAGE_MODEL_NETWORK_ERROR');
   if(status!==200)throw new Error('Gemini HTTP '+status);
   let data,parsed;
   try{data=JSON.parse(response.getContentText());}catch(_){throw new Error('IMAGE_MODEL_RESPONSE_JSON_INVALID');}
@@ -212,6 +219,7 @@ function bseImageProcessingModelCall_(mode,telegramFileId,mimeType,userInstructi
   parsed.uncertainty_note=String(parsed.uncertainty_note||'').trim().slice(0,1200);
   if(!BSE_IMAGE_PROCESSING_ALLOWED_CATEGORIES.includes(parsed.suggested_category))parsed.suggested_category='UNCLASSIFIED_TEST';
   if(!BSE_IMAGE_PROCESSING_ALLOWED_RECORDS.includes(parsed.suggested_record_type))parsed.suggested_record_type=bseImageProcessingSuggestedRecordFallback_(parsed.content_text);
+  parsed.model_used=modelUsed;
   if(String(mode)==='IMAGE_TO_TEXT'){
     const markdownTableLines=parsed.content_text.split(/\r?\n/).filter(line=>/^\s*\|.*\|\s*$/.test(line)).length;
     const fence=String.fromCharCode(96).repeat(3);
@@ -526,6 +534,7 @@ function runBseImageProcessingHarnessTests(){
     {id:'durable PROCESSING_DONE resumes to review card without model rerun',pass:/PROCESSING_DONE/.test(worker)&&/resumed_from/.test(worker)&&worker.indexOf("['PROCESSING_DONE','REVIEW_CARD_PENDING']")<worker.indexOf("bseImageProcessingModelCall_")},
     {id:'image to text forbids reconstructed markdown tables',pass:/OCR_FORMAT_REJECTED/.test(model)&&/Markdown tables/.test(prompt)&&/Do not normalize dates/.test(prompt)},
     {id:'image analysis remains noncanonical and non-diagnostic',pass:/NON_CANONICAL/.test(bseImageProcessingCardText_.toString())&&/Do not make a definitive diagnosis/.test(prompt)&&prompt.includes('mungkin/berkemungkinan')},
+    {id:'image model has transient fallback without changing primary contract',pass:/gemini-3\.5-flash-lite/.test(model)&&/\[0,429,500,502,503,504\]/.test(model)&&/preferredModel!=='gemini-3\.1-flash-lite'/.test(model)},
     {id:'Benar is the only Drive write path',pass:callback.includes("m[2]==='R'")&&callback.includes("m[2]==='C'")&&callback.indexOf('bseTelegramEvidenceStoreDrive_')>callback.indexOf("m[2]==='R'")},
     {id:'Betulkan can change category record and data',pass:/Kategori/.test(correction)&&/Rekod/.test(correction)&&/Data/.test(correction)&&/CORRECTION_WAITING_INFO/.test(callback)},
     {id:'corrected cards preserve Gemini output and label user correction separately',pass:/bseImageProcessingOriginalContent_/.test(bseImageProcessingCardText_.toString())&&/Pembetulan user/.test(bseImageProcessingCardText_.toString())&&/Pembetulan user/.test(bseImageProcessingSavedSummary_.toString())},
