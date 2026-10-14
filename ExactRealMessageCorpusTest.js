@@ -47,6 +47,14 @@ function bseExactCorpusDispatch_(id,fixture){
     return bseExactCorpusResult_(id,fixture,route,result,assertions,warnings);
   }
 
+  if(id==='RM-006'){
+    result=typeof bseChlorineUsageParseMessage_==='function'?bseChlorineUsageParseMessage_(text,at):null;
+    route=result?'INPUT_USAGE_CHLORINE':'UNSUPPORTED_DETERMINISTIC';
+    assertions.push(bseExactAssert_('chlorine becomes per-plot Input Usage',result&&result.validation==='PASS'&&result.candidates.length===4&&result.candidates.every(c=>c.target==='Input_Usage_Log'&&c.fields.item_name==='Chlorine Tablets'&&c.fields.quantity===1&&c.fields.unit==='botol')&&result.candidates.map(c=>c.fields.plot_id).join('|')==='M1P1|M1P2|M4P1|M4P2'));
+    assertions.push(bseExactAssert_('production boundary',result&&result.production_write===false));
+    return bseExactCorpusResult_(id,fixture,route,result,assertions,warnings);
+  }
+
   if(id==='RM-009'){
     result=bseLeaveParseMessage_(text,at); route=result?'LEAVE':'UNSUPPORTED_DETERMINISTIC';
     assertions.push(bseExactAssert_('blank leave choices not invented',!result||result.validation!=='PASS'||!result.candidates[0].fields.leave_type));
@@ -128,7 +136,6 @@ function bseExactCorpusDispatch_(id,fixture){
   if(id==='RM-015') assertions.push(bseExactAssert_('explicit dripper item and 500 pcs preserved',result&&result.validation==='PASS'&&result.candidates.some(c=>c.fields&&c.fields.item_name==='Dripper'&&Number(c.fields.counted_quantity)===500)));
   if(id==='RM-018') assertions.push(bseExactAssert_('petrol amount explicit',result&&result.validation==='PASS'&&result.candidates.some(c=>Number(c.fields&&c.fields.amount_myr)===50)));
   if(id==='RM-001') assertions.push(bseExactAssert_('asset acquisition recognized or explicit unsupported',!!result||route==='UNSUPPORTED_DETERMINISTIC'));
-  if(id==='RM-006') assertions.push(bseExactAssert_('chlorine route source-driven',!!result||route==='UNSUPPORTED_DETERMINISTIC'));
   assertions.push(bseExactAssert_('production boundary',!result||result.production_write===false));
   if(!result) warnings.push('no deterministic parser recognized this exact fixture');
   return bseExactCorpusResult_(id,fixture,route,result||{validation:'UNSUPPORTED',production_write:false,candidates:[]},assertions,warnings);
