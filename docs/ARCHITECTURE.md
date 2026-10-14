@@ -602,20 +602,29 @@ Keputusan owner selepas PILOT_TEST reporting stabilization:
    destination menjadi current plot. `Batal` adalah audit-only dan tidak meminta sebab
    kedua. Semua path kekal TEST-only dan `production_write:false`.
 
-   **Live proof 2026-10-15:** root `BSE-TG-746192336` (Timun, destination M1P3) entered
-   `WAITING_INFO` because M1P1 and M1P2 were both PLANNED. Reply-linked child
-   `BSE-TG-746192338` with canonical source `M1P1` resolved deterministically to
-   M1P1 -> M1P3 and opened approval card message 256 with the old plan, reported
-   destination and exact effect. Reporter selected `Batal`; Telegram confirmed
-   `DISCARDED_BY_REPORTER` at 15/10/2026 06:13 MYT and callback `746192339`
-   reached `PROCESSED`. Approval UI and child queue both read back
-   `DISCARDED_BY_REPORTER`; no second rejection-reason prompt was created.
-   Independent Sheet read-back confirmed zero matching Reallocation, Transplant and
-   Allocation Status events, while baseline M1P1/M1P2 Plot Allocation rows remained
-   unchanged. A live-only defect discovered during this proof (`source_plot` being
-   lost by worker finalization and downgraded to `batch_match`) was fixed with
-   regression coverage in commit `e4fbb7d`; targeted reallocation harness 8/8 and
-   full regression 47/47 PASS.
+   **Live proof 2026-10-15:** final valid re-proof used root `BSE-TG-746192337`
+   (Timun, destination M1P3). The deterministic ambiguity path exposed actual
+   source options M1P1/M1P2 and Telegram message 258 asked which plot supplied
+   the seedlings for M1P3. Reply-linked child `BSE-TG-746192340` / message 259
+   with canonical source `M1P1` resolved deterministically to M1P1 -> M1P3 and
+   opened approval card message 262. Callback JSON independently proved the live
+   card contained exactly `Benar` and `Batal` and no `Betulkan`. Reporter
+   selected `Batal`; Telegram confirmed `DISCARDED_BY_REPORTER` at
+   15/10/2026 06:26 MYT and callback `746192341` reached `PROCESSED`.
+   Approval UI and child queue both read back `DISCARDED_BY_REPORTER`;
+   `reject_prompt_message_id` remained empty, so no second rejection-reason
+   prompt was created. Independent Sheet read-back confirmed zero matching
+   Reallocation, Transplant and Allocation Status events, while baseline M1P1/M1P2
+   Plot Allocation rows remained unchanged as `PLANNED`.
+
+   The live sequence exposed three defects that were fixed and re-proven before
+   closure: worker finalization lost `source_plot` and downgraded the question to
+   `batch_match` (`e4fbb7d`); the effective approval send path used generic
+   three-button markup instead of the reallocation-specific two-button markup
+   (`15becc6`); and the source-plot question was operationally unclear and did
+   not expose the deterministic candidate plots (`26cd33c`). Final targeted
+   reallocation harness 8/8 PASS, targeted UI harness 6/6 PASS, full regression
+   47/47 PASS, schema 57/57 CURRENT, and source-key audit 191 entries / 0 issue.
 
 4. Selepas autonomous Daily Morning Digest LIVE PASS, kerja seterusnya yang diluluskan
    ialah Plant Replacement, kemudian OCR minimum PoC jika masih diperlukan oleh BSE.
