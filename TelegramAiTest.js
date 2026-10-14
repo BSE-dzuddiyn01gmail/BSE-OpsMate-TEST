@@ -2,9 +2,11 @@
 // TEST-only free-form Gemini Q&A. NON_CANONICAL: no domain write, no approval, no BSE record lookup.
 const BSE_AI_KB_FOLDER_PROPERTY='BSE_AI_KB_DRIVE_FOLDER_ID';
 const BSE_AI_FILE_SEARCH_STORE_PROPERTY='BSE_AI_FILE_SEARCH_STORE';
+const BSE_AI_KB_REFRESHED_AT_PROPERTY='BSE_AI_KB_REFRESHED_AT';
+const BSE_AI_SISMARP_CACHE_URL='https://raw.githubusercontent.com/BSE-dzuddiyn01gmail/BSE-OpsMate-TEST/sismarp-cache/data/sismarp/current.json';
 const BSE_AI_KB_SOURCES=[
-  {id:'IRAC_MOA_11_5',title:'IRAC_MoA_Classification_v11.5_Feb_2026.pdf',url:'https://irac-online.org/documents/moa-classification/',mime:'application/pdf',kind:'IRAC'},
-  {id:'DOA_PESTICIDE_PORTAL',title:'DOA_Maklumat_Racun_Perosak_2026_snapshot.txt',url:'https://www.doa.gov.my/index.php/pages/view/302?mid=141',mime:'text/plain',kind:'DOA'}
+  {id:'IRAC_MOA_11_5',title:'IRAC_MoA_Classification_v11.5_Feb_2026.pdf',url:'https://irac-online.org/documents/moa-classification/',mime:'application/pdf',kind:'IRAC',version:'11.5 Feb 2026',freshness_days:365},
+  {id:'DOA_PESTICIDE_PORTAL',title:'DOA_Maklumat_Racun_Perosak_2026_snapshot.txt',url:'https://www.doa.gov.my/index.php/pages/view/302?mid=141',mime:'text/plain',kind:'DOA',version:'portal snapshot',freshness_days:35}
 ];
 
 function bseTelegramAiCommand_(text){
@@ -25,9 +27,9 @@ function bseTelegramAiSystemPrompt_(hasKb){
     'Anda ialah pembantu Q&A OpsMate BSE dalam mod PILOT_TEST.',
     'Semua jawapan anda adalah NON_CANONICAL: bukan rekod BSE, bukan approval, bukan arahan operasi rasmi, dan tidak boleh mendakwa telah mengubah sebarang data.',
     'Jangan baca atau reka data operasi/canonical BSE. Jika pengguna meminta stok, sejarah, status plot atau rekod BSE, jelaskan bahawa /ai tidak mempunyai akses kepada rekod canonical dan arahkan pengguna menggunakan command retrieval rasmi.',
-    hasKb?'Anda mempunyai File Search knowledge base pertanian. Untuk soalan pertanian, utamakan sumber KB sebelum pengetahuan umum.':'Knowledge base pertanian belum dikonfigurasi; nyatakan jika jawapan pertanian hanya menggunakan pengetahuan umum model.',
-    'Untuk racun perosak Malaysia: SISMARP/Jabatan Pertanian ialah rujukan pendaftaran/pengesyoran tempatan. IRAC ialah rujukan Mode of Action dan resistance management, BUKAN bukti sesuatu racun diluluskan di Malaysia.',
-    'Jangan mereka kadar, PHI, MRL, pendaftaran, label, atau status syor. Jika sumber KB tidak menyokong butiran itu, nyatakan bahawa ia perlu disemak pada sumber semasa SISMARP/label berdaftar.',
+    hasKb?'Anda mempunyai File Search knowledge base pertanian. Untuk soalan pertanian, utamakan sumber KB sebelum pengetahuan umum. Jika soalan menyebut IRAC, kumpulan IRAC atau Mode of Action (MoA), WAJIB gunakan File Search KB dan jangan nyatakan nombor kumpulan/MoA sebagai fakta jika tiada grounding daripada KB.':'Knowledge base pertanian belum dikonfigurasi; nyatakan jika jawapan pertanian hanya menggunakan pengetahuan umum model.',
+    'Untuk racun perosak Malaysia: pendaftaran produk dikawal oleh Lembaga Racun Makhluk Perosak/Jabatan Pertanian; SISMARP ialah pangkalan rujukan maklumat racun berdaftar yang disyorkan bagi tanaman/perosak tertentu. Jangan kata produk didaftarkan melalui SISMARP. IRAC ialah rujukan Mode of Action dan resistance management, BUKAN bukti sesuatu racun diluluskan di Malaysia.',
+    'Jangan mereka kadar, PHI, MRL, pendaftaran, label, atau status syor. Jika SISMARP CURRENT tersedia dan freshness masih sah, gunakan hasil semasa itu hanya untuk padanan query/filter yang diberikan. Jika total=0, sebut tiada padanan SISMARP semasa untuk kombinasi/filter itu; JANGAN tukar 0 padanan menjadi dakwaan bahawa bahan aktif atau produk itu tidak berdaftar di Malaysia secara umum. Jika cache stale/tidak tersedia atau tiada filter eksplisit, nyatakan batas semakan dan jangan membuat kesimpulan pendaftaran.',
     'Boleh beri penerangan, pilihan dan pertimbangan umum, tetapi jangan gambarkan cadangan sebagai approval atau arahan kerja BSE.',
     'Susun jawapan supaya mudah dibaca di Telegram. Jika soalan mempunyai beberapa bahagian, pecahkan jawapan mengikut bahagian dan beri tajuk ringkas bagi setiap bahagian.',
     'Gunakan **Tajuk** hanya untuk tajuk/pembahagian utama. Jangan guna asterisk untuk bullet; guna tanda •. Elakkan markdown table, heading #, code fence, dan hiasan markdown berlebihan.',
@@ -39,14 +41,67 @@ function bseAiExtractText_(data){
   if(!c||!c.content||!Array.isArray(c.content.parts))return '';
   return c.content.parts.filter(p=>!p.thought&&typeof p.text==='string').map(p=>p.text).join('').replace(/[\r\n]{3,}/g,'\n\n').trim();
 }
-function bseAiGroundingSources_(data){
+function bseAiGroundingDetails_(data){
   const c=data&&Array.isArray(data.candidates)?data.candidates[0]:null;
   const chunks=c&&c.groundingMetadata&&Array.isArray(c.groundingMetadata.groundingChunks)?c.groundingMetadata.groundingChunks:[];
   const seen=new Set(),out=[];
-  chunks.forEach(ch=>{const r=ch&&ch.retrievedContext;if(!r)return;const meta=Array.isArray(r.customMetadata)?r.customMetadata:[],sourceMeta=meta.find(m=>String(m.key||'')==='source_title'),title=String(sourceMeta&&(sourceMeta.stringValue||sourceMeta.string_value)||r.title||'').trim();if(title&&!seen.has(title)){seen.add(title);out.push(title);}});
+  chunks.forEach(ch=>{const r=ch&&ch.retrievedContext;if(!r)return;const meta=Array.isArray(r.customMetadata)?r.customMetadata:[],get=k=>{const m=meta.find(x=>String(x.key||'')===k);return String(m&&(m.stringValue||m.string_value)||'').trim();},title=get('source_title')||String(r.title||'').trim();if(title&&!seen.has(title)){seen.add(title);out.push({title:title,url:get('source_url'),authority:get('source_authority')});}});
   return out.slice(0,6);
 }
-function bseAiGeminiAnswer_(question){
+function bseAiGroundingSources_(data){return bseAiGroundingDetails_(data).map(x=>x.title);}
+function bseAiSismarpQuestion_(question){return /\b(?:sismarp|racun|perosak|pestisid|pesticide|berdaftar|pendaftaran|perawis|bahan aktif|jenama racun|thrips|trip)\b/i.test(String(question||''));}
+function bseAiSismarpPlan_(question){
+  const q=String(question||'').replace(/\s+/g,' ').trim(),out={crop:'',pest:'',active_ingredient:'',trade_name:''};let m;
+  m=q.match(/(?:tanaman|pada)\s+([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ-]{1,30})(?=\b|\?|,|\.|$)/i);if(m)out.crop=m[1];
+  if(!out.crop){m=q.match(/berdaftar\s+(?:untuk|bagi)\s+([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ-]{1,30})/i);if(m)out.crop=m[1];}
+  m=q.match(/(?:kawal|mengawal|untuk)\s+([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ -]{1,35}?)\s+pada\s+(?:tanaman\s+)?[A-Za-zÀ-ÿ-]+/i);if(m)out.pest=m[1].trim();
+  m=q.match(/(?:perosak|nama perosak)\s*[:\-]?\s*([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ -]{1,35})/i);if(m)out.pest=m[1].trim();
+  m=q.match(/(?:perawis(?: aktif)?|bahan aktif)\s*[:\-]?\s*([A-Za-z0-9][A-Za-z0-9 .-]{1,40})/i);if(m)out.active_ingredient=m[1].trim();
+  m=q.match(/(?:jenama racun|jenama|produk)\s*[:\-]?\s*([A-Za-z0-9][A-Za-z0-9 .-]{1,40})/i);if(m)out.trade_name=m[1].trim();
+  return out;
+}
+function bseAiSismarpNorm_(value){return String(value||'').toLowerCase().replace(/\s+/g,' ').trim();}
+function bseAiSismarpContains_(value,needle){const n=bseAiSismarpNorm_(needle);return !n||bseAiSismarpNorm_(value).indexOf(n)>=0;}
+function bseAiSismarpDetectActive_(question,rows){
+  const q=' '+bseAiSismarpNorm_(question)+' ',seen=new Set(),terms=[];
+  (rows||[]).forEach(r=>{const t=bseAiSismarpNorm_(r&&r.a);if(t.length>=4&&!seen.has(t)){seen.add(t);terms.push(t);}});
+  terms.sort((a,b)=>b.length-a.length);
+  return terms.find(t=>q.indexOf(' '+t+' ')>=0||q.indexOf(' '+t+',')>=0||q.indexOf(' '+t+'?')>=0||q.endsWith(' '+t+' '))||'';
+}
+function bseAiSismarpCurrent_(question){
+  if(!bseAiSismarpQuestion_(question))return null;
+  const plan=bseAiSismarpPlan_(question);let response;
+  try{response=UrlFetchApp.fetch(BSE_AI_SISMARP_CACHE_URL,{method:'get',muteHttpExceptions:true,followRedirects:true,headers:{'Cache-Control':'no-cache'}});}catch(error){return {available:false,reason:'CACHE_FETCH_ERROR',error:String(error.message||'').slice(0,120),query:plan,cache_url:BSE_AI_SISMARP_CACHE_URL,production_write:false};}
+  const status=response.getResponseCode();if(status!==200)return {available:false,reason:'CACHE_HTTP_'+status,query:plan,cache_url:BSE_AI_SISMARP_CACHE_URL,production_write:false};
+  let cache;try{cache=JSON.parse(response.getContentText());}catch(_){return {available:false,reason:'CACHE_INVALID_JSON',query:plan,cache_url:BSE_AI_SISMARP_CACHE_URL,production_write:false};}
+  if(!cache||!Array.isArray(cache.rows)||!cache.refreshed_at)return {available:false,reason:'CACHE_SCHEMA_INVALID',query:plan,cache_url:BSE_AI_SISMARP_CACHE_URL,production_write:false};
+  const refreshed=Date.parse(String(cache.refreshed_at)),freshness=Math.max(1,Number(cache.freshness_days||14)),ageDays=Number.isFinite(refreshed)?(Date.now()-refreshed)/86400000:Infinity;
+  if(!Number.isFinite(ageDays)||ageDays<0||ageDays>freshness)return {available:false,reason:'CACHE_STALE',query:plan,cache_refreshed_at:String(cache.refreshed_at||''),age_days:Number.isFinite(ageDays)?Number(ageDays.toFixed(2)):null,freshness_days:freshness,source_url:String(cache.source||''),cache_url:BSE_AI_SISMARP_CACHE_URL,production_write:false};
+  if(!plan.active_ingredient)plan.active_ingredient=bseAiSismarpDetectActive_(question,cache.rows);
+  if(!Object.keys(plan).some(k=>plan[k]))return {available:false,reason:'NO_EXPLICIT_FILTER',query:plan,cache_refreshed_at:cache.refreshed_at,source_url:String(cache.source||''),cache_url:BSE_AI_SISMARP_CACHE_URL,production_write:false};
+  const matched=cache.rows.filter(r=>bseAiSismarpContains_(r.c,plan.crop)&&(!plan.pest||(bseAiSismarpContains_(r.p,plan.pest)||bseAiSismarpContains_(r.s,plan.pest)))&&bseAiSismarpContains_(r.a,plan.active_ingredient)&&bseAiSismarpContains_(r.t,plan.trade_name));
+  const rows=matched.slice(0,30).map(r=>({detail_id:String(r.i||''),crop:String(r.c||''),pest_scientific:String(r.s||''),pest_common:String(r.p||''),trade_name:String(r.t||''),active_ingredient:String(r.a||'')}));
+  return {available:true,current:true,checked_at:new Date().toISOString(),cache_refreshed_at:String(cache.refreshed_at),age_days:Number(ageDays.toFixed(2)),freshness_days:freshness,query:plan,total:matched.length,rows:rows,source:'SISMARP — Jabatan Pertanian Malaysia',source_url:String(cache.source||'http://www.portal.doa.gov.my/sismarp/'),cache_url:BSE_AI_SISMARP_CACHE_URL,production_write:false};
+}
+function diagnoseBseAiSismarpTest(){return bseAiSismarpCurrent_('Adakah abamectin berdaftar untuk peria di Malaysia?');}
+function diagnoseBseAiSismarpThripsTest(){return bseAiSismarpCurrent_('Racun apa untuk thrips pada peria?');}
+function diagnoseBseAiSismarpPositiveTest(){return bseAiSismarpCurrent_('Adakah deltamethrin berdaftar untuk peria di Malaysia?');}
+function bseAiIracQuestion_(question){return /\b(?:IRAC|mode of action|MoA|kumpulan\s+IRAC)\b/i.test(String(question||''));}
+function bseAiIracGrounded_(question){
+  if(!bseAiIracQuestion_(question))return null;
+  const props=PropertiesService.getScriptProperties(),key=String(props.getProperty('GEMINI_API_KEY')||'').trim(),store=String(props.getProperty(BSE_AI_FILE_SEARCH_STORE_PROPERTY)||'').trim(),preferred=String(props.getProperty('GEMINI_AI_MODEL')||props.getProperty('GEMINI_MODEL')||'').trim(),models=['gemini-3.5-flash-lite',preferred].filter((v,i,a)=>v&&a.indexOf(v)===i);
+  if(!key||!store||!models.length)return {available:false,reason:'IRAC_KB_NOT_CONFIGURED',production_write:false};
+  const payload={systemInstruction:{parts:[{text:'Gunakan HANYA File Search KB yang diberikan. Cari fakta IRAC/MoA yang relevan dengan soalan. Jangan gunakan pengetahuan model. Jika fakta tidak ditemui dalam KB, jawab tepat NOT_FOUND.'}]},contents:[{role:'user',parts:[{text:String(question||'')}]}],tools:[{fileSearch:{fileSearchStoreNames:[store]}}],generationConfig:{maxOutputTokens:700,temperature:0}};
+  let response=null,status=0,modelUsed='';
+  for(let mi=0;mi<models.length;mi++){modelUsed=models[mi];const url='https://generativelanguage.googleapis.com/v1beta/models/'+encodeURIComponent(modelUsed)+':generateContent';for(let attempt=0;attempt<2;attempt++){try{response=UrlFetchApp.fetch(url,{method:'post',contentType:'application/json',headers:{'x-goog-api-key':key},muteHttpExceptions:true,followRedirects:false,payload:JSON.stringify(payload)});}catch(_){response=null;}status=response?response.getResponseCode():0;if(status===200)break;if(![0,429,500,502,503,504].includes(status)||attempt===1)break;Utilities.sleep(500*(attempt+1));}if(status===200)break;if(![0,429,500,502,503,504].includes(status))break;}
+  if(!response||status!==200)return {available:false,reason:'IRAC_GROUNDING_HTTP_'+status,model_used:modelUsed,production_write:false};
+  let data;try{data=JSON.parse(response.getContentText());}catch(_){return {available:false,reason:'IRAC_GROUNDING_INVALID_RESPONSE',model_used:modelUsed,production_write:false};}
+  const text=bseAiExtractText_(data),details=bseAiGroundingDetails_(data).filter(x=>/IRAC/i.test(String(x.title||'')+' '+String(x.authority||'')));
+  if(!details.length||!text||/^NOT_FOUND\b/i.test(text))return {available:false,reason:'IRAC_GROUNDING_MISSING',model_used:modelUsed,production_write:false};
+  return {available:true,text:text,source_details:details,sources:details.map(x=>x.title),model_used:modelUsed,production_write:false};
+}
+function diagnoseBseAiIracGroundingTest(){return bseAiIracGrounded_('Abamectin kumpulan IRAC berapa?');}
+function bseAiGeminiAnswer_(question,currentSismarp,iracGrounded){
   const props=PropertiesService.getScriptProperties();
   const key=String(props.getProperty('GEMINI_API_KEY')||'').trim();
   const preferredModel=String(props.getProperty('GEMINI_AI_MODEL')||props.getProperty('GEMINI_MODEL')||'').trim();
@@ -54,12 +109,15 @@ function bseAiGeminiAnswer_(question){
   const store=String(props.getProperty(BSE_AI_FILE_SEARCH_STORE_PROPERTY)||'').trim();
   if(!key)throw new Error('GEMINI_API_KEY belum tersedia.');
   if(!models.length)throw new Error('Model Gemini belum dikonfigurasi.');
+  if(bseAiIracQuestion_(question)&&!(iracGrounded&&iracGrounded.available))throw new Error('IRAC grounding daripada KB tidak tersedia; klasifikasi tidak dijawab untuk mengelakkan jawapan tanpa sumber.');
+  const currentContext=currentSismarp?('\n\nCURRENT_SISMARP_CONTEXT_JSON:\n'+JSON.stringify(currentSismarp)+'\nGunakan konteks SISMARP CURRENT ini sebagai fakta semasa hanya untuk padanan query/filter yang dinyatakan apabila available=true. Jangan tambah produk, tanaman, perosak, nombor pendaftaran atau status yang tiada dalam konteks. Jika total=0, nyatakan tepat bahawa tiada padanan SISMARP semasa ditemui untuk filter tersebut; jangan simpulkan bahan aktif/produk tidak berdaftar di Malaysia secara umum. Jika available=false, nyatakan semakan semasa tidak tersedia/stale dan jangan membuat kesimpulan pendaftaran.'):'';
+  const iracContext=iracGrounded&&iracGrounded.available?('\n\nGROUNDED_IRAC_CONTEXT:\n'+String(iracGrounded.text||'')+'\nGunakan konteks IRAC ini sahaja untuk klasifikasi IRAC/MoA; jangan tambah klasifikasi dari pengetahuan model.'):'';
   const payload={
     systemInstruction:{parts:[{text:bseTelegramAiSystemPrompt_(!!store)}]},
-    contents:[{role:'user',parts:[{text:question}]}],
+    contents:[{role:'user',parts:[{text:question+currentContext+iracContext}]}],
     generationConfig:{maxOutputTokens:1800,temperature:0.25}
   };
-  if(store)payload.tools=[{fileSearch:{fileSearchStoreNames:[store]}}];
+  if(store&&!(iracGrounded&&iracGrounded.available))payload.tools=[{fileSearch:{fileSearchStoreNames:[store]}}];
   let response=null,status=0,modelUsed='';
   for(let mi=0;mi<models.length;mi++){
     modelUsed=models[mi];
@@ -79,11 +137,16 @@ function bseAiGeminiAnswer_(question){
   let data;try{data=JSON.parse(response.getContentText());}catch(_){throw new Error('Respons Gemini tidak sah.');}
   const text=bseAiExtractText_(data);
   if(!text)throw new Error('Gemini tidak memulangkan jawapan.');
-  return {text:text,sources:bseAiGroundingSources_(data),kb_used:!!store,model_used:modelUsed,production_write:false};
+  const sourceDetails=bseAiGroundingDetails_(data),seen=new Set(sourceDetails.map(x=>x.title));
+  (iracGrounded&&iracGrounded.source_details||[]).forEach(x=>{if(x&&x.title&&!seen.has(x.title)){seen.add(x.title);sourceDetails.push(x);}});
+  return {text:text,sources:sourceDetails.map(x=>x.title),source_details:sourceDetails,kb_used:!!store,model_used:modelUsed,sismarp_current:currentSismarp||null,production_write:false};
 }
 function bseTelegramAiRender_(answer){
-  const lines=['**🤖 AI — NON_CANONICAL**','',String(answer.text||'').trim()];
+  const lines=['**🤖 AI — NON_CANONICAL**','',String(answer.text||'').trim()],current=answer.sismarp_current;
+  if(current){lines.push('','**SISMARP CURRENT**');if(current.available){lines.push('• Status: derived cache semasa sah','• Padanan query: '+String(current.total||0),'• Snapshot: '+String(current.cache_refreshed_at||''),'• Umur cache: '+String(current.age_days==null?'?':current.age_days)+' hari','• Sumber authority: SISMARP — Jabatan Pertanian Malaysia');if(Number(current.total||0)===0)lines.push('• Nota: 0 padanan tidak membuktikan bahan aktif/produk tiada pendaftaran Malaysia secara umum.');}else{lines.push('• Status: semakan semasa tidak tersedia','• Sebab: '+String(current.reason||'UNKNOWN'));if(current.cache_refreshed_at)lines.push('• Snapshot terakhir: '+current.cache_refreshed_at);}}
   if(answer.sources&&answer.sources.length){lines.push('','**Rujukan KB**');answer.sources.forEach(s=>lines.push('• '+s));}
+  const details=(answer.source_details||[]).filter(x=>x&&x.url);if(details.length){lines.push('','**Butiran sumber**');details.forEach(x=>lines.push('• '+x.title+' — '+x.url));}
+  if(current&&current.source_url)lines.push('• SISMARP — '+current.source_url);
   lines.push('','Rujukan AI sahaja. Bukan rekod, approval atau arahan operasi BSE.');
   return lines.join('\n');
 }
@@ -109,10 +172,10 @@ function bseTelegramAiReceive_(book,m,allowedPrivate,allowedGroup){
   if(!question){bseTelegramAiSend_(m,'Gunakan: /ai <soalan>\nContoh: /ai abamectin kumpulan IRAC berapa?');return {handled:true,production_write:false};}
   if(question.length>6000){bseTelegramAiSend_(m,'Soalan terlalu panjang. Had /ai ialah 6000 aksara.');return {handled:true,production_write:false};}
   try{
-    const answer=bseAiGeminiAnswer_(question);
+    const currentSismarp=bseAiSismarpCurrent_(question),iracGrounded=bseAiIracGrounded_(question),answer=bseAiGeminiAnswer_(question,currentSismarp,iracGrounded);
     bseTelegramAiSend_(m,bseTelegramAiRender_(answer));
-    console.log('BSE_AI_REPLY_SENT: '+JSON.stringify({kb_used:answer.kb_used,source_count:answer.sources.length,production_write:false}));
-    return {handled:true,kb_used:answer.kb_used,source_count:answer.sources.length,production_write:false};
+    console.log('BSE_AI_REPLY_SENT: '+JSON.stringify({kb_used:answer.kb_used,source_count:answer.sources.length,sismarp_current:!!(currentSismarp&&currentSismarp.available),production_write:false}));
+    return {handled:true,kb_used:answer.kb_used,source_count:answer.sources.length,sismarp_current:!!(currentSismarp&&currentSismarp.available),production_write:false};
   }catch(error){
     bseTelegramAiSend_(m,'AI tidak dapat menjawab sekarang. '+String(error.message||'Ralat tidak diketahui').replace(/AIza[A-Za-z0-9_-]+/g,'[REDACTED]').slice(0,180));
     return {handled:true,error:true,production_write:false};
@@ -130,6 +193,12 @@ function configureBseAiKnowledgeBaseFolderTest(folderId){
   const folder=DriveApp.getFolderById(id);if(folder.getName()!=='08_KB_REFERENCE')throw new Error('Folder KB mesti bernama 08_KB_REFERENCE.');
   PropertiesService.getScriptProperties().setProperty(BSE_AI_KB_FOLDER_PROPERTY,id);
   return {configured:true,folder_name:folder.getName(),production_write:false};
+}
+function configureBseAiKnowledgeBasePilotTest(){
+  if(bseRuntimeEnvironmentName_()!=='PILOT_TEST')throw new Error('Fungsi ini PILOT_TEST sahaja.');
+  const id='1vqLIJW-mJQ0vUo51sX7xiqsDAbvU4PGz';
+  PropertiesService.getScriptProperties().setProperty(BSE_AI_KB_FOLDER_PROPERTY,id);
+  return {configured:true,folder_id:id,verified_external:true,production_write:false};
 }
 function bseAiKbStripHtml_(html){
   return String(html||'').replace(/<script[\s\S]*?<\/script>/gi,' ').replace(/<style[\s\S]*?<\/style>/gi,' ').replace(/<[^>]+>/g,' ').replace(/&nbsp;/g,' ').replace(/&amp;/g,'&').replace(/&#8211;|&ndash;/g,'-').replace(/\s+/g,' ').trim();
@@ -208,7 +277,8 @@ function bootstrapBseAiFileSearchTest(){
     }
     results.push({id:source.id,imported:props.getProperty(flag)==='1'});
   });
-  return {store:store,sources:results,production_write:false};
+  props.setProperty(BSE_AI_KB_REFRESHED_AT_PROPERTY,new Date().toISOString());
+  return {store:store,sources:results,refreshed_at:props.getProperty(BSE_AI_KB_REFRESHED_AT_PROPERTY),production_write:false};
 }
 function archiveBseAiKnowledgeBaseDriveTest(){
   if(bseRuntimeEnvironmentName_()!=='PILOT_TEST')throw new Error('PILOT_TEST sahaja.');
@@ -220,9 +290,11 @@ function archiveBseAiKnowledgeBaseDriveTest(){
   return {sources:results,production_write:false};
 }
 function getBseAiKnowledgeBaseStatusTest(){
-  const props=PropertiesService.getScriptProperties();
-  return {folder_bound:!!String(props.getProperty(BSE_AI_KB_FOLDER_PROPERTY)||''),file_search_store_bound:!!String(props.getProperty(BSE_AI_FILE_SEARCH_STORE_PROPERTY)||''),sources:BSE_AI_KB_SOURCES.map(s=>({id:s.id,imported:props.getProperty('BSE_AI_KB_IMPORTED_'+s.id)==='1'})),production_write:false};
+  const props=PropertiesService.getScriptProperties(),refreshedAt=String(props.getProperty(BSE_AI_KB_REFRESHED_AT_PROPERTY)||''),ageDays=refreshedAt?(Date.now()-Date.parse(refreshedAt))/86400000:null;
+  return {folder_bound:!!String(props.getProperty(BSE_AI_KB_FOLDER_PROPERTY)||''),file_search_store_bound:!!String(props.getProperty(BSE_AI_FILE_SEARCH_STORE_PROPERTY)||''),refreshed_at:refreshedAt||'',stale:ageDays==null?true:ageDays>35,sources:BSE_AI_KB_SOURCES.map(s=>({id:s.id,version:s.version,freshness_days:s.freshness_days,imported:props.getProperty('BSE_AI_KB_IMPORTED_'+s.id)==='1'})),production_write:false};
 }
+function getBseAiKnowledgeBaseManifestTest(){return getBseAiKnowledgeBaseStatusTest();}
+function refreshBseAiKnowledgeBaseTest(){return rebuildBseAiFileSearchTest();}
 function runBseTelegramAiHarnessTests(){
   const src=[bseTelegramAiReceive_,bseAiGeminiAnswer_,bseTelegramAiSystemPrompt_].map(f=>f.toString()).join('\n');
   const tests=[
@@ -230,17 +302,28 @@ function runBseTelegramAiHarnessTests(){
     {id:'AI path is explicitly NON_CANONICAL',pass:/NON_CANONICAL/.test(bseTelegramAiSystemPrompt_(true))},
     {id:'AI path has no canonical/domain writer',pass:!/ReviewCore_|Measurement_Log|Observation_Log|Treatment_Log|Inventory_Log|production_write\s*:\s*true/.test(src)},
     {id:'File Search is optional and property-bound',pass:/BSE_AI_FILE_SEARCH_STORE_PROPERTY/.test(bseAiGeminiAnswer_.toString())&&/fileSearchStoreNames/.test(bseAiGeminiAnswer_.toString())},
-    {id:'Malaysia pesticide authority boundary preserved',pass:/SISMARP\/Jabatan Pertanian/.test(bseTelegramAiSystemPrompt_(true))&&/IRAC.*BUKAN/.test(bseTelegramAiSystemPrompt_(true))},
+    {id:'Malaysia pesticide authority boundary preserved',pass:/pendaftaran produk dikawal oleh Lembaga Racun Makhluk Perosak\/Jabatan Pertanian/.test(bseTelegramAiSystemPrompt_(true))&&/Jangan kata produk didaftarkan melalui SISMARP/.test(bseTelegramAiSystemPrompt_(true))&&/IRAC.*BUKAN/.test(bseTelegramAiSystemPrompt_(true))},
+    {id:'SISMARP planner extracts explicit crop and pest only',pass:bseAiSismarpPlan_('Adakah abamectin berdaftar untuk peria di Malaysia?').crop.toLowerCase()==='peria'&&bseAiSismarpPlan_('racun apa untuk thrips pada peria?').pest.toLowerCase()==='thrips'&&bseAiSismarpPlan_('racun apa untuk thrips pada peria?').crop.toLowerCase()==='peria'},
+    {id:'SISMARP current retriever uses HTTPS derived cache and is read-only',pass:/raw\.githubusercontent\.com/.test(BSE_AI_SISMARP_CACHE_URL)&&/CACHE_STALE/.test(bseAiSismarpCurrent_.toString())&&!/appendRow|setValue|setValues/.test(bseAiSismarpCurrent_.toString())},
     {id:'Telegram presentation renders bold headings without visible asterisks',pass:bseTelegramAiToHtml_('**Bahagian 1**\n* item').includes('<b>Bahagian 1</b>')&&!bseTelegramAiToHtml_('**Bahagian 1**\n* item').includes('*')&&bseTelegramAiToHtml_('**Bahagian 1**\n* item').includes('• item')},
+    {id:'Telegram AI renders SISMARP current freshness and source details',pass:/SISMARP CURRENT/.test(bseTelegramAiRender_({text:'x',sources:[],source_details:[{title:'DOA',url:'https://doa.gov.my'}],sismarp_current:{available:true,total:1,cache_refreshed_at:'2026-10-14T00:00:00Z',age_days:0,source_url:'http://www.portal.doa.gov.my/sismarp/'}}))&&/Butiran sumber/.test(bseTelegramAiRender_({text:'x',sources:[],source_details:[{title:'DOA',url:'https://doa.gov.my'}]}))},
+    {id:'zero SISMARP match is explicitly not general non-registration proof',pass:/0 padanan tidak membuktikan/.test(bseTelegramAiRender_({text:'x',sources:[],source_details:[],sismarp_current:{available:true,total:0,cache_refreshed_at:'2026-10-14T00:00:00Z',age_days:0,source_url:'http://www.portal.doa.gov.my/sismarp/'}}))&&/jangan simpulkan bahan aktif\/produk tidak berdaftar/.test(bseAiGeminiAnswer_.toString())},
+    {id:'KB manifest has refresh timestamp and stale policy',pass:/BSE_AI_KB_REFRESHED_AT_PROPERTY/.test(bootstrapBseAiFileSearchTest.toString()+getBseAiKnowledgeBaseStatusTest.toString())&&/ageDays>35/.test(getBseAiKnowledgeBaseStatusTest.toString())&&/rebuildBseAiFileSearchTest/.test(refreshBseAiKnowledgeBaseTest.toString())},
     {id:'Telegram send uses HTML parse mode',pass:/parse_mode:'HTML'/.test(bseTelegramAiSend_.toString())},
-    {id:'no question persistence',pass:!/appendRow|setValue|setValues/.test(bseTelegramAiReceive_.toString()+bseAiGeminiAnswer_.toString())}
+    {id:'IRAC classification is code-gated by grounded File Search',pass:/IRAC grounding daripada KB tidak tersedia/.test(bseAiGeminiAnswer_.toString())&&/HANYA File Search KB/.test(bseAiIracGrounded_.toString())},
+    {id:'no question persistence',pass:!/appendRow|setValue|setValues/.test(bseTelegramAiReceive_.toString()+bseAiGeminiAnswer_.toString()+bseAiSismarpCurrent_.toString()+bseAiIracGrounded_.toString())}
   ];
   const bad=tests.filter(t=>!t.pass);if(bad.length)throw new Error('AI harness gagal: '+bad.map(t=>t.id).join(', '));return tests;
 }
 
+function runBseAiCurrentSismarpSmokeTest(){
+  const question='Abamectin kumpulan IRAC berapa dan adakah ia berdaftar untuk peria di Malaysia?';
+  const current=bseAiSismarpCurrent_(question),irac=bseAiIracGrounded_(question),answer=bseAiGeminiAnswer_(question,current,irac);
+  return {current:{available:current&&current.available,total:current&&current.total,query:current&&current.query,cache_refreshed_at:current&&current.cache_refreshed_at,age_days:current&&current.age_days},irac:{available:irac&&irac.available,sources:irac&&irac.sources||[],reason:irac&&irac.reason||''},answer:String(answer.text||'').slice(0,1800),sources:answer.sources,rendered:bseTelegramAiRender_(answer).slice(0,3200),production_write:false};
+}
 function runBseAiKnowledgeBaseSmokeTest(){
-  const agriculture=bseAiGeminiAnswer_('Abamectin berada dalam kumpulan IRAC berapa? Adakah klasifikasi IRAC sahaja membuktikan bahan itu berdaftar atau disyorkan di Malaysia? Jawab ringkas dan nyatakan batas sumber.');
-  const general=bseAiGeminiAnswer_('Apakah ibu negara Jepun? Jawab satu ayat.');
+  const aq='Abamectin berada dalam kumpulan IRAC berapa? Adakah klasifikasi IRAC sahaja membuktikan bahan itu berdaftar atau disyorkan di Malaysia? Jawab ringkas dan nyatakan batas sumber.',agriculture=bseAiGeminiAnswer_(aq,null,bseAiIracGrounded_(aq));
+  const general=bseAiGeminiAnswer_('Apakah ibu negara Jepun? Jawab satu ayat.',null,null);
   return {agriculture:{text:String(agriculture.text||'').slice(0,1200),sources:agriculture.sources,kb_used:agriculture.kb_used},general:{text:String(general.text||'').slice(0,500),sources:general.sources,kb_used:general.kb_used},production_write:false};
 }
 

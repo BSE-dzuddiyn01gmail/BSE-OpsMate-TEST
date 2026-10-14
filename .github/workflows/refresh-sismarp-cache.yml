@@ -1,0 +1,40 @@
+﻿name: Refresh SISMARP cache
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Weekly, Saturday 19:20 UTC = Sunday 03:20 MYT.
+    - cron: '20 19 * * 6'
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout canonical workflow source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Refresh public SISMARP cache
+        run: python3 scripts/refresh_sismarp_cache.py --output /tmp/sismarp-current.json
+      - name: Update derived cache branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git fetch origin sismarp-cache
+          git worktree add /tmp/sismarp-cache origin/sismarp-cache
+          cd /tmp/sismarp-cache
+          git switch -C sismarp-cache origin/sismarp-cache
+          mkdir -p data/sismarp
+          cp /tmp/sismarp-current.json data/sismarp/current.json
+          git add data/sismarp/current.json
+          if git diff --cached --quiet; then
+            echo 'No SISMARP cache change.'
+            exit 0
+          fi
+          git commit -m 'data: refresh SISMARP current cache'
+          git push origin HEAD:sismarp-cache

@@ -103,11 +103,14 @@ function bsePilotAuditCell_(row,index,name){return Object.prototype.hasOwnProper
 function bsePilotAuditSourceEntries_(snapshot){
   const idx=bsePilotAuditIndex_(snapshot.headers),keyName=['source_key','reference','evidence_id','update_id'].find(h=>Object.prototype.hasOwnProperty.call(idx,h));
   if(!keyName)return [];
-  return snapshot.rows.map((row,i)=>({sheet:snapshot.sheet,row:i+2,key:bsePilotAuditCell_(row,idx,keyName),hash:bsePilotAuditCell_(row,idx,'payload_hash'),status:bsePilotAuditCell_(row,idx,'status')||bsePilotAuditCell_(row,idx,'decision_status')||bsePilotAuditCell_(row,idx,'verification_status'),production:bsePilotAuditCell_(row,idx,'production_write'),official:bsePilotAuditCell_(row,idx,'official_bse_write')})).filter(x=>x.key);
+  return snapshot.rows.map((row,i)=>({sheet:snapshot.sheet,row:i+2,key:bsePilotAuditCell_(row,idx,keyName),hash:bsePilotAuditCell_(row,idx,'payload_hash'),status:bsePilotAuditCell_(row,idx,'status')||bsePilotAuditCell_(row,idx,'decision_status')||bsePilotAuditCell_(row,idx,'verification_status')||bsePilotAuditCell_(row,idx,'ocr_status'),production:bsePilotAuditCell_(row,idx,'production_write'),official:bsePilotAuditCell_(row,idx,'official_bse_write')})).filter(x=>x.key);
+}
+function bsePilotAuditTerminalDiscarded_(entry){
+  return /^(?:OCR_DISCARDED|DISCARDED_BY_REPORTER|SUPERSEDED_TEST|VOIDED_TEST|REJECTED|CANCELLED)$/i.test(String(entry&&entry.status||''));
 }
 function bsePilotAuditDuplicateIssues_(entries,allowDuplicateSheets){
   const issues=[],by={};
-  entries.forEach(e=>{const k=e.sheet+'|'+e.key;(by[k]||(by[k]=[])).push(e);});
+  entries.filter(e=>!bsePilotAuditTerminalDiscarded_(e)).forEach(e=>{const k=e.sheet+'|'+e.key;(by[k]||(by[k]=[])).push(e);});
   Object.keys(by).forEach(k=>{const rows=by[k];if(rows.length<2||allowDuplicateSheets.has(rows[0].sheet))return;
     const hashes=Array.from(new Set(rows.map(x=>x.hash).filter(Boolean)));
     issues.push({type:hashes.length>1?'CONFLICTING_HASH':'DUPLICATE_SOURCE_KEY',sheet:rows[0].sheet,key:rows[0].key,rows:rows.map(x=>x.row),hashes:hashes});
@@ -143,7 +146,9 @@ function runBsePilotReadOnlyAuditorHarnessTests(){
     {id:'header delta detects exact',pass:bsePilotAuditHeaderDelta_(['a','b'],['a','b']).exact===true},
     {id:'header delta detects reorder',pass:bsePilotAuditHeaderDelta_(['a','b'],['b','a']).order_mismatch===true},
     {id:'header delta detects missing/extra',pass:bsePilotAuditHeaderDelta_(['a','b'],['a','c']).missing[0]==='b'&&bsePilotAuditHeaderDelta_(['a','b'],['a','c']).extra[0]==='c'},
-    {id:'duplicate detector flags conflict',pass:bsePilotAuditDuplicateIssues_([{sheet:'S',key:'K',row:2,hash:'A'},{sheet:'S',key:'K',row:3,hash:'B'}],new Set()).some(x=>x.type==='CONFLICTING_HASH')},
+    {id:'duplicate detector flags active conflict',pass:bsePilotAuditDuplicateIssues_([{sheet:'S',key:'K',row:2,hash:'A',status:'PROPOSED'},{sheet:'S',key:'K',row:3,hash:'B',status:'PROPOSED'}],new Set()).some(x=>x.type==='CONFLICTING_HASH')},
+    {id:'terminal discarded row does not conflict with later active lifecycle row',pass:bsePilotAuditDuplicateIssues_([{sheet:'PILOT_TEST_EVIDENCE_OCR',key:'K',row:2,hash:'A',status:'OCR_DISCARDED'},{sheet:'PILOT_TEST_EVIDENCE_OCR',key:'K',row:3,hash:'B',status:'PROPOSED_NON_CANONICAL'}],new Set()).length===0},
+    {id:'source entry reads OCR lifecycle status',pass:bsePilotAuditSourceEntries_({sheet:'PILOT_TEST_EVIDENCE_OCR',headers:['evidence_id','payload_hash','ocr_status','production_write'],rows:[['E1','H1','OCR_DISCARDED',false]]})[0].status==='OCR_DISCARDED'},
     {id:'allowed one-to-many not duplicate',pass:bsePilotAuditDuplicateIssues_([{sheet:'PILOT_TEST_PLANT_CENSUS',key:'K',row:2,hash:'A'},{sheet:'PILOT_TEST_PLANT_CENSUS',key:'K',row:3,hash:'A'}],new Set(['PILOT_TEST_PLANT_CENSUS'])).length===0}
   ];
   const failed=tests.filter(t=>!t.pass);if(failed.length)throw new Error('Read-only auditor harness gagal: '+failed.map(t=>t.id).join(', '));
