@@ -626,6 +626,38 @@ Keputusan owner selepas PILOT_TEST reporting stabilization:
    reallocation harness 8/8 PASS, targeted UI harness 6/6 PASS, full regression
    47/47 PASS, schema 57/57 CURRENT, and source-key audit 191 entries / 0 issue.
 
+   **Benar-path live proof 2026-10-15:** after Batal safety was proven, the same
+   PILOT_TEST lineage was exercised with real TEST confirmation writes. Root
+   `BSE-TG-746192342` used an explicit labelled source (`Plot asal: M1P1`) and
+   destination M1P3. Live testing exposed that the destination parser initially
+   counted the labelled source as a destination; commit `c64f883` excludes only
+   `Plot asal:` / `Dari plot:` lines from destination parsing while preserving
+   them as explicit source evidence. Card 267 then resolved allocation
+   `BSE-SB-CB-20260910-001-PA-001` M1P1 -> M1P3 and reporter `Benar` created
+   reallocation `BSE-SB-RA-20261015-001`, transplant
+   `BSE-SB-TR-20261015-001`, and status `PLANNED -> ACTIVE` at M1P3.
+
+   A second root, `BSE-TG-746192344`, deliberately used natural shorthand:
+   `Pindah anak pokok Timun ke M1P4, 15/10/2026`. Initial runtime correctly
+   failed closed because crop/date shorthand was not yet contracted. Commit
+   `0617ce5` added one strict anchored shorthand grammar for exactly
+   `Pindah anak pokok <crop> ke <plot>, <dd/mm/yyyy>`, without broad heuristic
+   parsing. After regression, the same queued source deterministically identified
+   M1P2 as the only remaining valid source because PA-001 was already ACTIVE at
+   M1P3. Card 273 showed M1P2 -> M1P4 with only `Benar / Batal`; reporter
+   `Benar` created `BSE-SB-RA-20261015-002`,
+   `BSE-SB-TR-20261015-002`, and activated
+   `BSE-SB-CB-20260910-001-PA-002` at M1P4.
+
+   Final independent Sheet read-back shows exactly two Timun reallocation rows
+   (M1P1 -> M1P3 and M1P2 -> M1P4), corresponding completed Transplant rows,
+   and two allocation-status rows at M1P3/M1P4. Original PLOT_ALLOCATION rows
+   remain unchanged as M1P1/M1P2 `PLANNED`; effective state is derived from the
+   status ledger. Final targeted reallocation harness 10/10 PASS, targeted UI
+   harness 6/6 PASS, full regression 47/47 PASS, schema 57/57 CURRENT, source-key
+   audit 205 entries / 0 issue, `production_write:false`, and
+   `official_bse_write:false`.
+
 4. Selepas autonomous Daily Morning Digest LIVE PASS, kerja seterusnya yang diluluskan
    ialah Plant Replacement, kemudian OCR minimum PoC jika masih diperlukan oleh BSE.
    Friday Weekly Digest autonomous proof diteruskan pada first scheduled Friday run.
