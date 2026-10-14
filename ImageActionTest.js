@@ -112,11 +112,11 @@ function bseImageActionCallback_(book,callback){
     if(index<0)throw new Error('Image action tidak ditemui.');
     const row=rows[index],actor=String(callback.from&&callback.from.id||''),chat=String(callback.message&&callback.message.chat&&callback.message.chat.id||'');
     if(actor!==String(row[4])||chat!==String(row[1])){
-      if(callback.id)bseTelegramApi_('answerCallbackQuery',{callback_query_id:callback.id,text:'Pilihan ini hanya untuk penghantar gambar.',show_alert:true});
+      if(callback.id){try{bseTelegramApi_('answerCallbackQuery',{callback_query_id:callback.id,text:'Pilihan ini hanya untuk penghantar gambar.',show_alert:true});}catch(_){}}
       return {authorized:false,production_write:false};
     }
     if(String(row[12])!=='OPEN'){
-      if(callback.id)bseTelegramApi_('answerCallbackQuery',{callback_query_id:callback.id,text:'Pilihan gambar ini sudah diproses.'});
+      if(callback.id){try{bseTelegramApi_('answerCallbackQuery',{callback_query_id:callback.id,text:'Pilihan gambar ini sudah diproses.'});}catch(_){}}
       return {duplicate:true,status:String(row[12]),production_write:false};
     }
     const action=m[2],synthetic=bseImageActionSyntheticMessage_(row,action);
@@ -129,7 +129,7 @@ function bseImageActionCallback_(book,callback){
     const status=action==='A'?'SELECTED_ANALYSIS':action==='T'?'SELECTED_TEXT':action==='E'?'SELECTED_EVIDENCE':'DISCARDED';
     sheet.getRange(index+2,13,1,5).setValues([[status,String(row[13]||''),action,new Date().toISOString(),'']]);SpreadsheetApp.flush();
     bseImageActionClosePrompt_(row,label);
-    if(callback.id)bseTelegramApi_('answerCallbackQuery',{callback_query_id:callback.id,text:label.slice(0,180)});
+    if(callback.id){try{bseTelegramApi_('answerCallbackQuery',{callback_query_id:callback.id,text:label.slice(0,180)});}catch(_){}}
     return {selected:action,status:status,production_write:false};
   }finally{lock.releaseLock();}
 }
@@ -151,6 +151,24 @@ function processBseImageActionCallbacksTest(){
   }
   return {production_write:false};
 }
+function reconcileBseImageActionExpiredCallbacksTest(){
+  if(bseRuntimeEnvironmentName_()!=='PILOT_TEST')throw new Error('Image action callback reconcile hanya dibenarkan dalam PILOT_TEST.');
+  const book=boundTestBook_(),stateSheet=bseImageActionSheet_(book),states=bseImageActionRows_(stateSheet),cb=bseImageActionCallbackSheet_(book);
+  const rows=cb.getLastRow()>1?cb.getRange(2,1,cb.getLastRow()-1,BSE_IMAGE_ACTION_CALLBACK_HEADERS.length).getValues():[];
+  let reconciled=0;
+  for(let i=0;i<rows.length;i++){
+    if(String(rows[i][3])!=='FAILED_CALLBACK_EXPIRED')continue;
+    let callback=null;try{callback=JSON.parse(String(rows[i][2]||''));}catch(_){continue;}
+    const m=String(callback&&callback.data||'').match(/^IA1:([A-Za-z0-9]{8,16}):([ATER])$/);if(!m)continue;
+    const expected=m[2]==='A'?'SELECTED_ANALYSIS':m[2]==='T'?'SELECTED_TEXT':m[2]==='E'?'SELECTED_EVIDENCE':'DISCARDED';
+    const state=states.find(r=>String(r[0])===m[1]);
+    if(!state||String(state[12])!==expected||String(state[14])!==m[2])continue;
+    cb.getRange(i+2,4,1,6).setValues([['PROCESSED',Number(rows[i][4]||1),'RECONCILED_AFTER_APPLY: '+String(rows[i][5]||'').slice(0,180),String(rows[i][6]||''),new Date().toISOString(),'']]);
+    reconciled++;
+  }
+  SpreadsheetApp.flush();
+  return {reconciled:reconciled,production_write:false};
+}
 function installBseImageActionSchemaTest(){
   if(bseRuntimeEnvironmentName_()!=='PILOT_TEST')throw new Error('Image action schema hanya dibenarkan dalam PILOT_TEST.');
   const book=boundTestBook_();bseImageActionSheet_(book);bseImageActionCallbackSheet_(book);
@@ -166,6 +184,7 @@ function runBseImageActionHarnessTests(){
     {id:'analysis and OCR reuse existing image processing intake',pass:/bseImageProcessingReceive_/.test(callback)&&/SELECTED_ANALYSIS/.test(callback)&&/SELECTED_TEXT/.test(callback)},
     {id:'evidence action reuses existing human-confirmed Evidence flow',pass:/bseTelegramEvidenceReceiveMessage_/.test(callback)&&/SELECTED_EVIDENCE/.test(callback)},
     {id:'callback is durable and retryable',pass:/bseImageActionCallbackSheet_/.test(bseImageActionPersistCallback_.toString())&&/bseTelegramCallbackFailureState_/.test(processor)},
+    {id:'expired Telegram callback acknowledgement is non-fatal after action apply',pass:/answerCallbackQuery/.test(callback)&&/catch\(_\)\{\}/.test(callback)&&/FAILED_CALLBACK_EXPIRED/.test(reconcileBseImageActionExpiredCallbacksTest.toString())},
     {id:'no domain or production writer',pass:!/bse(?:Measurement|CropBatch|Transplant|PlantCensus|Treatment|Inventory|Observation)ReviewCore_|production_write\s*:\s*true/.test(receive+callback+processor)}
   ];
   const bad=tests.filter(t=>!t.pass);if(bad.length)throw new Error('Image action harness gagal: '+bad.map(t=>t.id).join(', '));

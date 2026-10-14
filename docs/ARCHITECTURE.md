@@ -58,7 +58,11 @@ Scope lock platform yang diluluskan untuk roadmap ialah:
   `file_id` asal dan intake image-processing sedia ada; pilihan Evidence menggunakan
   flow Evidence dengan human confirmation. Receiver hanya menyimpan Telegram file
   identity + state TEST sebelum pilihan/queue processing; gambar belum ditulis ke Drive
-  pada tahap ini. Worker menjalankan Gemini di background dan hanya
+  pada tahap ini. Telegram `answerCallbackQuery` acknowledgement adalah best-effort sahaja:
+  jika polling manual lambat dan callback query sudah expired selepas action berjaya applied,
+  expiry tidak boleh menukar action yang sudah diproses kepada failure atau mencetus duplicate;
+  audit callback boleh direconcile kepada `PROCESSED` berdasarkan terminal chooser state.
+  Worker menjalankan Gemini di background dan hanya
   membuat **1 retry** selepas kegagalan pertama. Jika kedua-dua cubaan gagal, status
   menjadi `PROCESSING_FAILED`, bot menghantar ringkasan error bersih, dan tiada Drive
   atau domain write dibuat.
