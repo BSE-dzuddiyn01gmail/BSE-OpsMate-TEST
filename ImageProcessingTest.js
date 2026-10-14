@@ -40,12 +40,13 @@ function bseImageProcessingCallbackSheet_(book){
 function bseImageProcessingRows_(sheet){
   return sheet.getLastRow()>1?sheet.getRange(2,1,sheet.getLastRow()-1,BSE_IMAGE_PROCESSING_HEADERS.length).getValues():[];
 }
-function bseImageProcessingCaptionCommand_(caption){
-  const raw=String(caption||'').trim().toLowerCase();
-  if(raw==='/image_to_text')return 'IMAGE_TO_TEXT';
-  if(raw==='/image_analysis')return 'IMAGE_ANALYSIS';
-  return '';
+function bseImageProcessingCaptionMeta_(caption){
+  const raw=String(caption||'').trim();
+  const m=raw.match(/^\/(image_to_text|image_analysis)(?:@[A-Za-z0-9_]+)?(?:\s+([\s\S]*))?$/i);
+  if(!m)return {mode:'',instruction:''};
+  return {mode:m[1].toLowerCase()==='image_analysis'?'IMAGE_ANALYSIS':'IMAGE_TO_TEXT',instruction:String(m[2]||'').trim().slice(0,2000)};
 }
+function bseImageProcessingCaptionCommand_(caption){return bseImageProcessingCaptionMeta_(caption).mode;}
 function bseImageProcessingModeLabel_(mode){
   return String(mode)==='IMAGE_ANALYSIS'?'IMAGE ANALYSIS':'IMAGE TO TEXT';
 }
@@ -78,7 +79,7 @@ function bseImageProcessingMarkup_(token){
   ]]};
 }
 function bseImageProcessingReceive_(book,m){
-  const mode=bseImageProcessingCaptionCommand_(m&&m.caption);
+  const meta=bseImageProcessingCaptionMeta_(m&&m.caption),mode=meta.mode;
   if(!mode)return {handled:false};
   const a=bseTelegramEvidenceAttachment_(m);
   if(!a||a.type!=='PHOTO'||!/^image\//i.test(a.mime))return {handled:true,text:'Image processing hanya menyokong PHOTO/image.'};
@@ -132,7 +133,8 @@ function bseImageProcessingModelSchema_(){
     additionalProperties:false
   };
 }
-function bseImageProcessingPrompt_(mode){
+function bseImageProcessingPrompt_(mode,userInstruction){
+  const instruction=String(userInstruction||'').trim();
   if(String(mode)==='IMAGE_TO_TEXT'){
     return [
       'OCR ONLY. Transcribe only text that is visibly present in this image.',
@@ -142,8 +144,9 @@ function bseImageProcessingPrompt_(mode){
       'Use [UNREADABLE] for uncertain glyphs.',
       'suggested_category and suggested_record_type are only storage suggestions. Do not claim a domain write.',
       'structured_summary may summarize visible text briefly but must not add facts.',
-      'uncertainty_note must mention any uncertainty or be an empty string.'
-    ].join('\n');
+      'uncertainty_note must mention any uncertainty or be an empty string.',
+      instruction?'User instruction (must not override OCR safety rules above): '+instruction:''
+    ].filter(Boolean).join('\n');
   }
   return [
     'Analyze the visible image for operational context only.',
@@ -153,8 +156,9 @@ function bseImageProcessingPrompt_(mode){
     'Do not invent text, dates, quantities, people, plot IDs, crop names, or causes that are not visible.',
     'suggested_category and suggested_record_type are storage suggestions only; never claim a domain write.',
     'structured_summary must contain only concise visible facts useful for later human review.',
-    'uncertainty_note must state important uncertainty, or be empty when none is material.'
-  ].join('\n');
+    'uncertainty_note must state important uncertainty, or be empty when none is material.',
+    instruction?'User instruction (must not override non-diagnostic/non-canonical safety rules above): '+instruction:''
+  ].filter(Boolean).join('\n');
 }
 function bseImageProcessingFetchBytes_(telegramFileId){
   const props=PropertiesService.getScriptProperties(),botToken=String(props.getProperty('TELEGRAM_BOT_TOKEN')||'').trim();
@@ -169,14 +173,14 @@ function bseImageProcessingFetchBytes_(telegramFileId){
   if(!bytes.length||bytes.length>10*1024*1024)throw new Error('IMAGE_MODEL_FILE_SIZE_INVALID');
   return bytes;
 }
-function bseImageProcessingModelCall_(mode,telegramFileId,mimeType){
+function bseImageProcessingModelCall_(mode,telegramFileId,mimeType,userInstruction){
   const props=PropertiesService.getScriptProperties(),key=String(props.getProperty('GEMINI_API_KEY')||'').trim(),model=String(props.getProperty('GEMINI_MODEL')||'').trim();
   if(!key)throw new Error('IMAGE_MODEL_KEY_MISSING');
   if(model!=='gemini-3.1-flash-lite')throw new Error('IMAGE_MODEL_NAME_INVALID');
   const bytes=bseImageProcessingFetchBytes_(telegramFileId);
   const payload={
     contents:[{role:'user',parts:[
-      {text:bseImageProcessingPrompt_(mode)},
+      {text:bseImageProcessingPrompt_(mode,userInstruction)},
       {inlineData:{mimeType:String(mimeType||'image/jpeg'),data:Utilities.base64Encode(bytes)}}
     ]}],
     generationConfig:{
@@ -286,11 +290,13 @@ function processBseImageProcessingQueueTest(){
     return {processed:ok?1:0,failed:ok?0:1,card_retry:true,resumed_from:String(row[14]),production_write:false};
   }
   sheet.getRange(index+2,15).setValue('PROCESSING');SpreadsheetApp.flush();
+  const promptEvidence=bseEvidenceFindById_(book,String(row[1]));
+  const userInstruction=promptEvidence?bseImageProcessingCaptionMeta_(promptEvidence.row[7]).instruction:'';
   let result=null,lastError='',attempts=0;
   for(let attempt=1;attempt<=2;attempt++){
     attempts=attempt;
     try{
-      result=bseImageProcessingModelCall_(row[8],row[9],row[11]);
+      result=bseImageProcessingModelCall_(row[8],row[9],row[11],userInstruction);
       break;
     }catch(error){
       lastError=bseImageProcessingSafeError_(error);
@@ -497,7 +503,8 @@ function installBseImageProcessingSchemaTest(){
 function runBseImageProcessingHarnessTests(){
   const receive=bseImageProcessingReceive_.toString(),worker=processBseImageProcessingQueueTest.toString(),model=bseImageProcessingModelCall_.toString(),callback=bseImageProcessingCallback_.toString(),correction=bseImageProcessingCorrectionReceive_.toString(),prompt=bseImageProcessingPrompt_.toString();
   const tests=[
-    {id:'caption commands are image_to_text and image_analysis only',pass:bseImageProcessingCaptionCommand_('/image_to_text')==='IMAGE_TO_TEXT'&&bseImageProcessingCaptionCommand_('/image_analysis')==='IMAGE_ANALYSIS'&&!bseImageProcessingCaptionCommand_('/ocr')&&!bseImageProcessingCaptionCommand_('/image-to-text')},
+    {id:'caption commands support optional bot mention and user instruction',pass:bseImageProcessingCaptionCommand_('/image_to_text')==='IMAGE_TO_TEXT'&&bseImageProcessingCaptionCommand_('/image_analysis tolong analisis daun ini')==='IMAGE_ANALYSIS'&&bseImageProcessingCaptionCommand_('/image_to_text@OpsMate_BSE_Pilot_Test_Bot ambil semua tulisan')==='IMAGE_TO_TEXT'&&bseImageProcessingCaptionMeta_('/image_analysis cari tanda penyakit').instruction==='cari tanda penyakit'&&!bseImageProcessingCaptionCommand_('/ocr')&&!bseImageProcessingCaptionCommand_('/image-to-text')},
+    {id:'user instruction is passed to model prompt without overriding safety',pass:/userInstruction/.test(worker)&&/bseImageProcessingCaptionMeta_/.test(worker)&&/must not override/.test(prompt)},
     {id:'PHOTO queues before Drive write',pass:/PHOTO/.test(receive)&&/IMAGE_PROCESSING_PENDING/.test(receive)&&!/bseTelegramEvidenceStoreDrive_/.test(receive)},
     {id:'heavy processing retries once then fails cleanly',pass:/attempt<=2/.test(worker)&&/PROCESSING_FAILED/.test(worker)&&/gagal selepas 1 retry/.test(worker)},
     {id:'durable PROCESSING_DONE resumes to review card without model rerun',pass:/PROCESSING_DONE/.test(worker)&&/resumed_from/.test(worker)&&worker.indexOf("['PROCESSING_DONE','REVIEW_CARD_PENDING']")<worker.indexOf("bseImageProcessingModelCall_")},
