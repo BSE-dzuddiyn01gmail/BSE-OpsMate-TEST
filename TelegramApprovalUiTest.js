@@ -255,7 +255,7 @@ function bseTelegramApprovalEnsureCard_(book,queueRow){
     sheet.appendRow(reservation);SpreadsheetApp.flush();
     let sent;try{
       const heading=envelopes.length>1?'Rekod '+(index+1)+'/'+envelopes.length+'\n':'';
-      const cropBundle=(envelope.candidates||[]).some(c=>c&&c.target==='Crop_Batch_Log'),footer=envelopes.length>1?'\n\nSetiap rekod disahkan secara berasingan.':cropBundle?'\n\nPengesahan ini meliputi semaian dan semua plot di atas.':'';sent=bseTelegramApi_('sendMessage',{chat_id:chat,text:heading+bseApprovalSummary_(reference,envelope)+footer,reply_parameters:{message_id:Number(queueRow[3]),allow_sending_without_reply:true},reply_markup:bseApprovalMarkup_(token)});
+      const cropBundle=(envelope.candidates||[]).some(c=>c&&c.target==='Crop_Batch_Log'),footer=envelopes.length>1?'\n\nSetiap rekod disahkan secara berasingan.':cropBundle?'\n\nPengesahan ini meliputi semaian dan semua plot di atas.':'';sent=bseTelegramApi_('sendMessage',{chat_id:chat,text:heading+bseApprovalSummary_(reference,envelope)+footer,reply_parameters:{message_id:Number(queueRow[3]),allow_sending_without_reply:true},reply_markup:bseApprovalMarkupForResult_(token,envelope)});
     }catch(error){
       sheet.getRange(sheet.getLastRow(),20).setValue(bseTelegramSafeErrorDescription_(error.message||'CARD_SEND_UNCERTAIN'));SpreadsheetApp.flush();
       pending.push({source_key:sourceKey,status:'CARD_SEND_PENDING',token:token});continue;
@@ -402,11 +402,12 @@ function runBseTelegramReporterCallbackContextHarnessTests(){
 
 function runBseTransplantReallocationUiHarnessTests(){
   const result={validation:'PASS',production_write:false,candidates:[{target:'Transplant_Event_Log',validation:'PASS',missing:[],fields:{event_date:'2026-10-14',crop:'Peria',plot_ids:['M3P2'],reallocation:{required:true,batch_id:'BSE-SB-CB-20261001-001',allocation_id:'BSE-SB-CB-20261001-001-PA-001',from_plot_id:'M3P1',to_plot_id:'M3P2'}}}]};
-  const text=bseApprovalSummary_('BSE-TG-900',result),markup=bseApprovalMarkupForResult_('abc123xyz',result),buttons=markup.inline_keyboard.flat(),generic=bseApprovalMarkupForResult_('abc123xyz',{validation:'PASS',candidates:[{target:'Transplant_Event_Log',fields:{}}]}).inline_keyboard.flat(),controller=bseTelegramApprovalControllerCore_.toString();
+  const text=bseApprovalSummary_('BSE-TG-900',result),markup=bseApprovalMarkupForResult_('abc123xyz',result),buttons=markup.inline_keyboard.flat(),generic=bseApprovalMarkupForResult_('abc123xyz',{validation:'PASS',candidates:[{target:'Transplant_Event_Log',fields:{}}]}).inline_keyboard.flat(),controller=bseTelegramApprovalControllerCore_.toString(),sendPath=bseTelegramApprovalEnsureCard_.toString();
   const tests=[
     {id:'card states old plan and empty destination explicitly',pass:text.includes('Pelan semasa:')&&text.includes('M3P1 = Peria')&&text.includes('M3P2 = Tiada pelan tanaman')},
     {id:'card states reported destination and exact post-confirmation effect',pass:text.includes('Laporan transplant:')&&text.includes('M3P2 = Peria')&&text.includes('allocation Peria dipindahkan M3P1 → M3P2')&&text.includes('M3P1 menjadi tiada tanaman / tiada allocation aktif')&&text.includes('rekod transplant dibuat pada M3P2')},
     {id:'reallocation card has Benar and Batal only',pass:buttons.length===2&&buttons.some(b=>/Benar/.test(b.text))&&buttons.some(b=>/Batal/.test(b.text))&&!buttons.some(b=>/Betulkan/.test(b.text))},
+    {id:'effective approval send path uses result-aware markup',pass:/bseApprovalMarkupForResult_\(token,envelope\)/.test(sendPath)&&!/reply_markup:bseApprovalMarkup_\(token\)/.test(sendPath)},
     {id:'ordinary cards retain Benar Betulkan Batal',pass:generic.length===3&&generic.some(b=>/Betulkan/.test(b.text))},
     {id:'reallocation Batal is direct audit-only with no second reason prompt',pass:/reallocation&&reallocation\.required===true/.test(controller)&&/Batal oleh penghantar pada kad perubahan plot/.test(controller)&&/Allocation asal kekal; tiada rekod transplant\/reallocation ditulis/.test(controller)}
   ];
