@@ -1,4 +1,4 @@
-/** @OnlyCurrentDoc */
+/** @NotOnlyCurrentDoc */
 // BSE TEST harness v0.1. Core contract v2026.1 + Clerk Rules v2026.1.1.
 // Intentionally narrow deterministic parser; NOT Gemini and NOT a production writer.
 const BSE_TEST = Object.freeze({
