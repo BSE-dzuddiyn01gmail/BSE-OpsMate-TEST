@@ -222,9 +222,10 @@ function bseApprovalReferenceRows_(sheet,reference){
   return bseApprovalRows_(sheet).map((row,index)=>({row:row,index:index})).filter(item=>String(item.row[0])===String(reference));
 }
 function bseApprovalRecomputeQueueStatus_(book,reference){
-  const approval=bseTelegramApprovalSheet_(book),items=bseApprovalReferenceRows_(approval,reference),states=items.map(item=>String(item.row[17]||''));
+  const approval=bseTelegramApprovalSheet_(book),items=bseApprovalReferenceRows_(approval,reference),allStates=items.map(item=>String(item.row[17]||'')),states=allStates.filter(v=>!['SUPERSEDED_TEST','VOIDED_SUPERSEDED_TEST'].includes(v));
   const queue=bseTelegramQueue_(book),qrows=queue.getLastRow()>1?queue.getRange(2,1,queue.getLastRow()-1,BSE_TG_QUEUE_HEADERS.length).getValues():[],q=qrows.findIndex(r=>'BSE-TG-'+String(r[0])===String(reference));
-  if(q<0||!states.length)return '';
+  if(q<0||!allStates.length)return '';
+  if(!states.length)return String(qrows[q][6]||'');
   let status='';
   if(states.some(v=>/^CORRECTION_/.test(v)))status='CORRECTION_WAITING_INFO';
   else if(states.some(v=>['OPEN','CARD_SEND_PENDING'].includes(v)))status='NEEDS_HUMAN_REVIEW';
@@ -305,6 +306,13 @@ function bseTelegramReporterConfirmationCore_(book,context,input){
   bseTelegramOwnerNotice_(book,(recordSummary?recordSummary+'\n\n':'')+'Makluman TEST '+row[0]+(candidateIndex==null?'':' rekod '+(candidateIndex+1))+' telah direkodkan oleh penghantar.');
   outcome.candidate_index=candidateIndex;outcome.queue_status=status;return outcome;
 }
+function reconcileBseTelegramApprovalQueueStatusTest(reference){
+  if(bseRuntimeEnvironmentName_()!=='PILOT_TEST')throw new Error('Queue status reconcile hanya dibenarkan dalam PILOT_TEST.');
+  const value=String(reference||'').trim();if(!/^BSE-TG-\d+$/.test(value))throw new Error('Rujukan mesti BSE-TG-<update_id>.');
+  const status=bseApprovalRecomputeQueueStatus_(boundTestBook_(),value);
+  return {reference:value,status:status,production_write:false};
+}
+
 function runBseMultiRecordD048ApprovalHarnessTests(){
   const source=bseTelegramApprovalEnsureCard_.toString(),confirm=bseTelegramReporterConfirmationCore_.toString(),aggregate=bseApprovalRecomputeQueueStatus_.toString();
   const sample={validation:'PASS',production_write:false,candidates:[
@@ -327,6 +335,7 @@ function runBseMultiRecordD048ApprovalHarnessTests(){
     {id:'confirmation reconstructs only selected candidate',pass:/bseApprovalCandidateIndexFromSourceKey_/.test(confirm)&&/bseApprovalCandidateEnvelope_\(aggregate,candidateIndex\)/.test(confirm)},
     {id:'cancel does not blindly discard whole source',pass:/bseApprovalRecomputeQueueStatus_/.test(confirm)&&!/queue\.getRange\(q\+2,7\)\.setValue\('DISCARDED_BY_REPORTER'\)/.test(confirm)},
     {id:'aggregate remains open while another candidate is open',pass:/states\.some\(v=>\['OPEN','CARD_SEND_PENDING'\]\.includes\(v\)\)/.test(aggregate)},
+    {id:'superseded historical cards are excluded from aggregate terminal state',pass:/SUPERSEDED_TEST/.test(aggregate)&&/VOIDED_SUPERSEDED_TEST/.test(aggregate)&&/filter\(v=>!\['SUPERSEDED_TEST','VOIDED_SUPERSEDED_TEST'\]/.test(aggregate)},
     {id:'production boundary preserved',pass:sample.production_write===false&&e1.production_write===false&&e2.production_write===false}
   ];
   const failures=tests.filter(test=>!test.pass);if(failures.length)throw new Error('D-048 approval harness gagal: '+failures.map(test=>test.id).join(', '));return tests;
