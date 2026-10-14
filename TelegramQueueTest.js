@@ -24,7 +24,7 @@ function receiveBseTelegramTest() {
     let added=0;
     for(const update of updates) {
       if(!Number.isSafeInteger(update.update_id))throw new Error('Update ID tidak sah.');
-      if(update.callback_query){if(typeof bseImageProcessingIsCallback_==='function'&&bseImageProcessingIsCallback_(update))bseImageProcessingPersistCallback_(book,update);else if(typeof bseTelegramEvidenceIsCallback_==='function'&&bseTelegramEvidenceIsCallback_(update))bseTelegramEvidencePersistCallback_(book,update);else if(typeof bseTelegramRegistrationIsCallback_==='function'&&bseTelegramRegistrationIsCallback_(update))bseTelegramRegistrationPersistCallback_(book,update);else bseTelegramApprovalPersistCallback_(book,update);props.setProperty('BSE_TELEGRAM_OFFSET',String(update.update_id+1));continue;}
+      if(update.callback_query){if(typeof bseImageActionIsCallback_==='function'&&bseImageActionIsCallback_(update))bseImageActionPersistCallback_(book,update);else if(typeof bseImageProcessingIsCallback_==='function'&&bseImageProcessingIsCallback_(update))bseImageProcessingPersistCallback_(book,update);else if(typeof bseTelegramEvidenceIsCallback_==='function'&&bseTelegramEvidenceIsCallback_(update))bseTelegramEvidencePersistCallback_(book,update);else if(typeof bseTelegramRegistrationIsCallback_==='function'&&bseTelegramRegistrationIsCallback_(update))bseTelegramRegistrationPersistCallback_(book,update);else bseTelegramApprovalPersistCallback_(book,update);props.setProperty('BSE_TELEGRAM_OFFSET',String(update.update_id+1));continue;}
       const m=update.message||update.edited_message,edited=!!update.edited_message;
       const privateStart=m&&m.chat&&m.from&&m.chat.type==='private'&&String(m.chat.id)===String(m.from.id)&&bseTelegramPrivateOptInCommand_(m.text,me.username);
       const allowedPrivate=m&&m.chat&&m.from&&m.chat.type==='private'&&String(m.chat.id)===chat&&String(m.from.id)===user;
@@ -60,6 +60,10 @@ function receiveBseTelegramTest() {
         const report=bseTelegramReportRetrieve_(book,m);
         if(report.handled&&report.text){if(m.chat.type==='private')bseTelegramPrivateCommandReply_(m,report.text);else bseTelegramApi_('sendMessage',{chat_id:sourceChat,text:report.text,reply_parameters:{message_id:Number(m.message_id),allow_sending_without_reply:true}});}
       }
+      else if(typeof bseTelegramEcHistoryRetrieve_==='function'&&typeof bseTelegramEcHistoryCommand_==='function'&&bseTelegramEcHistoryCommand_(m&&m.text)&&(m&&m.chat&&(m.chat.type==='private'||allowedGroup))){
+        const ecHistory=bseTelegramEcHistoryRetrieve_(book,m);
+        if(ecHistory.handled&&ecHistory.text){if(m.chat.type==='private')bseTelegramPrivateCommandReply_(m,ecHistory.text);else bseTelegramApi_('sendMessage',{chat_id:sourceChat,text:ecHistory.text,reply_parameters:{message_id:Number(m.message_id),allow_sending_without_reply:true}});}
+      }
       else if(typeof bseTelegramHistoryRetrieve_==='function'&&typeof bseTelegramHistoryCommand_==='function'&&bseTelegramHistoryCommand_(m&&m.text)&&(m&&m.chat&&(m.chat.type==='private'||allowedGroup))){
         const history=bseTelegramHistoryRetrieve_(book,m);
         if(history.handled&&history.text){if(m.chat.type==='private')bseTelegramPrivateCommandReply_(m,history.text);else bseTelegramApi_('sendMessage',{chat_id:sourceChat,text:history.text,reply_parameters:{message_id:Number(m.message_id),allow_sending_without_reply:true}});}
@@ -78,6 +82,7 @@ function receiveBseTelegramTest() {
       }
       else if(rejectPromptReply){rejectReplies.push({chat_id:sourceChat,message_id:String(m.message_id),reply_to_message_id:replyId,user_id:reporter,text:typeof m.text==='string'?m.text:''});}
       else if(typeof bseImageProcessingCorrectionReceive_==='function'&&bseImageProcessingCorrectionReceive_(book,m).handled){}
+      else if((evidence=typeof bseImageActionReceive_==='function'?bseImageActionReceive_(book,m):null)&&evidence.handled){if(evidence.text){if(m&&m.chat&&m.chat.type==='private')bseTelegramPrivateCommandReply_(m,evidence.text);else bseTelegramApi_('sendMessage',{chat_id:sourceChat,text:evidence.text,reply_parameters:{message_id:Number(m.message_id),allow_sending_without_reply:true}});}}
       else if((evidence=typeof bseImageProcessingReceive_==='function'?bseImageProcessingReceive_(book,m):null)&&evidence.handled){if(evidence.text){if(m&&m.chat&&m.chat.type==='private')bseTelegramPrivateCommandReply_(m,evidence.text);else bseTelegramApi_('sendMessage',{chat_id:sourceChat,text:evidence.text,reply_parameters:{message_id:Number(m.message_id),allow_sending_without_reply:true}});}}
       else if(typeof bseTelegramEvidenceCorrectionReceive_==='function'&&bseTelegramEvidenceCorrectionReceive_(book,m).handled){}
       else if((evidence=typeof bseTelegramEvidenceReceiveMessage_==='function'?bseTelegramEvidenceReceiveMessage_(book,m):null)&&evidence.handled){if(evidence.text)bseTelegramPrivateCommandReply_(m,evidence.text);}
@@ -137,6 +142,7 @@ function receiveBseTelegramTest() {
   } catch(error) {receiverError=error;console.log('TELEGRAM_RECEIVE_ERROR: '+String(error.message||''));} finally {lock.releaseLock();}
   try{processBseTelegramApprovalCallbacks();}catch(error){console.log('APPROVAL_CALLBACK_PENDING: '+String(error.message||''));}
   try{if(typeof processBseTelegramRegistrationCallbacks==='function')processBseTelegramRegistrationCallbacks();}catch(error){console.log('REGISTRATION_CALLBACK_PENDING: '+String(error.message||''));}
+  try{if(typeof processBseImageActionCallbacksTest==='function'){const imageActionCallbacks=processBseImageActionCallbacksTest();console.log('IMAGE_ACTION_CALLBACK_DONE: '+JSON.stringify(imageActionCallbacks));}}catch(error){console.log('IMAGE_ACTION_CALLBACK_PENDING: '+String(error.message||''));}
   try{if(typeof processBseImageProcessingCallbacksTest==='function'){const imageCallbacks=processBseImageProcessingCallbacksTest();console.log('IMAGE_PROCESSING_CALLBACK_DONE: '+JSON.stringify(imageCallbacks));}}catch(error){console.log('IMAGE_PROCESSING_CALLBACK_PENDING: '+String(error.message||''));}
   try{const evidenceCallbacks=processBseTelegramEvidenceCallbacks();console.log('EVIDENCE_CALLBACK_DONE: '+JSON.stringify(evidenceCallbacks));}catch(error){console.log('EVIDENCE_CALLBACK_PENDING: '+String(error.message||''));}
   try{if(typeof processBseTelegramInventoryClarificationReplies==='function')processBseTelegramInventoryClarificationReplies();}catch(error){console.log('INVENTORY_CLARIFICATION_PENDING: '+String(error.message||''));}

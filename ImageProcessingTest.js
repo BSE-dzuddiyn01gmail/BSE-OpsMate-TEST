@@ -1,6 +1,6 @@
 /** @OnlyCurrentDoc */
 // TEST-only queued image processing.
-// User-facing modes: /image_to_text and /image_analysis as PHOTO captions.
+// User-facing modes: /image_to_text and /image_analysis as PHOTO captions, or inline chooser after a captionless PHOTO.
 // Processing output is NON_CANONICAL until explicit human review. No domain writer.
 
 const BSE_IMAGE_PROCESSING_HEADERS=[
