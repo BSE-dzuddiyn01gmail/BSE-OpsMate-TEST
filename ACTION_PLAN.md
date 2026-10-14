@@ -1,21 +1,24 @@
 # ACTION PLAN — OpsMate BSE Site B Recovery
 
 ## Current true milestone
-PILOT_TEST technical implementation is current on canonical `main` at `03d56f5`.
+PILOT_TEST technical implementation is current on canonical `main` at `8c204ff`.
 Daily Morning Digest achieved autonomous LIVE PASS on 2026-10-12; Friday Weekly Digest
 remains installed/verified but its first autonomous scheduled proof is still pending.
-Plant Replacement/Sulam is implemented on the current feature branch and has reached
-PILOT_TEST technical/runtime PASS, but its Telegram end-to-end live proof is still pending.
-Pilot acceptance, production readiness, and final handover remain NOT ACHIEVED.
+Plant Replacement/Sulam is now Telegram E2E LIVE VERIFIED, including reporter confirmation,
+TEST writer, independent Sheet read-back, exact-reference retrieval, and duplicate/idempotency proof.
+Image Processing (`/image_to_text`, `/image_analysis`) is LIVE VERIFIED with TEST Drive evidence,
+formatted Telegram review/saved summaries, Gemini transient fallback, and no canonical/domain auto-write.
+`/ai` non-canonical Gemini Q&A with agriculture File Search KB is MERGED and LIVE PASS.
+Final PILOT_TEST technical closeout audit is PASS. Production readiness and final handover remain NOT ACHIEVED because the Friday Weekly Digest still lacks its first autonomous scheduled LIVE proof and no PILOT_REAL/production promotion has been authorized.
 
 ## Locked safety
 `production_write:false`; `official_bse_write:false`; `BSE_TELEGRAM_AUTOMATION=OFF`; no Google Tasks; no official BSE write; no Telegram retry unless independently proven safe.
 
 ## Evidence snapshot
-- Canonical `origin/main`: `03d56f5` (PR #44 merged). Dirty primary repo remains preserved untouched.
+- Canonical `origin/main`: `8c204ff` (PR #51 merged). Working tree was clean before this status update.
 - PR #9 merged 12 recovery commits from `recovery/pilot-source-reconcile`.
 - Canonical source was pushed to PILOT_TEST Apps Script HEAD; no Apps Script version or deployment was created or updated.
-- Latest full PILOT_TEST regression with Plant Replacement implementation: 41/41 PASS, failed:0, `production_write:false`.
+- Latest full PILOT_TEST regression after `/ai`, Image Processing formatting/fallback, and Sulam live proof: 44/44 PASS, failed:0, `production_write:false`.
 - Independent pull/byte audit after the canonical push: 42/42 canonical files match.
 - Telegram proof: BSE-TG-746192225 and BSE-TG-746192227 each produced exactly one TEST inventory event. The latest manual flow received once, sent ACK `26`, sent approval card `28`, processed the `Benar` callback, and reached `APPROVED_TEST / VERIFIED_TEST` with queue `REPORTER_CONFIRMED`; no production write.
 - REC-018 cleanup: `TEST_ONLY_PILOT_E2E_SMOKE.gs` was deleted from the active PILOT_TEST Apps Script editor, independently read back as absent, and removed from the executor mirror. Canonical Git did not track this tombstone.
@@ -25,7 +28,10 @@ Pilot acceptance, production readiness, and final handover remain NOT ACHIEVED.
 - REC-024 final readiness audit (2026-10-08): canonical main and PILOT_TEST Apps Script executor matched. Runtime reported `PILOT_TEST`, workbook/evidence binding present, `BSE_TELEGRAM_AUTOMATION=OFF`, `production_write:false`, and `official_bse_write:false`. Callback diagnostic showed all eight persisted callbacks `PROCESSED` with no error; approval audit found no `OPEN` card. Full regression: 26/26 PASS.
 
 - Daily Morning Digest autonomous LIVE PASS (2026-10-12): Telegram message ID `167` was sent automatically for period 2026-10-11; independent Sheet read-back showed digest audit `SENT`, report audit 8/8, and trigger UID advanced from `2910103434482941952` to `5040989954461663232`. General polling remained OFF and `production_write:false`.
-- Plant Replacement/Sulam technical runtime proof (2026-10-12): deterministic parser, dedicated review/writer, retrieval/history wiring, active-allocation guard, and TEST-only schema implemented. Targeted harnesses 12/12 PASS; full regression 41/41 PASS; schema 50/50 CURRENT; source-key audit CURRENT / 0 issue. Read-only real-state preview on M3P3 at valid event date 20/10/2026 resolved crop `Peria` and replacement_count 20. Telegram live proof remains pending.
+- Plant Replacement/Sulam LIVE E2E proof (2026-10-14): `BSE-TG-746192324` parsed `20/10/2026 Sulam 1 pokok M3P3 / Tanaman: Peria`, matched ACTIVE batch `BSE-SB-CB-20260910-002` and allocation `...-PA-001`, reporter card was confirmed, callback `746192325` reached `PROCESSED`, and exactly one TEST event `BSE-SB-PR-f09986463084` was written as `VERIFIED_TEST` with `production_write:FALSE`. Independent `/retrieve BSE-TG-746192324` audit recorded `SENT | OWNER_ACTIVE`; duplicate replay left exactly one event.
+- Image Processing LIVE proof (2026-10-14): `/image_to_text` and `/image_analysis` presentation upgraded to Telegram HTML; structured Gemini summary is labelled `Rumusan`, while `Pembetulan user` appears only for a real correction. Gemini image calls use `gemini-3.1-flash-lite` primary with `gemini-3.5-flash-lite` transient 429/5xx fallback. Confirmed TEST evidence read-back used one Drive file only; latest verified file ID `1D1nAsb3mFJ5pkD831F_xauRdLKYB21zB`, size 74,152 bytes. Image Processing harness 16/16 PASS.
+- `/ai` LIVE proof (2026-10-14): isolated NON_CANONICAL Telegram Q&A merged in PR #50, with Gemini File Search agriculture KB (IRAC MoA v11.5 + DOA pesticide portal snapshot), formatted HTML replies, no canonical BSE read/write, and full regression 44/44 PASS.
+- Final PILOT_TEST closeout audit (2026-10-14): runtime `PILOT_TEST`, spreadsheet/evidence bound, general automation `OFF`, `production_write:false`, `official_bse_write:false`; schema audit 53/53 `CURRENT`; source-key audit `CURRENT` with 179 entries / 0 issue after auditor was corrected to treat terminal `OCR_DISCARDED` history as non-active lifecycle state; read-only auditor harness 8/8 PASS; approval callbacks latest state all processed and no current approval card OPEN; full regression 44/44 PASS; temporary `clasp pull` comparison confirmed 52/52 executable files byte-identical with Apps Script HEAD.
 
 ## Recovery tasks
 - REC-001 through REC-009: DONE — source/runtime audit, Owner Registry extraction, tests, and reproducible Script HEAD audit.
@@ -41,16 +47,21 @@ Pilot acceptance, production readiness, and final handover remain NOT ACHIEVED.
 - REC-025: DONE — PILOT_TEST stability cycle (2026-10-08) passed with independent Sheet read-back. Cycle 1 Benar: BSE-TG-746192241 produced exactly one `Baja NPK` `1.25 kg` inventory TEST record after reporter confirmation. Cycle 2 Betulkan: BSE-TG-746192243 (`0.40 kg`) entered correction state; replacement BSE-TG-746192245 (`0.60 kg`) produced exactly one confirmed TEST record with original-plus-correction provenance, while the root created no domain record. Cycle 3 Batal: BSE-TG-746192247 (`2.00 kg`) reached `DISCARDED_BY_REPORTER` with no inventory record. A controlled receive/worker retry with no new Telegram message created no queue, approval card, callback, or inventory duplicate. Final runtime audit retained `PILOT_TEST`, automation `OFF`, `production_write:false`, `official_bse_write:false`; full regression 26/26 PASS.
 
 ## Current operational state
-- `PILOT_TEST` only. General Telegram receive/worker polling automation kekal OFF dan manual. Daily Morning Digest 08:01 MYT = AUTONOMOUS LIVE PASS; current trigger UID `5040989954461663232`. Friday Weekly Digest 07:59 MYT = installed/verified, autonomous proof PENDING until first Friday run. Plant Replacement = technical/runtime PASS, live Telegram proof PENDING.
+- `PILOT_TEST` only. General Telegram receive/worker polling automation kekal OFF dan manual. Daily Morning Digest 08:01 MYT = AUTONOMOUS LIVE PASS; current trigger UID `5040989954461663232`. Friday Weekly Digest 07:59 MYT = installed/verified, autonomous proof PENDING until first Friday run.
+- Plant Replacement/Sulam = LIVE VERIFIED end-to-end, including exact-reference retrieval and duplicate/idempotency proof.
+- Image Processing `/image_to_text` + `/image_analysis` = LIVE VERIFIED; Drive evidence remains TEST-only and domain records are not auto-written.
+- `/ai` = LIVE PASS / NON_CANONICAL; agriculture KB retrieval is active, while live/current SISMARP retrieval remains a future enhancement rather than a PILOT_TEST closeout blocker.
 - User `913757987` is registered as active TEST owner/admin.
 - No Google Tasks, production writer, production deployment, or official BSE integration is enabled.
 
 ## Next real pilot gate
-- Execute one controlled Telegram end-to-end proof for Plant Replacement/Sulam using a factually valid ACTIVE plot/date; verify parse -> reporter card -> Benar -> TEST writer -> independent read-back -> retrieval -> no duplicate.
-- Keep Friday Weekly Digest autonomous proof pending until its first scheduled Friday run at 07:59 MYT.
-- OCR minimum PoC follows Plant Replacement live proof if BSE still requires it.
+- Final PILOT_TEST technical closeout/readiness audit: PASS on 2026-10-14.
+- Keep Friday Weekly Digest autonomous proof pending until its first scheduled Friday run at 07:59 MYT; do not mark autonomous weekly reporting verified before that real scheduled proof.
+- After the Friday scheduled proof, prepare the final PILOT_TEST handover / PILOT_REAL readiness decision without enabling production write or general Telegram polling unless separately authorized.
 - General Telegram receive/worker polling remains OFF unless separately authorized.
 
 ## Known limits
 - Apps Script cloud logs remain unavailable through clasp because its project configuration lacks a GCP project ID; this is a diagnostic gap only.
+- Drive-authorized callbacks may fail through `clasp run` Execution API even when the Apps Script owner runtime is authorized; live Drive callback proofs therefore use the Apps Script owner runtime and are independently read back from Sheet/Drive.
+- Friday Weekly Digest has not yet achieved an autonomous scheduled LIVE PASS; installed/verified is not equivalent to scheduled proof.
 - General Telegram receive/worker automation remains intentionally OFF. Dedicated reporting schedulers are separately governed; production promotion, Apps Script version/deployment update, or official BSE write still requires explicit owner authorization.
