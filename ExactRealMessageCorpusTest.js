@@ -48,10 +48,11 @@ function bseExactCorpusDispatch_(id,fixture){
   }
 
   if(id==='RM-006'){
-    result=typeof bseChlorineUsageParseMessage_==='function'?bseChlorineUsageParseMessage_(text,at):null;
-    route=result?'INPUT_USAGE_CHLORINE':'UNSUPPORTED_DETERMINISTIC';
-    assertions.push(bseExactAssert_('chlorine becomes per-plot Input Usage',result&&result.validation==='PASS'&&result.candidates.length===4&&result.candidates.every(c=>c.target==='Input_Usage_Log'&&c.fields.item_name==='Chlorine Tablets'&&c.fields.quantity===1&&c.fields.unit==='botol')&&result.candidates.map(c=>c.fields.plot_id).join('|')==='M1P1|M1P2|M4P1|M4P2'));
-    assertions.push(bseExactAssert_('production boundary',result&&result.production_write===false));
+    result=bseChlorineTreatmentParseMessage_(text,at); route=result?'TREATMENT_CHLORINE':'UNSUPPORTED_DETERMINISTIC';
+    const c=result&&result.candidates&&result.candidates[0],f=c&&c.fields||{};
+    assertions.push(bseExactAssert_('chlorine routes to Treatment, not inventory',result&&result.production_write===false&&result.candidates.length===1&&c.target==='Treatment_Event_Log'));
+    assertions.push(bseExactAssert_('legacy chlorine plots and dosage preserved',f.plot_ids&&f.plot_ids.join('|')==='M1P1|M1P2|M4P1|M4P2'&&f.treatment_description==='Chlorine Tablets - 1 botol'));
+    assertions.push(bseExactAssert_('crop remains unresolved until lifecycle allocation context',c&&c.validation==='NEED_INFO'&&c.missing.includes('crop')));
     return bseExactCorpusResult_(id,fixture,route,result,assertions,warnings);
   }
 

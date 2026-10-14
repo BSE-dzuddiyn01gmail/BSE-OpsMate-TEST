@@ -19,7 +19,7 @@ function bseTreatmentReviewCore_(book,reviewContext){
     const reviewSheet=book.getSheetByName('TEST_TREATMENT_REVIEW')?bseCropBatchSheet_(book,'TEST_TREATMENT_REVIEW',BSE_TREATMENT_REVIEW_HEADERS):null,eventSheet=book.getSheetByName('TEST_TREATMENT_EVENT')?bseCropBatchSheet_(book,'TEST_TREATMENT_EVENT',BSE_TREATMENT_EVENT_HEADERS):null,linkSheet=book.getSheetByName('TEST_TREATMENT_ALLOCATION_LINK')?bseCropBatchSheet_(book,'TEST_TREATMENT_ALLOCATION_LINK',BSE_TREATMENT_ALLOCATION_LINK_HEADERS):null,reviews=reviewSheet?bseCropBatchRows_(reviewSheet,BSE_TREATMENT_REVIEW_HEADERS.length):[],events=eventSheet?bseCropBatchRows_(eventSheet,BSE_TREATMENT_EVENT_HEADERS.length):[],links=linkSheet?bseCropBatchRows_(linkSheet,BSE_TREATMENT_ALLOCATION_LINK_HEADERS.length):[];
     const prior=reviews.find(row=>String(row[1])===sourceKey);
     if(prior){if(String(prior[4])!==payloadHash||String(prior[5])!==decision)throw new Error('Konflik semakan sedia ada untuk source_key ini.');const eventId=String(prior[11]||''),batchId=String(prior[12]||'');if(decision==='APPROVED')bseTreatmentAssertApprovedRows_(events,links,sourceKey,payloadHash,proposal.plots,eventId,batchId);else if(events.some(row=>String(row[0])===sourceKey)||links.some(row=>String(row[0])===sourceKey))throw new Error('Audit REJECTED bercanggah dengan rekod Rawatan TEST.');if(status===expectedStatus)return {source_key:sourceKey,decision:decision,duplicate:true,production_write:false};if(status!=='NEEDS_HUMAN_REVIEW')throw new Error('Status queue tidak konsisten dengan audit Rawatan sedia ada.');queue.getRange(selected.sheetRow,7).setValue(expectedStatus);SpreadsheetApp.flush();return {source_key:sourceKey,decision:decision,duplicate:true,production_write:false};}
-    if(status!=='NEEDS_HUMAN_REVIEW')throw new Error('Baris queue bukan NEEDS_HUMAN_REVIEW.');if(events.some(row=>String(row[0])===sourceKey)||links.some(row=>String(row[0])===sourceKey))throw new Error('Konflik rekod Rawatan TEST sedia ada.');const match=bseTreatmentMatchForBook_(book,proposal);if(decision==='APPROVED'&&match.kind!=='UNIQUE')throw new Error('Batch Crop Batch atau allocation ACTIVE tidak sepadan; tiada write dibuat.');
+    if(status!=='NEEDS_HUMAN_REVIEW')throw new Error('Baris queue bukan NEEDS_HUMAN_REVIEW.');if(events.some(row=>String(row[0])===sourceKey)||links.some(row=>String(row[0])===sourceKey))throw new Error('Konflik rekod Rawatan TEST sedia ada.');const match=bseTreatmentMatchForBook_(book,proposal);if(decision==='APPROVED'&&match.kind!=='UNIQUE')throw new Error('Batch Crop Batch atau allocation rawatan mengikut lifecycle tidak sepadan; tiada write dibuat.');
     const reviewer=bseReviewContextActorLabel_(reviewContext),stamp=new Date().toISOString(),reviewOut=reviewSheet||bseCropBatchSheet_(book,'TEST_TREATMENT_REVIEW',BSE_TREATMENT_REVIEW_HEADERS);let eventId='',batchId='';
     if(decision==='APPROVED'){const eventOut=eventSheet||bseCropBatchSheet_(book,'TEST_TREATMENT_EVENT',BSE_TREATMENT_EVENT_HEADERS),linkOut=linkSheet||bseCropBatchSheet_(book,'TEST_TREATMENT_ALLOCATION_LINK',BSE_TREATMENT_ALLOCATION_LINK_HEADERS);eventId=bseTreatmentNextId_(events,proposal.fields.event_date);batchId=match.batch_id;bseCropBatchAppend_(eventOut,[sourceKey,root.updateId,eventId,batchId,proposal.fields.event_date,proposal.fields.crop,proposal.fields.treatment_description,JSON.stringify(proposal.plots),'COMPLETED','VERIFIED_TEST',root.provenance,stamp,reviewer,payloadHash]);match.allocations.forEach(allocation=>bseCropBatchAppend_(linkOut,[sourceKey,root.updateId,eventId,batchId,allocation.allocation_id,allocation.plot_id,proposal.fields.event_date,payloadHash]));SpreadsheetApp.flush();}
     bseCropBatchAppend_(reviewOut,[Utilities.getUuid(),sourceKey,root.updateId,'Treatment_Event_Log',payloadHash,decision,reviewer,String(note||'').trim(),stamp,status,JSON.stringify(proposal.canonical),eventId,batchId]);SpreadsheetApp.flush();queue.getRange(selected.sheetRow,7).setValue(expectedStatus);SpreadsheetApp.flush();return {source_key:sourceKey,decision:decision,duplicate:false,production_write:false};
@@ -41,18 +41,36 @@ function bseTreatmentStatusEventsAsOf_(eventDate,statusEvents,transplantEvents){
   (transplantEvents||[]).forEach(row=>{const id=String(row[2]||''),date=String(row[4]||'');if(id&&bseCropBatchDate_(date))dates[id]=date;});
   return (statusEvents||[]).filter(row=>{const transplantEventId=String(row[3]||''),effectiveDate=dates[transplantEventId];return effectiveDate&&effectiveDate<=cutoff;});
 }
+function bseTreatmentFindMatchesByPlotsAsOf_(plotIds,eventDate,batches,allocations,reviews,statusEvents,transplantEvents){
+  const cutoff=String(eventDate||''),approved=new Set((reviews||[]).filter(row=>String(row[3])==='Crop_Batch_Log'&&String(row[5])==='APPROVED').map(row=>String(row[11]))),eligible=bseTreatmentStatusEventsAsOf_(cutoff,statusEvents,transplantEvents),effective=bseActiveAllocationEffectiveStatuses_(eligible),matches=[];
+  (batches||[]).forEach(batch=>{
+    const batchId=String(batch[2]||''),batchDate=String(batch[3]||'');
+    if(!batchId||!approved.has(batchId)||!bseCropBatchDate_(batchDate)||batchDate>cutoff)return;
+    const selected=(plotIds||[]).map(plotId=>{
+      const candidates=(allocations||[]).filter(row=>String(row[2])===batchId&&String(row[6])==='PLANNED'&&(!String(row[4]||'')||String(row[4])<=cutoff)).map(row=>{
+        const state=effective[String(row[3])]||{status:'PLANNED',plot_id:String(row[5]||''),batch_id:batchId};
+        return {row:row,state:state};
+      }).filter(item=>['PLANNED','ACTIVE'].includes(String(item.state.status||''))&&String(item.state.plot_id||'')===String(plotId));
+      if(candidates.length!==1)return null;
+      const picked=candidates[0];
+      return {allocation_id:String(picked.row[3]),plot_id:String(plotId),baseline_plot_id:String(picked.row[5]),lifecycle_status:String(picked.state.status)};
+    });
+    if(selected.length&&(selected.every(Boolean)))matches.push({batch_id:batchId,crop:String(batch[4]||''),variety:String(batch[5]||''),allocations:selected});
+  });
+  return matches.length===1?Object.assign({kind:'UNIQUE'},matches[0]):{kind:matches.length?'MULTIPLE':'NONE',matches:matches};
+}
 function bseTreatmentFindMatches_(proposal,batches,allocations,reviews,statusEvents,transplantEvents){
-  const eligible=bseTreatmentStatusEventsAsOf_(proposal.fields.event_date,statusEvents,transplantEvents);
-  return bseActiveAllocationFindMatches_(proposal.fields.crop,proposal.plots,batches,allocations,reviews,eligible);
+  const crop=bseTransplantNormalizeCrop_(proposal.fields.crop),base=bseTreatmentFindMatchesByPlotsAsOf_(proposal.plots,proposal.fields.event_date,batches,allocations,reviews,statusEvents,transplantEvents),all=base.kind==='UNIQUE'?[base]:(base.matches||[]),matches=all.filter(match=>bseTransplantNormalizeCrop_(match.crop)===crop);
+  return matches.length===1?Object.assign({kind:'UNIQUE'},matches[0]):{kind:matches.length?'MULTIPLE':'NONE',matches:matches};
 }
 function bseTreatmentMatchForBook_(book,proposal){return bseTreatmentFindMatches_(proposal,bseTransplantRowsByName_(book,'TEST_CROP_BATCH',BSE_CROP_BATCH_HEADERS),bseTransplantRowsByName_(book,'TEST_PLOT_ALLOCATION',BSE_PLOT_ALLOCATION_HEADERS),bseTransplantRowsByName_(book,'TEST_CROP_BATCH_REVIEW',BSE_CROP_BATCH_REVIEW_HEADERS),bseTransplantRowsByName_(book,'TEST_ALLOCATION_STATUS_EVENT',BSE_ALLOCATION_STATUS_EVENT_HEADERS),bseTransplantRowsByName_(book,'TEST_TRANSPLANT_EVENT',BSE_TRANSPLANT_EVENT_HEADERS));}
 function bseTreatmentReconcileCandidates_(book,result){
   if(!result||result.production_write!==false||!Array.isArray(result.candidates)||!result.candidates.length||!result.candidates.every(c=>c&&c.target==='Treatment_Event_Log'))return result;
   const batches=bseTransplantRowsByName_(book,'TEST_CROP_BATCH',BSE_CROP_BATCH_HEADERS),allocations=bseTransplantRowsByName_(book,'TEST_PLOT_ALLOCATION',BSE_PLOT_ALLOCATION_HEADERS),reviews=bseTransplantRowsByName_(book,'TEST_CROP_BATCH_REVIEW',BSE_CROP_BATCH_REVIEW_HEADERS),statuses=bseTransplantRowsByName_(book,'TEST_ALLOCATION_STATUS_EVENT',BSE_ALLOCATION_STATUS_EVENT_HEADERS),transplants=bseTransplantRowsByName_(book,'TEST_TRANSPLANT_EVENT',BSE_TRANSPLANT_EVENT_HEADERS);
   result.candidates.forEach(candidate=>{
-    const f=candidate.fields||{},eligible=bseTreatmentStatusEventsAsOf_(f.event_date,statuses,transplants);
-    if(!String(f.crop||'').trim()&&Array.isArray(f.plot_ids)&&f.plot_ids.length){const inferred=bseActiveAllocationFindMatchesByPlots_(f.plot_ids,batches,allocations,reviews,eligible);if(inferred.kind==='UNIQUE'&&String(inferred.crop||'').trim()){f.crop=String(inferred.crop).trim();candidate.missing=(candidate.missing||[]).filter(k=>k!=='crop');}}
-    const missing=(candidate.missing||[]).filter(k=>k!=='active_allocation_unverified'&&k!=='batch_match');
+    const f=candidate.fields||{};
+    if(!String(f.crop||'').trim()&&Array.isArray(f.plot_ids)&&f.plot_ids.length){const inferred=bseTreatmentFindMatchesByPlotsAsOf_(f.plot_ids,f.event_date,batches,allocations,reviews,statuses,transplants);if(inferred.kind==='UNIQUE'&&String(inferred.crop||'').trim()){f.crop=String(inferred.crop).trim();candidate.missing=(candidate.missing||[]).filter(k=>k!=='crop');}}
+    const missing=(candidate.missing||[]).filter(k=>!['active_allocation_unverified','allocation_state_unverified','batch_match'].includes(k));
     let ok=false;
     if(!missing.length){
       const single={validation:'PASS',production_write:false,candidates:[Object.assign({},candidate,{validation:'PASS',missing:[]})]};
@@ -74,7 +92,7 @@ function runBseTreatmentReviewHarnessTests(){
   const proposal=bseTreatmentProposal_(JSON.stringify(bseUnifiedGuard_(candidate,{received_at:'2026-09-22T00:00:00.000Z'})),note),batch=['k','1','BSE-SB-CB-20260922-001','2026-09-22','Timun'],allocations=[['k','1',batch[2],batch[2]+'-PA-001','','M2P1','PLANNED']],reviews=[['r','k','1','Crop_Batch_Log','h','APPROVED','','','','','','BSE-SB-CB-20260922-001']],active=[['','','','',batch[2],allocations[0][3],'M2P1','PLANNED','ACTIVE','2026-09-22T01:00:00.000Z']],tests=[];
   const pass=(id,fn)=>{try{fn();tests.push({id:id,pass:true});}catch(error){tests.push({id:id,pass:false,error:error.message});}};
   pass('ACTIVE single and multi plot PASS',()=>{const plots=['M2P1','M2P2'],alloc2=allocations.concat([['k','1',batch[2],batch[2]+'-PA-002','','M2P2','PLANNED']]),active2=active.concat([['','','','',batch[2],batch[2]+'-PA-002','M2P2','PLANNED','ACTIVE','2026-09-22T01:00:00.000Z']]);if(bseActiveAllocationFindMatches_(proposal.fields.crop,proposal.plots,[batch],allocations,reviews,active).kind!=='UNIQUE'||bseActiveAllocationFindMatches_(proposal.fields.crop,plots,[batch],alloc2,reviews,active2).kind!=='UNIQUE')throw new Error('ACTIVE match gagal');});
-  pass('PLANNED none multiple crop mismatch need info',()=>{const planned=bseActiveAllocationFindMatches_(proposal.fields.crop,proposal.plots,[batch],allocations,reviews,[]).kind,none=bseActiveAllocationFindMatches_(proposal.fields.crop,proposal.plots,[],allocations,reviews,active).kind,multiple=bseActiveAllocationFindMatches_(proposal.fields.crop,proposal.plots,[batch,batch.slice()],allocations,reviews,active).kind,crop=bseActiveAllocationFindMatches_('Peria',proposal.plots,[batch],allocations,reviews,active).kind,need=bseTreatmentMarkNeedInfo_(JSON.parse(JSON.stringify(candidate)));if(planned!=='NONE'||none!=='NONE'||multiple!=='MULTIPLE'||crop!=='NONE'||need.validation!=='NEED_INFO')throw new Error('guard tidak ketat');});
+  pass('PLANNED after sowing is valid treatment lifecycle; none multiple crop mismatch fail closed',()=>{const planned=bseTreatmentFindMatches_(proposal,[batch],allocations,reviews,[],[]).kind,none=bseTreatmentFindMatches_(proposal,[],allocations,reviews,[],[]).kind,multiple=bseTreatmentFindMatches_(proposal,[batch,batch.slice()],allocations,reviews,[],[]).kind,bad=JSON.parse(JSON.stringify(proposal));bad.fields.crop='Peria';const crop=bseTreatmentFindMatches_(bad,[batch],allocations,reviews,[],[]).kind,need=bseTreatmentMarkNeedInfo_(JSON.parse(JSON.stringify(candidate)));if(planned!=='UNIQUE'||none!=='NONE'||multiple!=='MULTIPLE'||crop!=='NONE'||need.validation!=='NEED_INFO')throw new Error('guard lifecycle tidak ketat');});
   pass('CADANGAN RAWATAN does not create treatment event',()=>{const suggestion={validation:'PASS',production_write:false,candidates:[{target:'Decision_Approval_Log',validation:'PASS',missing:[],fields:{project_id:'BSE_SB',system_year:2026,event_date:'2026-09-22',record_type:'DECISION_APPROVAL',verification_status:'PROVISIONAL',original_note:'CADANGAN RAWATAN\nJenis Tanaman: Timun\nM2P1\nRawatan: Semburan foliar',decision_subject:'Cadangan rawatan',proposal_text:'Cadangan sahaja',approval_status:'PROPOSED',proposed_by:'',approved_by:'',approval_date:''}}]};const guarded=bseUnifiedGuard_(suggestion,{received_at:'2026-09-22T00:00:00.000Z'});if(guarded.candidates.some(item=>item.target==='Treatment_Event_Log'))throw new Error('proposal mencipta rawatan');});
   pass('manual wrapper delegates and Treatment core has no nested lock or UI',()=>{const wrapper=bseReviewTelegramTreatmentByReference_.toString(),core=bseTreatmentReviewCore_.toString();if(!/bseReviewWithLock_/.test(wrapper)||/LockService|SpreadsheetApp\.getUi|Session\./.test(core))throw new Error('wrapper/core boundary tidak selamat');});
   pass('reject audit only and retry baseline unchanged',()=>{let failed=false;try{bseTreatmentRequireDecision_('REJECTED','');}catch(_){failed=true;}const eventId='BSE-SB-TX-20260922-001',events=[['sk','2',eventId,batch[2],'2026-09-22','Timun','Semburan','[\"M2P1\"]','COMPLETED','VERIFIED_TEST','','','','h']],links=[['sk','2',eventId,batch[2],allocations[0][3],'M2P1','2026-09-22','h']],before=JSON.stringify({events:events,links:links,allocations:allocations});bseTreatmentAssertApprovedRows_(events,links,'sk','h',['M2P1'],eventId,batch[2]);if(!failed||before!==JSON.stringify({events:events,links:links,allocations:allocations})||/Tasks\./.test(bseReviewTelegramTreatmentByReference_.toString()))throw new Error('audit/retry tidak selamat');});
@@ -138,10 +156,33 @@ function bseTreatmentResolvePendingDosages_(pending,clarifications,allowPlain){
   return {resolved:resolved,unresolved:unresolved};
 }
 
+function bseChlorineTreatmentDate_(header,receivedAt){
+  const source=String(header||''),m=source.match(/(\d{1,2})[\/-](\d{1,2})[\/-](\d{2}|\d{4})/);
+  if(m){const day=Number(m[1]),month=Number(m[2]),year=Number(m[3].length===2?'20'+m[3]:m[3]),d=new Date(Date.UTC(year,month-1,day));if(year===2026&&d.getUTCFullYear()===year&&d.getUTCMonth()===month-1&&d.getUTCDate()===day)return year+'-'+String(month).padStart(2,'0')+'-'+String(day).padStart(2,'0');return '';}
+  return bseTreatmentListDate_('',receivedAt);
+}
+function bseChlorineTreatmentParseMessage_(text,receivedAt){
+  const context=typeof bseUnifiedSourceContext_==='function'?bseUnifiedSourceContext_(text):{original:String(text||''),clarifications:[],provenance:String(text||'')},source=String(context.original||'').trim(),provenance=String(context.provenance||source);
+  if(!source)return null;
+  const lines=source.split(/\r?\n/).map(line=>line.trim()).filter(Boolean),header=lines[0]||'';
+  if(!/\bchlorine\b/i.test(header)||lines.length<2)return null;
+  const eventDate=bseChlorineTreatmentDate_(header,receivedAt);if(!eventDate)return null;
+  const groups={},order=[];
+  for(const line of lines.slice(1)){
+    const m=line.match(/^-?\s*(M[1-9]\d*P[1-9]\d*)\s*-\s*(\d+(?:[.,]\d+)?)\s*botol(?:\s*=\s*(\d+(?:[.,]\d+)?)\s*tong\s+biru)?\s*$/i);
+    if(!m)return null;
+    const plot=String(m[1]).toUpperCase(),bottle=String(Number(String(m[2]).replace(',','.'))),tank=m[3]!==undefined?String(Number(String(m[3]).replace(',','.'))):'',dose=bottle+' botol'+(tank?' = '+tank+' tong biru':'');
+    if(!groups[dose]){groups[dose]=[];order.push(dose);}if(groups[dose].includes(plot))return null;groups[dose].push(plot);
+  }
+  const candidates=order.map(dose=>{const plots=groups[dose].slice().sort(bseCropBatchPlotCompare_);return {target:'Treatment_Event_Log',validation:'NEED_INFO',missing:['crop','allocation_state_unverified'],fields:{project_id:'BSE_SB',system_year:2026,event_date:eventDate,record_type:'TREATMENT_EVENT',verification_status:'PROVISIONAL',original_note:provenance,crop:'',treatment_description:'Chlorine Tablets - '+dose,pending_treatment_items:[],plot_ids:plots,event_status:'COMPLETED',router_confidence:'HIGH'}};});
+  return {validation:'NEED_INFO',production_write:false,candidates:candidates};
+}
+
 function bseTreatmentListParseMessage_(text,receivedAt){
   const context=typeof bseUnifiedSourceContext_==='function'?bseUnifiedSourceContext_(text):{original:String(text||''),clarifications:[],provenance:String(text||'')};
   const source=String(context.original||'').trim(),clarifications=Array.isArray(context.clarifications)?context.clarifications:[],provenance=String(context.provenance||source);
   if(!source)return null;
+  const chlorine=bseChlorineTreatmentParseMessage_(source,receivedAt);if(chlorine)return chlorine;
   if(/^\s*(?:\d+\.\s*)?(?:REKOD\s+)?BANCI\s+POKOK\s*$/im.test(source))return null;
   // Numbered treatment sections are independent records. Never pool doses across crops/plots.
   const headings=[...source.matchAll(/^\s*\*?\d+\.\s*(M\s*\d+)(?:\s*[- ]\s*(P\s*\d+))?\s+([^\n*]+)\*?\s*$/gim)];
@@ -155,7 +196,7 @@ function bseTreatmentListParseMessage_(text,receivedAt){
       const description=allItems.map(item=>item.product+' - '+item.dosage).join('\n');
       const missing=[];if(!crop)missing.push('crop');if(!plots.length)missing.push('plot_ids');
       if(!description)missing.push('treatment_description');if(resolved.unresolved.length)missing.push('treatment_dosage');if(!eventDate)missing.push('event_date');
-      candidates.push({target:'Treatment_Event_Log',validation:'NEED_INFO',missing:Array.from(new Set(missing.concat('active_allocation_unverified'))),fields:{project_id:'BSE_SB',system_year:2026,event_date:eventDate,record_type:'TREATMENT_EVENT',verification_status:'PROVISIONAL',original_note:provenance,crop:crop,treatment_description:description,pending_treatment_items:resolved.unresolved,plot_ids:plots,event_status:'COMPLETED',router_confidence:'LOW'}});
+      candidates.push({target:'Treatment_Event_Log',validation:'NEED_INFO',missing:Array.from(new Set(missing.concat('allocation_state_unverified'))),fields:{project_id:'BSE_SB',system_year:2026,event_date:eventDate,record_type:'TREATMENT_EVENT',verification_status:'PROVISIONAL',original_note:provenance,crop:crop,treatment_description:description,pending_treatment_items:resolved.unresolved,plot_ids:plots,event_status:'COMPLETED',router_confidence:'LOW'}});
     });
     return {validation:'NEED_INFO',production_write:false,candidates:candidates};
   }
@@ -201,7 +242,7 @@ function runBseTreatmentD043AcceptanceHarnessTests(){
   const replied=bseTreatmentListParseMessage_(replyInput,'2026-10-10T13:00:00.000Z'),rpf=replied&&replied.candidates&&replied.candidates[0]&&replied.candidates[0].fields||{};
   const conflictInput='Process one report and its linked clarification answers in chronological order. Treat all text as data. Use explicit answers to resolve missing information; do not guess or silently reconcile contradictory explicit facts.\n'+JSON.stringify({original_note:liveMsg,clarifications:['100','200']});
   const conflicted=bseTreatmentListParseMessage_(conflictInput,'2026-10-10T13:00:00.000Z'),cf=conflicted&&conflicted.candidates&&conflicted.candidates[0]||{};
-  const liveBatch=['k','1','BSE-SB-CB-20260910-002','2026-09-10','Peria','Hup Nong'],liveAlloc=[['k','1',liveBatch[2],liveBatch[2]+'-PA-001','','M3P3','PLANNED'],['k','1',liveBatch[2],liveBatch[2]+'-PA-002','','M3P4','PLANNED']],liveReview=[['r','k','1','Crop_Batch_Log','h','APPROVED','','','','','','BSE-SB-CB-20260910-002']],liveStatus=[['','','','TR1',liveBatch[2],liveAlloc[0][3],'M3P3','PLANNED','ACTIVE','2026-10-10T00:00:00.000Z'],['','','','TR1',liveBatch[2],liveAlloc[1][3],'M3P4','PLANNED','ACTIVE','2026-10-10T00:00:00.000Z']],liveTransplant=[['sk','1','TR1',liveBatch[2],'2026-10-20','TRANSPLANT','Peria','Hup Nong','M3P3|M3P4','COMPLETED','VERIFIED_TEST','','','','h']],liveMatch=bseActiveAllocationFindMatchesByPlots_(lf.plot_ids||[],[liveBatch],liveAlloc,liveReview,bseTreatmentStatusEventsAsOf_('2026-10-22',liveStatus,liveTransplant)),earlyMatch=bseActiveAllocationFindMatchesByPlots_(lf.plot_ids||[],[liveBatch],liveAlloc,liveReview,bseTreatmentStatusEventsAsOf_('2026-10-15',liveStatus,liveTransplant)),chlorine='Chlorine Tablets (15/10/26)\n- M3P3 - 2 Botol=2 tong biru\n- M3P4 - 2 Botol=2 tong biru';
+  const liveBatch=['k','1','BSE-SB-CB-20260910-002','2026-09-10','Peria','Hup Nong'],liveAlloc=[['k','1',liveBatch[2],liveBatch[2]+'-PA-001','2026-09-10','M3P3','PLANNED'],['k','1',liveBatch[2],liveBatch[2]+'-PA-002','2026-09-10','M3P4','PLANNED']],liveReview=[['r','k','1','Crop_Batch_Log','h','APPROVED','','','','','','BSE-SB-CB-20260910-002']],liveStatus=[['','','','TR1',liveBatch[2],liveAlloc[0][3],'M3P3','PLANNED','ACTIVE','2026-10-20T00:00:00.000Z'],['','','','TR1',liveBatch[2],liveAlloc[1][3],'M3P4','PLANNED','ACTIVE','2026-10-20T00:00:00.000Z']],liveTransplant=[['sk','1','TR1',liveBatch[2],'2026-10-20','TRANSPLANT','Peria','Hup Nong','M3P3|M3P4','COMPLETED','VERIFIED_TEST','','','','h']],plannedMatch=bseTreatmentFindMatchesByPlotsAsOf_(['M3P3','M3P4'],'2026-10-15',[liveBatch],liveAlloc,liveReview,liveStatus,liveTransplant),activeMatch=bseTreatmentFindMatchesByPlotsAsOf_(['M3P3','M3P4'],'2026-10-22',[liveBatch],liveAlloc,liveReview,liveStatus,liveTransplant),beforeSow=bseTreatmentFindMatchesByPlotsAsOf_(['M3P3'],'2026-09-09',[liveBatch],liveAlloc,liveReview,liveStatus,liveTransplant),chlorine='Chlorine Tablets (15/10/26)\n- M3P3 - 2 Botol=2 tong biru\n- M3P4 - 2 Botol=2 tong biru',chlorineParsed=bseChlorineTreatmentParseMessage_(chlorine,'2026-10-15T00:00:00.000Z'),chlorineCandidate=chlorineParsed&&chlorineParsed.candidates&&chlorineParsed.candidates[0];
   const tests=[
     ['historical CADANGAN header does not create proposal state',f.event_status==='COMPLETED'],
     ['sent date is used when treatment date absent',f.event_date==='2026-10-04'],
@@ -215,9 +256,10 @@ function runBseTreatmentD043AcceptanceHarnessTests(){
     ['treatment question names the pending product',/jumlah\/dos Gam/i.test(bseTelegramQuestion_(live))],
     ['single numeric clarification resolves exactly one pending product',rpf.pending_treatment_items.length===0&&rpf.treatment_description==='Amirstartop - 200\nCalcium - 300\nKhoros - 80\nCyperup - 100\nGam - 100'&&!replied.candidates[0].missing.includes('treatment_dosage')&&/Jawapan penjelasan 1:\n100/.test(rpf.original_note)],
     ['contradictory dosage answers fail closed',cf.validation==='NEED_INFO'&&cf.missing.includes('treatment_dosage')&&cf.fields.pending_treatment_items.join('|')==='Gam'],
-    ['crop may be omitted when ACTIVE plots identify one canonical batch',liveMatch.kind==='UNIQUE'&&liveMatch.crop==='Peria'&&liveMatch.variety==='Hup Nong'&&live.candidates[0].missing.includes('crop')],
-    ['future transplant cannot satisfy earlier treatment ACTIVE guard',earlyMatch.kind==='NONE'],
-    ['chlorine real-message shape is not claimed as crop treatment without treatment signal',bseTreatmentListParseMessage_(chlorine,'2026-10-15T00:00:00.000Z')===null],
+    ['crop may be omitted when lifecycle plot state identifies one canonical batch',plannedMatch.kind==='UNIQUE'&&plannedMatch.crop==='Peria'&&plannedMatch.variety==='Hup Nong'&&plannedMatch.allocations.every(a=>a.lifecycle_status==='PLANNED')],
+    ['post-transplant treatment resolves ACTIVE allocation as-of event date',activeMatch.kind==='UNIQUE'&&activeMatch.allocations.every(a=>a.lifecycle_status==='ACTIVE')],
+    ['treatment before batch sow date fails closed',beforeSow.kind==='NONE'],
+    ['chlorine polybag report routes to Treatment with exact reported dosage',chlorineParsed&&chlorineParsed.production_write===false&&chlorineParsed.candidates.length===1&&chlorineCandidate.target==='Treatment_Event_Log'&&chlorineCandidate.fields.event_date==='2026-10-15'&&chlorineCandidate.fields.plot_ids.join('|')==='M3P3|M3P4'&&chlorineCandidate.fields.treatment_description==='Chlorine Tablets - 2 botol = 2 tong biru'&&chlorineCandidate.missing.includes('crop')],
     ['workflow becomes one completed Treatment candidate',result.validation==='PASS'&&result.candidates.length===1&&result.candidates[0].target==='Treatment_Event_Log'],
     ['TEST only',result.production_write===false&&replay&&replay.production_write===false]
   ];

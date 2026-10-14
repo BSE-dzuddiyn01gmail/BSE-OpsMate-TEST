@@ -129,36 +129,8 @@ function bseInputUsageConfirmedSummary_(book,reference,outcome){
   const rows=bseInputUsageRows_(bseInputUsageSheet_(book,'TEST_INPUT_USAGE_LOG',BSE_INPUT_USAGE_LOG_HEADERS),BSE_INPUT_USAGE_LOG_HEADERS.length).filter(r=>String(r[0])===key);
   return bseInputUsageConfirmedSummaryFromRows_(reference,rows);
 }
-
-function bseChlorineUsageDate_(header,receivedAt){
-  const m=String(header||'').match(/\((\d{1,2})[\/-](\d{1,2})[\/-](\d{2}|\d{4})\)\s*$/);
-  if(!m)return bseInventoryMalaysiaDate_(receivedAt);
-  const day=Number(m[1]),month=Number(m[2]),year=Number(m[3].length===2?'20'+m[3]:m[3]),d=new Date(Date.UTC(year,month-1,day));
-  return year===2026&&d.getUTCFullYear()===year&&d.getUTCMonth()===month-1&&d.getUTCDate()===day?year+'-'+String(month).padStart(2,'0')+'-'+String(day).padStart(2,'0'):'';
-}
-function bseChlorineUsageParseMessage_(text,receivedAt){
-  const context=typeof bseUnifiedSourceContext_==='function'?bseUnifiedSourceContext_(text):{original:String(text||''),provenance:String(text||'')};
-  const source=String(context.original||'').trim(),provenance=String(context.provenance||source);
-  if(!source)return null;
-  const lines=source.split(/\r?\n/).map(line=>line.trim()).filter(Boolean),header=lines[0]||'';
-  if(!/\bchlorine\b/i.test(header)||/\bM[1-9]\d*P[1-9]\d*\b/i.test(header)||lines.length<2)return null;
-  const eventDate=bseChlorineUsageDate_(header,receivedAt);if(!eventDate)return null;
-  const rows=[],seen=new Set();
-  for(const line of lines.slice(1)){
-    const m=line.match(/^-?\s*(M[1-9]\d*P[1-9]\d*)\s*-\s*(\d+(?:[.,]\d+)?)\s*botol(?:\s*=\s*(\d+(?:[.,]\d+)?)\s*tong\s+biru)?\s*$/i);
-    if(!m)return null;
-    const plot=String(m[1]).toUpperCase(),quantity=Number(String(m[2]).replace(',','.'));
-    if(!Number.isFinite(quantity)||quantity<=0||seen.has(plot))return null;
-    seen.add(plot);rows.push({plot_id:plot,quantity:quantity});
-  }
-  if(!rows.length)return null;
-  const candidates=rows.map(row=>({target:'Input_Usage_Log',validation:'PASS',missing:[],fields:{project_id:'BSE_SB',system_year:2026,event_date:eventDate,record_type:'INPUT_USAGE',verification_status:'PROVISIONAL',original_note:provenance,plot_id:row.plot_id,item_name:'Chlorine Tablets',quantity:row.quantity,unit:'botol'}}));
-  return {validation:'PASS',production_write:false,candidates:candidates};
-}
 function runBseInputUsageInventoryMappingHarnessTests(){
   const note='17/9/2026 M2P3 pagi tadi selesai spray Abamectin. Jumlah sebenar Abamectin digunakan 100 ml. Kelulusan Manager belum disahkan.';
-  const chlorineOld=bseChlorineUsageParseMessage_('(gambar pil chlorine)\nM1P1 - 1 botol\nM1P2 - 1 botol\n\nM4P1 - 1 botol\nM4P2 - 1 botol','2026-09-21T04:00:00.000Z');
-  const chlorineLiveText='Chlorine Tablets (15/10/26)\n- M3P3 - 2 Botol=2 tong biru\n- M3P4 - 2 Botol=2 tong biru',chlorineLive=bseChlorineUsageParseMessage_(chlorineLiveText,'2026-10-15T00:00:00.000Z'),chlorineGuarded=chlorineLive?bseUnifiedGuard_(JSON.parse(JSON.stringify(chlorineLive)),{received_at:'2026-10-15T00:00:00.000Z'}):null;
   const result={validation:'PASS',production_write:false,candidates:[{target:'Input_Usage_Log',validation:'PASS',missing:[],fields:{project_id:'BSE_SB',system_year:2026,event_date:'2026-09-17',record_type:'INPUT_USAGE',verification_status:'PROVISIONAL',original_note:note,plot_id:'M2P3',item_name:'Abamectin',quantity:100,unit:'ml'}}]};
   const candidate=bseInputUsageCandidate_(result),sourceKey=bseInputUsageSourceKey_('BSE-TG-1',candidate),mapped=bseInputUsageToInventoryOut_('BSE-TG-1',candidate,sourceKey);
   const core=bseInputUsageReviewCore_.toString(),inventory=bseInventoryReviewCore_.toString();
@@ -169,11 +141,7 @@ function runBseInputUsageInventoryMappingHarnessTests(){
     {id:'mapper never enables production write',pass:mapped.production_write===false},
     {id:'Input Usage core writes canonical log and invokes inventory derivation',pass:/TEST_INPUT_USAGE_LOG/.test(core)&&/bseInputUsageToInventoryOut_/.test(core)&&/bseInventoryReviewCore_/.test(core)},
     {id:'derived inventory cannot own aggregate Telegram queue status',pass:/suppress_queue_status:true/.test(core)&&/suppress_queue_status/.test(inventory)},
-    {id:'approval domain uses dedicated Input Usage boundary',pass:bseApprovalDomain_(result).core===bseInputUsageReviewCore_},
-    {id:'legacy chlorine corpus becomes deterministic per-plot Input Usage',pass:chlorineOld&&chlorineOld.validation==='PASS'&&chlorineOld.candidates.length===4&&chlorineOld.candidates.every(c=>c.target==='Input_Usage_Log'&&c.fields.quantity===1&&c.fields.unit==='botol'&&c.fields.event_date==='2026-09-21')&&chlorineOld.candidates.map(c=>c.fields.plot_id).join('|')==='M1P1|M1P2|M4P1|M4P2'},
-    {id:'live chlorine format preserves explicit date bottles and plots',pass:chlorineLive&&chlorineLive.validation==='PASS'&&chlorineLive.candidates.length===2&&chlorineLive.candidates.every(c=>c.fields.item_name==='Chlorine Tablets'&&c.fields.quantity===2&&c.fields.unit==='botol'&&c.fields.event_date==='2026-10-15'&&/2 Botol=2 tong biru/.test(c.fields.original_note))&&chlorineLive.candidates.map(c=>c.fields.plot_id).join('|')==='M3P3|M3P4'},
-    {id:'chlorine candidates survive unified guard without crop inference',pass:chlorineGuarded&&chlorineGuarded.validation==='PASS'&&chlorineGuarded.candidates.length===2&&chlorineGuarded.candidates.every(c=>c.target==='Input_Usage_Log'&&c.validation==='PASS'&&!c.missing.length&&!Object.prototype.hasOwnProperty.call(c.fields,'crop'))},
-    {id:'chlorine parser fails closed on duplicate plot or unrelated stock text',pass:bseChlorineUsageParseMessage_('Chlorine Tablets (15/10/26)\nM3P3 - 2 botol\nM3P3 - 2 botol','2026-10-15T00:00:00.000Z')===null&&bseChlorineUsageParseMessage_('Chlorine stok 2 botol','2026-10-15T00:00:00.000Z')===null}
+    {id:'approval domain uses dedicated Input Usage boundary',pass:bseApprovalDomain_(result).core===bseInputUsageReviewCore_}
   ];
   const failures=tests.filter(t=>!t.pass);if(failures.length)throw new Error('Input Usage mapping harness gagal: '+failures.map(t=>t.id).join(', '));return tests;
 }
