@@ -243,8 +243,21 @@ function bseImageProcessingBodyHtml_(mode,value){
   }
   return text.replace(/[\r\n]{3,}/g,'\n\n')||'(tiada text)';
 }
+function bseImageProcessingSummaryMeta_(row){
+  let structured='',uncertainty='';
+  try{
+    const parsed=JSON.parse(String(row&&row[16]||''));
+    structured=String(parsed&&parsed.structured_summary||'').trim();
+    uncertainty=String(parsed&&parsed.uncertainty_note||'').trim();
+  }catch(_){}
+  const summary=[structured,uncertainty?('Ketidakpastian: '+uncertainty):''].filter(Boolean).join('\n');
+  const stored=String(row&&row[20]||'').trim();
+  const legacy=[structured,uncertainty?('Uncertainty: '+uncertainty):''].filter(Boolean).join('\n');
+  const correction=stored&&stored!==summary&&stored!==legacy?stored:'';
+  return {summary:summary,correction:correction};
+}
 function bseImageProcessingCardText_(row){
-  const mode=String(row[8]),original=bseImageProcessingOriginalContent_(row),review=String(row[17]||'').trim(),correction=String(row[20]||'').trim();
+  const mode=String(row[8]),original=bseImageProcessingOriginalContent_(row),review=String(row[17]||'').trim(),meta=bseImageProcessingSummaryMeta_(row);
   const body=original||review,label=mode==='IMAGE_ANALYSIS'?'Analisis Gemini — NON_CANONICAL':'Transkripsi — NON_CANONICAL';
   const lines=[
     '<b>[PILOT TEST]</b>',
@@ -258,7 +271,8 @@ function bseImageProcessingCardText_(row){
     '• Kategori: '+bseImageProcessingEscapeHtml_(String(row[18]||'UNCLASSIFIED_TEST')),
     '• Cadangan rekod: '+bseImageProcessingEscapeHtml_(String(row[19]||'EVIDENCE_ONLY'))
   ];
-  if(correction)lines.push('','<b>Pembetulan user</b>',bseImageProcessingEscapeHtml_(correction.slice(0,700)));
+  if(meta.summary)lines.push('','<b>Rumusan</b>',bseImageProcessingEscapeHtml_(meta.summary.slice(0,900)));
+  if(meta.correction)lines.push('','<b>Pembetulan user</b>',bseImageProcessingEscapeHtml_(meta.correction.slice(0,700)));
   lines.push('','Gambar belum disimpan ke Drive. Tiada domain record ditulis.');
   return lines.join('\n').slice(0,3900);
 }
@@ -356,7 +370,7 @@ function processBseImageProcessingQueueTest(){
 }
 
 function bseImageProcessingSavedSummary_(row){
-  const mode=String(row[8]),original=bseImageProcessingOriginalContent_(row),review=String(row[17]||'').trim(),correction=String(row[20]||'').trim(),body=original||review;
+  const mode=String(row[8]),original=bseImageProcessingOriginalContent_(row),review=String(row[17]||'').trim(),meta=bseImageProcessingSummaryMeta_(row),body=original||review;
   const label=mode==='IMAGE_ANALYSIS'?'Analisis Gemini — NON_CANONICAL':'Transkripsi — NON_CANONICAL';
   const lines=[
     '<b>[PILOT TEST]</b>',
@@ -372,7 +386,8 @@ function bseImageProcessingSavedSummary_(row){
     '• Status: CONFIRMED_TEST',
     '• Gambar: disimpan ke Google Drive TEST'
   ];
-  if(correction)lines.push('','<b>Pembetulan user</b>',bseImageProcessingEscapeHtml_(correction.slice(0,700)));
+  if(meta.summary)lines.push('','<b>Rumusan</b>',bseImageProcessingEscapeHtml_(meta.summary.slice(0,900)));
+  if(meta.correction)lines.push('','<b>Pembetulan user</b>',bseImageProcessingEscapeHtml_(meta.correction.slice(0,700)));
   lines.push('','Tiada domain record atau production write dibuat.');
   return lines.join('\n').slice(0,3900);
 }
@@ -537,7 +552,8 @@ function runBseImageProcessingHarnessTests(){
     {id:'image model has transient fallback without changing primary contract',pass:/gemini-3\.5-flash-lite/.test(model)&&/\[0,429,500,502,503,504\]/.test(model)&&/preferredModel!=='gemini-3\.1-flash-lite'/.test(model)},
     {id:'Benar is the only Drive write path',pass:callback.includes("m[2]==='R'")&&callback.includes("m[2]==='C'")&&callback.indexOf('bseTelegramEvidenceStoreDrive_')>callback.indexOf("m[2]==='R'")},
     {id:'Betulkan can change category record and data',pass:/Kategori/.test(correction)&&/Rekod/.test(correction)&&/Data/.test(correction)&&/CORRECTION_WAITING_INFO/.test(callback)},
-    {id:'corrected cards preserve Gemini output and label user correction separately',pass:/bseImageProcessingOriginalContent_/.test(bseImageProcessingCardText_.toString())&&/Pembetulan user/.test(bseImageProcessingCardText_.toString())&&/Pembetulan user/.test(bseImageProcessingSavedSummary_.toString())},
+    {id:'structured summary is presented as Rumusan, not user correction',pass:/Rumusan/.test(bseImageProcessingCardText_.toString())&&/bseImageProcessingSummaryMeta_/.test(bseImageProcessingCardText_.toString())&&bseImageProcessingSummaryMeta_([,,,,,,,,,,,,,,,,JSON.stringify({structured_summary:'Ringkas',uncertainty_note:''}),,,,, 'Ringkas']).summary==='Ringkas'&&bseImageProcessingSummaryMeta_([,,,,,,,,,,,,,,,,JSON.stringify({structured_summary:'Ringkas',uncertainty_note:''}),,,,, 'Ringkas']).correction===''},
+    {id:'corrected cards preserve Gemini output and label real user correction separately',pass:/bseImageProcessingOriginalContent_/.test(bseImageProcessingCardText_.toString())&&/Pembetulan user/.test(bseImageProcessingCardText_.toString())&&/Pembetulan user/.test(bseImageProcessingSavedSummary_.toString())},
     {id:'image cards use readable HTML sections',pass:/parse_mode:'HTML'/.test(bseImageProcessingOpenCard_.toString())&&/Maklumat rekod/.test(bseImageProcessingCardText_.toString())&&/Analisis Gemini/.test(bseImageProcessingCardText_.toString())&&/Transkripsi/.test(bseImageProcessingCardText_.toString())},
     {id:'saved image summary uses HTML and preserves OCR literal text',pass:/parse_mode:'HTML'/.test(bseImageProcessingCallback_.toString())&&bseImageProcessingBodyHtml_('IMAGE_TO_TEXT','A * B')==='A * B'&&!bseImageProcessingBodyHtml_('IMAGE_ANALYSIS','**Tajuk**').includes('**')},
     {id:'Evidence writes reacquire canonical Evidence sheet',pass:!/evidence\.sheet/.test(bseImageProcessingOpenCard_.toString()+worker+callback+correction)&&/bseTelegramEvidenceSheet_\(book\)\.getRange/.test(bseImageProcessingOpenCard_.toString()+worker+callback+correction)},
