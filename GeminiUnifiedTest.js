@@ -728,9 +728,10 @@ function bseTransplantExplicitDateContext_(sourceContext){
     lines.forEach(line=>{
       const labeled=line.match(/^\s*Tarikh\s+Pindah\s*:\s*(.*?)\s*$/i);
       const plain=index>0&&lines.length===1?line.match(/^\s*(\d{1,2}\/\d{1,2}\/\d{4})\s*$/):null;
-      if(!labeled&&!plain)return;
+      const inline=index===0&&lines.length===1?line.match(/^Pindah\s+anak\s+pokok\s+.+?\s+ke\s+M[1-9]\d*P[1-9]\d*\s*,\s*(\d{1,2}\/\d{1,2}\/\d{4})\s*$/i):null;
+      if(!labeled&&!plain&&!inline)return;
       present=true;
-      const raw=(labeled?labeled[1]:plain[1]).trim(),parts=raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+      const raw=(labeled?labeled[1]:plain?plain[1]:inline[1]).trim(),parts=raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
       if(!parts){invalid=true;return;}
       const day=Number(parts[1]),month=Number(parts[2]),year=Number(parts[3]),date=new Date(Date.UTC(year,month-1,day));
       if(year!==2026||date.getUTCFullYear()!==year||date.getUTCMonth()!==month-1||date.getUTCDate()!==day){invalid=true;return;}

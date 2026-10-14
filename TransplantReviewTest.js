@@ -71,7 +71,7 @@ function bseTransplantRequireDecision_(decision,note){if(!['APPROVED','REJECTED'
 function bseTransplantNormalizeCrop_(value){return String(value==null?'':value).trim().replace(/\s+/g,' ').toLocaleLowerCase();}
 function bseTransplantExplicitCropContext_(source){
   const values=[],normalize=bseTransplantNormalizeCrop_,add=value=>{let clean=String(value||'').trim();const paired=clean.match(/^(.*?)\s*\(([^()]+)\)\s*$/);if(paired)clean=paired[1].trim();if(clean&&!values.some(item=>normalize(item)===normalize(clean)))values.push(clean);};
-  [source&&source.original].concat(source&&source.clarifications||[]).forEach(text=>String(text||'').split(/\r?\n/).forEach(line=>{const m=line.match(/^\s*(?:\d+\.\s*)?(?:Jenis\s+Tanaman|Tanaman)\s*:\s*(.*?)\s*$/i);if(m)add(m[1]);}));
+  [source&&source.original].concat(source&&source.clarifications||[]).forEach(text=>{const raw=String(text||'').trim(),inline=raw.match(/^Pindah\s+anak\s+pokok\s+(.+?)\s+ke\s+M[1-9]\d*P[1-9]\d*\s*,\s*\d{1,2}\/\d{1,2}\/\d{4}\s*$/i);if(inline)add(inline[1]);String(text||'').split(/\r?\n/).forEach(line=>{const m=line.match(/^\s*(?:\d+\.\s*)?(?:Jenis\s+Tanaman|Tanaman)\s*:\s*(.*?)\s*$/i);if(m)add(m[1]);});});
   return {crop:values.length===1?values[0]:'',conflict:values.length>1};
 }
 function bseTransplantExplicitSourcePlotContext_(source){
