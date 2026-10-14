@@ -70,6 +70,9 @@ Scope lock platform yang diluluskan untuk roadmap ialah:
   Evidence dan **tidak auto-write domain record**. Ini mengekalkan authority sedia ada:
   contohnya `Observation_Log.suspected_cause` hanya boleh berasal daripada fakta/punca
   yang dinyatakan dan disahkan manusia, bukan inference Gemini.
+- `/ai <soalan>` ialah laluan Q&A Gemini **NON_CANONICAL** yang terasing daripada parser/domain writer. Ia hanya membalas ke Telegram, tidak membuka review card, tidak membaca canonical BSE, tidak menulis queue/domain record, dan tidak boleh digunakan sebagai approval atau arahan operasi rasmi. Soalan umum menggunakan pengetahuan Gemini; apabila File Search KB dikonfigurasi, Gemini boleh menggunakan rujukan pertanian berautoriti.
+- Agriculture KB PILOT_TEST menggunakan folder Drive `08_KB_REFERENCE` sebagai archive/audit source dan Gemini File Search sebagai semantic retrieval layer. Set awal: IRAC MoA Classification v11.5 (Feb 2026) dan snapshot portal racun perosak semasa Jabatan Pertanian yang memaut SISMARP. Untuk racun Malaysia, DOA/SISMARP ialah authority bagi registration/recommendation; IRAC hanya authority bagi MoA/resistance management. Snapshot KB tidak boleh dianggap bukti bahawa status pendaftaran semasa masih sama; live SISMARP retrieval kekal milestone berasingan.
+- `/ai` tidak membaca stok, sejarah, status plot atau rekod canonical BSE. Pertanyaan data operasi mesti menggunakan command retrieval rasmi yang mempunyai access boundary sendiri.
 - inventori/claim hanya log rujukan, bukan rekod stok atau kewangan rasmi.
 - `TEST_CLAIM_LOG` menggunakan header kanonik yang mengekalkan identiti Telegram
   penuntut tepat selepas `claimant`; migrasi TEST yang dikenali menyusun data
