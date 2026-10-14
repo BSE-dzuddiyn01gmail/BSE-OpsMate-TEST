@@ -53,6 +53,9 @@ function receiveBseTelegramTest() {
         const deletion=bseTelegramDeleteReceiveCommand_(book,m);
         if(deletion.text)bseTelegramPrivateCommandReply_(m,deletion.text);
       }
+      else if(typeof bseTelegramAiReceive_==='function'&&typeof bseTelegramAiCommand_==='function'&&bseTelegramAiCommand_(m&&m.text)){
+        bseTelegramAiReceive_(book,m,allowedPrivate,allowedGroup);
+      }
       else if(typeof bseTelegramReportRetrieve_==='function'&&typeof bseTelegramReportCommand_==='function'&&bseTelegramReportCommand_(m&&m.text)&&(m&&m.chat&&(m.chat.type==='private'||allowedGroup))){
         const report=bseTelegramReportRetrieve_(book,m);
         if(report.handled&&report.text){if(m.chat.type==='private')bseTelegramPrivateCommandReply_(m,report.text);else bseTelegramApi_('sendMessage',{chat_id:sourceChat,text:report.text,reply_parameters:{message_id:Number(m.message_id),allow_sending_without_reply:true}});}
