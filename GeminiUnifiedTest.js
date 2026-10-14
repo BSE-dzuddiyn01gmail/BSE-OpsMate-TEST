@@ -686,8 +686,11 @@ function bseUnifiedGuardSeedSowing_(r,source) {
 function bseTransplantPlots_(input){
   const text=String(input||'');
   if(!/\bpindah\s+anak\s+pokok\b/i.test(text))return {ok:false,plots:[],reason:'TRANSPLANT_PHRASE_MISSING'};
+  // Explicit source labels describe where seedlings came from, not transplant
+  // destinations. Exclude only those labelled lines from destination parsing.
+  const destinationText=text.split(/\r?\n/).filter(line=>!/^\s*(?:Plot\s+asal|Dari\s+plot)\s*:/i.test(line)).join('\n');
   const tokens=[];const matcher=/\bM([1-9]\d*)P(\d+)\b/ig;let match;
-  while((match=matcher.exec(text))){
+  while((match=matcher.exec(destinationText))){
     const digits=match[2];
     if(!/^[1-9]\d*$/.test(digits)||digits.length>2)return {ok:false,plots:[],reason:'TRANSPLANT_PLOT_AMBIGUOUS'};
     const numbers=digits.length===2?[digits[0],digits[1]]:[digits];
