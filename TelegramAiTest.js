@@ -29,6 +29,8 @@ function bseTelegramAiSystemPrompt_(hasKb){
     'Untuk racun perosak Malaysia: SISMARP/Jabatan Pertanian ialah rujukan pendaftaran/pengesyoran tempatan. IRAC ialah rujukan Mode of Action dan resistance management, BUKAN bukti sesuatu racun diluluskan di Malaysia.',
     'Jangan mereka kadar, PHI, MRL, pendaftaran, label, atau status syor. Jika sumber KB tidak menyokong butiran itu, nyatakan bahawa ia perlu disemak pada sumber semasa SISMARP/label berdaftar.',
     'Boleh beri penerangan, pilihan dan pertimbangan umum, tetapi jangan gambarkan cadangan sebagai approval atau arahan kerja BSE.',
+    'Susun jawapan supaya mudah dibaca di Telegram. Jika soalan mempunyai beberapa bahagian, pecahkan jawapan mengikut bahagian dan beri tajuk ringkas bagi setiap bahagian.',
+    'Gunakan **Tajuk** hanya untuk tajuk/pembahagian utama. Jangan guna asterisk untuk bullet; guna tanda •. Elakkan markdown table, heading #, code fence, dan hiasan markdown berlebihan.',
     'Jawab dalam Bahasa Melayu yang ringkas dan praktikal kecuali pengguna meminta bahasa lain.'
   ].join('\n');
 }
@@ -80,16 +82,24 @@ function bseAiGeminiAnswer_(question){
   return {text:text,sources:bseAiGroundingSources_(data),kb_used:!!store,model_used:modelUsed,production_write:false};
 }
 function bseTelegramAiRender_(answer){
-  const lines=['🤖 AI — NON_CANONICAL','',String(answer.text||'').trim()];
-  if(answer.sources&&answer.sources.length){lines.push('','Rujukan KB:');answer.sources.forEach(s=>lines.push('• '+s));}
+  const lines=['**🤖 AI — NON_CANONICAL**','',String(answer.text||'').trim()];
+  if(answer.sources&&answer.sources.length){lines.push('','**Rujukan KB**');answer.sources.forEach(s=>lines.push('• '+s));}
   lines.push('','Rujukan AI sahaja. Bukan rekod, approval atau arahan operasi BSE.');
   return lines.join('\n');
 }
+function bseTelegramAiToHtml_(text){
+  let s=String(text||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  s=s.replace(/^#{1,6}\s+/gm,'');
+  s=s.replace(/\*\*([^*\n]+)\*\*/g,'<b>$1</b>');
+  s=s.replace(/^\s*[-*]\s+/gm,'• ');
+  s=s.replace(/\*/g,'');
+  return s.replace(/[\r\n]{3,}/g,'\n\n').trim();
+}
 function bseTelegramAiSend_(m,text){
   const chunks=[];let rest=String(text||'');
-  while(rest.length>3900){let cut=rest.lastIndexOf('\n',3900);if(cut<2500)cut=3900;chunks.push(rest.slice(0,cut));rest=rest.slice(cut).replace(/^\s+/,'');}
+  while(rest.length>3600){let cut=rest.lastIndexOf('\n',3600);if(cut<2400)cut=3600;chunks.push(rest.slice(0,cut));rest=rest.slice(cut).replace(/^\s+/,'');}
   if(rest)chunks.push(rest);
-  chunks.forEach((chunk,i)=>{const payload={chat_id:String(m.chat.id),text:chunk};if(i===0&&m.message_id)payload.reply_parameters={message_id:Number(m.message_id),allow_sending_without_reply:true};bseTelegramApi_('sendMessage',payload);});
+  chunks.forEach((chunk,i)=>{const payload={chat_id:String(m.chat.id),text:bseTelegramAiToHtml_(chunk),parse_mode:'HTML'};if(i===0&&m.message_id)payload.reply_parameters={message_id:Number(m.message_id),allow_sending_without_reply:true};bseTelegramApi_('sendMessage',payload);});
   return chunks.length;
 }
 function bseTelegramAiReceive_(book,m,allowedPrivate,allowedGroup){
@@ -221,6 +231,8 @@ function runBseTelegramAiHarnessTests(){
     {id:'AI path has no canonical/domain writer',pass:!/ReviewCore_|Measurement_Log|Observation_Log|Treatment_Log|Inventory_Log|production_write\s*:\s*true/.test(src)},
     {id:'File Search is optional and property-bound',pass:/BSE_AI_FILE_SEARCH_STORE_PROPERTY/.test(bseAiGeminiAnswer_.toString())&&/fileSearchStoreNames/.test(bseAiGeminiAnswer_.toString())},
     {id:'Malaysia pesticide authority boundary preserved',pass:/SISMARP\/Jabatan Pertanian/.test(bseTelegramAiSystemPrompt_(true))&&/IRAC.*BUKAN/.test(bseTelegramAiSystemPrompt_(true))},
+    {id:'Telegram presentation renders bold headings without visible asterisks',pass:bseTelegramAiToHtml_('**Bahagian 1**\n* item').includes('<b>Bahagian 1</b>')&&!bseTelegramAiToHtml_('**Bahagian 1**\n* item').includes('*')&&bseTelegramAiToHtml_('**Bahagian 1**\n* item').includes('• item')},
+    {id:'Telegram send uses HTML parse mode',pass:/parse_mode:'HTML'/.test(bseTelegramAiSend_.toString())},
     {id:'no question persistence',pass:!/appendRow|setValue|setValues/.test(bseTelegramAiReceive_.toString()+bseAiGeminiAnswer_.toString())}
   ];
   const bad=tests.filter(t=>!t.pass);if(bad.length)throw new Error('AI harness gagal: '+bad.map(t=>t.id).join(', '));return tests;
