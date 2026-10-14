@@ -89,6 +89,18 @@ function diagnoseBseAiSismarpTest(){return bseAiSismarpCurrent_('Adakah abamecti
 function diagnoseBseAiSismarpThripsTest(){return bseAiSismarpCurrent_('Racun apa untuk thrips pada peria?');}
 function diagnoseBseAiSismarpPositiveTest(){return bseAiSismarpCurrent_('Adakah deltamethrin berdaftar untuk peria di Malaysia?');}
 function diagnoseBseAiSismarpNaturalQueryTest(){return bseAiSismarpCurrent_('Deltamethrin untuk tanaman peria bagi kawalan lalat buah: adakah ada padanan dalam SISMARP semasa, apakah kumpulan IRAC bahan aktif ini, dan nyatakan sumber rujukan?');}
+function bseAiIracGroundingQuestion_(question,currentSismarp){
+  const active=String(currentSismarp&&currentSismarp.query&&currentSismarp.query.active_ingredient||'').trim();
+  return bseAiIracQuestion_(question)&&active?(active+' kumpulan IRAC berapa?'):String(question||'');
+}
+function bseAiIracGroundedReliable_(question){
+  let result=bseAiIracGrounded_(question);
+  for(let retry=0;retry<2&&result&&!result.available&&/^(?:IRAC_GROUNDING_HTTP_(?:0|429|5\d\d)|IRAC_GROUNDING_MISSING|IRAC_GROUNDING_INVALID_RESPONSE)$/.test(String(result.reason||''));retry++){
+    Utilities.sleep(750*(retry+1));
+    result=bseAiIracGrounded_(question);
+  }
+  return result;
+}
 function bseAiIracQuestion_(question){return /\b(?:IRAC|mode of action|MoA|kumpulan\s+IRAC)\b/i.test(String(question||''));}
 function bseAiIracGrounded_(question){
   if(!bseAiIracQuestion_(question))return null;
@@ -175,7 +187,7 @@ function bseTelegramAiReceive_(book,m,allowedPrivate,allowedGroup){
   if(!question){bseTelegramAiSend_(m,'Gunakan: /ai <soalan>\nContoh: /ai abamectin kumpulan IRAC berapa?');return {handled:true,production_write:false};}
   if(question.length>6000){bseTelegramAiSend_(m,'Soalan terlalu panjang. Had /ai ialah 6000 aksara.');return {handled:true,production_write:false};}
   try{
-    const currentSismarp=bseAiSismarpCurrent_(question),iracGrounded=bseAiIracGrounded_(question),answer=bseAiGeminiAnswer_(question,currentSismarp,iracGrounded);
+    const currentSismarp=bseAiSismarpCurrent_(question),iracQuestion=bseAiIracGroundingQuestion_(question,currentSismarp),iracGrounded=bseAiIracGroundedReliable_(iracQuestion),answer=bseAiGeminiAnswer_(question,currentSismarp,iracGrounded);
     bseTelegramAiSend_(m,bseTelegramAiRender_(answer));
     console.log('BSE_AI_REPLY_SENT: '+JSON.stringify({kb_used:answer.kb_used,source_count:answer.sources.length,sismarp_current:!!(currentSismarp&&currentSismarp.available),production_write:false}));
     return {handled:true,kb_used:answer.kb_used,source_count:answer.sources.length,sismarp_current:!!(currentSismarp&&currentSismarp.available),production_write:false};
@@ -315,6 +327,8 @@ function runBseTelegramAiHarnessTests(){
     {id:'KB manifest has refresh timestamp and stale policy',pass:/BSE_AI_KB_REFRESHED_AT_PROPERTY/.test(bootstrapBseAiFileSearchTest.toString()+getBseAiKnowledgeBaseStatusTest.toString())&&/ageDays>35/.test(getBseAiKnowledgeBaseStatusTest.toString())&&/rebuildBseAiFileSearchTest/.test(refreshBseAiKnowledgeBaseTest.toString())},
     {id:'Telegram send uses HTML parse mode',pass:/parse_mode:'HTML'/.test(bseTelegramAiSend_.toString())},
     {id:'IRAC classification is code-gated by grounded File Search',pass:/IRAC grounding daripada KB tidak tersedia/.test(bseAiGeminiAnswer_.toString())&&/HANYA File Search KB/.test(bseAiIracGrounded_.toString())},
+    {id:'IRAC grounding narrows combined pesticide question to detected active ingredient',pass:(()=>{const q='Deltamethrin untuk tanaman peria bagi kawalan lalat buah: adakah ada padanan dalam SISMARP semasa, apakah kumpulan IRAC bahan aktif ini, dan nyatakan sumber rujukan?',current={query:{active_ingredient:'deltamethrin'}};return bseAiIracGroundingQuestion_(q,current)==='deltamethrin kumpulan IRAC berapa?';})()},
+    {id:'IRAC grounding retries transient or missing File Search result without model-knowledge fallback',pass:/retry<2/.test(bseAiIracGroundedReliable_.toString())&&/IRAC_GROUNDING_MISSING/.test(bseAiIracGroundedReliable_.toString())&&!/generateContent|GEMINI_API_KEY/.test(bseAiIracGroundedReliable_.toString())},
     {id:'no question persistence',pass:!/appendRow|setValue|setValues/.test(bseTelegramAiReceive_.toString()+bseAiGeminiAnswer_.toString()+bseAiSismarpCurrent_.toString()+bseAiIracGrounded_.toString())}
   ];
   const bad=tests.filter(t=>!t.pass);if(bad.length)throw new Error('AI harness gagal: '+bad.map(t=>t.id).join(', '));return tests;
@@ -322,12 +336,12 @@ function runBseTelegramAiHarnessTests(){
 
 function runBseAiCurrentSismarpSmokeTest(){
   const question='Abamectin kumpulan IRAC berapa dan adakah ia berdaftar untuk peria di Malaysia?';
-  const current=bseAiSismarpCurrent_(question),irac=bseAiIracGrounded_(question),answer=bseAiGeminiAnswer_(question,current,irac);
+  const current=bseAiSismarpCurrent_(question),irac=bseAiIracGroundedReliable_(bseAiIracGroundingQuestion_(question,current)),answer=bseAiGeminiAnswer_(question,current,irac);
   return {current:{available:current&&current.available,total:current&&current.total,query:current&&current.query,cache_refreshed_at:current&&current.cache_refreshed_at,age_days:current&&current.age_days},irac:{available:irac&&irac.available,sources:irac&&irac.sources||[],reason:irac&&irac.reason||''},answer:String(answer.text||'').slice(0,1800),sources:answer.sources,rendered:bseTelegramAiRender_(answer).slice(0,3200),production_write:false};
 }
 function runBseAiNaturalQuerySmokeTest(){
   const question='Deltamethrin untuk tanaman peria bagi kawalan lalat buah: adakah ada padanan dalam SISMARP semasa, apakah kumpulan IRAC bahan aktif ini, dan nyatakan sumber rujukan?';
-  const current=bseAiSismarpCurrent_(question),irac=bseAiIracGrounded_(question),answer=bseAiGeminiAnswer_(question,current,irac);
+  const current=bseAiSismarpCurrent_(question),irac=bseAiIracGroundedReliable_(bseAiIracGroundingQuestion_(question,current)),answer=bseAiGeminiAnswer_(question,current,irac);
   return {current:{available:current&&current.available,total:current&&current.total,query:current&&current.query,cache_refreshed_at:current&&current.cache_refreshed_at},irac:{available:irac&&irac.available,sources:irac&&irac.sources||[],reason:irac&&irac.reason||''},answer:String(answer.text||'').slice(0,1800),sources:answer.sources,rendered:bseTelegramAiRender_(answer).slice(0,3200),production_write:false};
 }
 function runBseAiKnowledgeBaseSmokeTest(){
