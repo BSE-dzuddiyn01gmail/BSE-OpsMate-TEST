@@ -3,6 +3,7 @@
 
 const BSE_TRANSPLANT_EVENT_HEADERS=['source_key','queue_update_id','transplant_event_id','batch_id','event_date','event_type','crop','variety','plot_ids','event_status','verification_status','original_note','approved_at','reviewer','payload_hash'];
 const BSE_ALLOCATION_STATUS_EVENT_HEADERS=['source_key','queue_update_id','status_event_id','transplant_event_id','batch_id','allocation_id','plot_id','from_status','to_status','changed_at','reviewer','payload_hash'];
+const BSE_PLOT_REALLOCATION_EVENT_HEADERS=['source_key','queue_update_id','reallocation_event_id','transplant_event_id','batch_id','allocation_id','crop','from_plot_id','to_plot_id','event_date','event_status','verification_status','original_note','approved_at','reviewer','payload_hash'];
 const BSE_TRANSPLANT_REVIEW_HEADERS=['review_id','source_key','queue_update_id','target','payload_hash','decision','reviewer','review_note','reviewed_at','queue_status_before','candidate_json','transplant_event_id','batch_id'];
 
 function approveTelegramTransplantByReference(){const reference=bsePromptTransplantReference_('Lulus Transplant TEST');if(reference)return bseReviewTelegramTransplantByReference_('APPROVED',reference,'');}
@@ -33,14 +34,15 @@ function bseTransplantReviewCore_(book,reviewContext){
     const reviewSheet=book.getSheetByName('TEST_TRANSPLANT_REVIEW')?bseCropBatchSheet_(book,'TEST_TRANSPLANT_REVIEW',BSE_TRANSPLANT_REVIEW_HEADERS):null;
     const eventSheet=book.getSheetByName('TEST_TRANSPLANT_EVENT')?bseCropBatchSheet_(book,'TEST_TRANSPLANT_EVENT',BSE_TRANSPLANT_EVENT_HEADERS):null;
     const statusSheet=book.getSheetByName('TEST_ALLOCATION_STATUS_EVENT')?bseCropBatchSheet_(book,'TEST_ALLOCATION_STATUS_EVENT',BSE_ALLOCATION_STATUS_EVENT_HEADERS):null;
-    const reviews=reviewSheet?bseCropBatchRows_(reviewSheet,BSE_TRANSPLANT_REVIEW_HEADERS.length):[],events=eventSheet?bseCropBatchRows_(eventSheet,BSE_TRANSPLANT_EVENT_HEADERS.length):[],statusEvents=statusSheet?bseCropBatchRows_(statusSheet,BSE_ALLOCATION_STATUS_EVENT_HEADERS.length):[];
+    const reallocationSheet=book.getSheetByName('TEST_PLOT_REALLOCATION_EVENT')?bseCropBatchSheet_(book,'TEST_PLOT_REALLOCATION_EVENT',BSE_PLOT_REALLOCATION_EVENT_HEADERS):null;
+    const reviews=reviewSheet?bseCropBatchRows_(reviewSheet,BSE_TRANSPLANT_REVIEW_HEADERS.length):[],events=eventSheet?bseCropBatchRows_(eventSheet,BSE_TRANSPLANT_EVENT_HEADERS.length):[],statusEvents=statusSheet?bseCropBatchRows_(statusSheet,BSE_ALLOCATION_STATUS_EVENT_HEADERS.length):[],reallocationEvents=reallocationSheet?bseCropBatchRows_(reallocationSheet,BSE_PLOT_REALLOCATION_EVENT_HEADERS.length):[];
     const prior=reviews.find(row=>String(row[1])===sourceKey);
     if(prior){
       const payloadHash=bseCropBatchHash_({proposal:proposal.canonical,batch_id:String(prior[12]||'')});
       if(String(prior[4])!==payloadHash||String(prior[5])!==decision)throw new Error('Konflik semakan sedia ada untuk source_key ini.');
       const eventId=String(prior[11]||''),batchId=String(prior[12]||'');
-      if(decision==='APPROVED')bseTransplantAssertApprovedRows_(events,statusEvents,sourceKey,payloadHash,proposal.plots,eventId,batchId);
-      else if(events.some(row=>String(row[0])===sourceKey)||statusEvents.some(row=>String(row[0])===sourceKey))throw new Error('Audit REJECTED bercanggah dengan rekod Transplant TEST.');
+      if(decision==='APPROVED'){bseTransplantAssertApprovedRows_(events,statusEvents,sourceKey,payloadHash,proposal.plots,eventId,batchId);if(proposal.reallocation)bseTransplantAssertReallocationRows_(reallocationEvents,'BSE-TG-'+root.updateId+'|Plot_Reallocation_Event_Log',payloadHash,proposal.reallocation,eventId,batchId);}
+      else if(events.some(row=>String(row[0])===sourceKey)||statusEvents.some(row=>String(row[0])===sourceKey)||reallocationEvents.some(row=>String(row[1])===root.updateId))throw new Error('Audit REJECTED bercanggah dengan rekod Transplant TEST.');
       if(status===expectedStatus)return {source_key:sourceKey,batch_id:batchId,transplant_event_id:eventId,decision:decision,duplicate:true,production_write:false};
       if(status!=='NEEDS_HUMAN_REVIEW')throw new Error('Status queue tidak konsisten dengan audit Transplant sedia ada.');
       queue.getRange(selected.sheetRow,7).setValue(expectedStatus);SpreadsheetApp.flush();
@@ -49,12 +51,13 @@ function bseTransplantReviewCore_(book,reviewContext){
     const match=bseTransplantMatchForBook_(book,proposal);if(match.kind!=='UNIQUE')throw new Error('Batch Crop Batch atau allocation PLANNED tidak sepadan; tiada write dibuat.');
     const payloadHash=bseCropBatchHash_({proposal:proposal.canonical,batch_id:match.batch_id});
     if(status!=='NEEDS_HUMAN_REVIEW')throw new Error('Baris queue bukan NEEDS_HUMAN_REVIEW.');
-    if(events.some(row=>String(row[0])===sourceKey)||statusEvents.some(row=>String(row[0])===sourceKey))throw new Error('Konflik rekod Transplant TEST sedia ada.');
+    if(events.some(row=>String(row[0])===sourceKey)||statusEvents.some(row=>String(row[0])===sourceKey)||reallocationEvents.some(row=>String(row[1])===root.updateId))throw new Error('Konflik rekod Transplant TEST sedia ada.');
     const reviewer=bseReviewContextActorLabel_(reviewContext),stamp=new Date().toISOString(),reviewOut=reviewSheet||bseCropBatchSheet_(book,'TEST_TRANSPLANT_REVIEW',BSE_TRANSPLANT_REVIEW_HEADERS);let eventId='';
     if(decision==='APPROVED'){
       const eventOut=eventSheet||bseCropBatchSheet_(book,'TEST_TRANSPLANT_EVENT',BSE_TRANSPLANT_EVENT_HEADERS),statusOut=statusSheet||bseCropBatchSheet_(book,'TEST_ALLOCATION_STATUS_EVENT',BSE_ALLOCATION_STATUS_EVENT_HEADERS);
       eventId=bseTransplantNextId_(events,proposal.fields.event_date);
       bseCropBatchAppend_(eventOut,[sourceKey,root.updateId,eventId,match.batch_id,proposal.fields.event_date,'TRANSPLANT',proposal.fields.crop,proposal.fields.variety,proposal.plots.join('|'),'COMPLETED','VERIFIED_TEST',root.provenance,stamp,reviewer,payloadHash]);
+      if(proposal.reallocation){const reallocOut=reallocationSheet||bseCropBatchSheet_(book,'TEST_PLOT_REALLOCATION_EVENT',BSE_PLOT_REALLOCATION_EVENT_HEADERS),reallocSource='BSE-TG-'+root.updateId+'|Plot_Reallocation_Event_Log',reallocId=bseTransplantReallocationNextId_(reallocationEvents,proposal.fields.event_date);bseCropBatchAppend_(reallocOut,[reallocSource,root.updateId,reallocId,eventId,match.batch_id,proposal.reallocation.allocation_id,proposal.fields.crop,proposal.reallocation.from_plot_id,proposal.reallocation.to_plot_id,proposal.fields.event_date,'COMPLETED','VERIFIED_TEST',root.provenance,stamp,reviewer,payloadHash]);}
       match.allocations.forEach(allocation=>bseCropBatchAppend_(statusOut,[sourceKey,root.updateId,Utilities.getUuid(),eventId,match.batch_id,allocation.allocation_id,allocation.plot_id,'PLANNED','ACTIVE',stamp,reviewer,payloadHash]));
       SpreadsheetApp.flush();
     }
@@ -66,19 +69,54 @@ function bseTransplantReviewCore_(book,reviewContext){
 
 function bseTransplantRequireDecision_(decision,note){if(!['APPROVED','REJECTED'].includes(decision))throw new Error('Keputusan semakan tidak sah.');if(decision==='REJECTED'&&!String(note||'').trim())throw new Error('Sebab penolakan wajib diisi.');}
 function bseTransplantNormalizeCrop_(value){return String(value==null?'':value).trim().replace(/\s+/g,' ').toLocaleLowerCase();}
+function bseTransplantExplicitCropContext_(source){
+  const values=[],normalize=bseTransplantNormalizeCrop_,add=value=>{let clean=String(value||'').trim();const paired=clean.match(/^(.*?)\s*\(([^()]+)\)\s*$/);if(paired)clean=paired[1].trim();if(clean&&!values.some(item=>normalize(item)===normalize(clean)))values.push(clean);};
+  [source&&source.original].concat(source&&source.clarifications||[]).forEach(text=>String(text||'').split(/\r?\n/).forEach(line=>{const m=line.match(/^\s*(?:\d+\.\s*)?(?:Jenis\s+Tanaman|Tanaman)\s*:\s*(.*?)\s*$/i);if(m)add(m[1]);}));
+  return {crop:values.length===1?values[0]:'',conflict:values.length>1};
+}
+function bseTransplantExplicitSourcePlotContext_(source){
+  const values=[],add=value=>{const plot=String(value||'').trim().toUpperCase();if(/^M[1-9]\d*P[1-9]\d*$/.test(plot)&&!values.includes(plot))values.push(plot);};
+  const original=String(source&&source.original||'');
+  original.split(/\r?\n/).forEach(line=>{const m=line.match(/^\s*(?:Plot\s+asal|Dari\s+plot)\s*:\s*(M[1-9]\d*P[1-9]\d*)\s*$/i);if(m)add(m[1]);});
+  (source&&source.clarifications||[]).forEach(text=>{const raw=String(text||'').trim(),label=raw.match(/^(?:Plot\s+asal|Dari\s+plot)\s*:\s*(M[1-9]\d*P[1-9]\d*)\s*$/i);if(label)add(label[1]);else if(/^M[1-9]\d*P[1-9]\d*$/i.test(raw))add(raw);});
+  return {plot:values.length===1?values[0]:'',conflict:values.length>1};
+}
+function bseTransplantEffectivePlanPlot_(allocation,effective){
+  const state=effective[String(allocation&&allocation[3]||'')];
+  if(state&&state.status==='ACTIVE'&&state.plot_id)return state.plot_id;
+  return String(allocation&&allocation[5]||'');
+}
+function bseTransplantFindReallocation_(cropValue,destinationPlots,batches,allocations,reviews,statusEvents,sourcePlotId){
+  const plots=(destinationPlots||[]).map(String);if(plots.length!==1)return {kind:'NONE',reason:'DESTINATION_COUNT'};
+  const destination=plots[0],crop=bseTransplantNormalizeCrop_(cropValue);if(!crop)return {kind:'NONE',reason:'CROP_REQUIRED'};
+  const approved=new Set((reviews||[]).filter(row=>String(row[3])==='Crop_Batch_Log'&&String(row[5])==='APPROVED').map(row=>String(row[11]))),effective=bseActiveAllocationEffectiveStatuses_(statusEvents||[]);
+  const approvedAllocations=(allocations||[]).filter(row=>approved.has(String(row[2]||''))&&String(row[6]||'')==='PLANNED');
+  const occupied=approvedAllocations.some(row=>bseTransplantEffectivePlanPlot_(row,effective)===destination);
+  if(occupied)return {kind:'NONE',reason:'DESTINATION_ALREADY_PLANNED'};
+  const candidates=[];
+  (batches||[]).forEach(batch=>{const batchId=String(batch[2]||'');if(!batchId||!approved.has(batchId)||bseTransplantNormalizeCrop_(batch[4])!==crop)return;
+    approvedAllocations.filter(row=>String(row[2])===batchId).forEach(row=>{const state=effective[String(row[3]||'')];if(state&&state.status==='ACTIVE')return;const fromPlot=String(row[5]||'');if(sourcePlotId&&fromPlot!==String(sourcePlotId))return;if(fromPlot&&fromPlot!==destination)candidates.push({batch_id:batchId,crop:String(batch[4]||''),variety:String(batch[5]||''),allocation_id:String(row[3]||''),from_plot_id:fromPlot,to_plot_id:destination});});
+  });
+  return candidates.length===1?Object.assign({kind:'UNIQUE'},candidates[0]):{kind:candidates.length?'MULTIPLE':'NONE',reason:candidates.length?'SOURCE_AMBIGUOUS':'SOURCE_NOT_FOUND',matches:candidates};
+}
+function bseTransplantReallocationForBook_(book,crop,destinationPlots,sourcePlotId){
+  return bseTransplantFindReallocation_(crop,destinationPlots,bseTransplantRowsByName_(book,'TEST_CROP_BATCH',BSE_CROP_BATCH_HEADERS),bseTransplantRowsByName_(book,'TEST_PLOT_ALLOCATION',BSE_PLOT_ALLOCATION_HEADERS),bseTransplantRowsByName_(book,'TEST_CROP_BATCH_REVIEW',BSE_CROP_BATCH_REVIEW_HEADERS),bseTransplantRowsByName_(book,'TEST_ALLOCATION_STATUS_EVENT',BSE_ALLOCATION_STATUS_EVENT_HEADERS),sourcePlotId);
+}
 function bseTransplantProposal_(encoded,original){
   let result;try{result=JSON.parse(String(encoded||''));}catch(_){throw new Error('candidate_json tidak sah.');}
   if(!result||typeof result!=='object'||Array.isArray(result)||Object.keys(result).some(key=>!['validation','production_write','candidates'].includes(key))||result.validation!=='PASS'||result.production_write!==false||!Array.isArray(result.candidates)||result.candidates.length!==1)throw new Error('Hasil Transplant TEST tidak sah.');
-  const candidate=result.candidates[0],f=candidate&&candidate.fields,allowed=['project_id','system_year','event_date','record_type','verification_status','original_note','event_type','crop','variety','plot_ids','event_status','responsible_name','responsible_source','responsible_telegram_user_id'];
+  const candidate=result.candidates[0],f=candidate&&candidate.fields,allowed=['project_id','system_year','event_date','record_type','verification_status','original_note','event_type','crop','variety','plot_ids','event_status','responsible_name','responsible_source','responsible_telegram_user_id','reallocation'];
   if(!candidate||candidate.target!=='Transplant_Event_Log'||candidate.validation!=='PASS'||!Array.isArray(candidate.missing)||candidate.missing.length||!f||typeof f!=='object'||Array.isArray(f)||Object.keys(f).some(key=>!allowed.includes(key))||f.project_id!=='BSE_SB'||f.system_year!==2026||f.record_type!=='TRANSPLANT_EVENT'||f.verification_status!=='PROVISIONAL'||f.original_note!==original||f.event_type!=='TRANSPLANT'||f.event_status!=='PROPOSED'||typeof f.crop!=='string'||!f.crop.trim()||typeof f.variety!=='string'||!bseCropBatchDate_(f.event_date)||!Array.isArray(f.plot_ids)||!f.plot_ids.length)throw new Error('Calon Transplant gagal semakan kontrak TEST.');
   const plots=f.plot_ids.slice().map(String).sort(bseTransplantPlotCompare_);
   if(new Set(plots).size!==plots.length||plots.some(plot=>!/^M[1-9]\d*P[1-9]\d*$/.test(plot))||JSON.stringify(plots)!==JSON.stringify(f.plot_ids))throw new Error('Plot Transplant mesti unik dan diisih secara kanonik.');
-  const canonical={event_date:f.event_date,event_type:'TRANSPLANT',crop:f.crop,variety:f.variety,plot_ids:plots,event_status:'PROPOSED',verification_status:'PROVISIONAL',original_note:original,production_write:false};
-  return {fields:f,plots:plots,canonical:canonical};
+  let reallocation=null;if(f.reallocation!==undefined){const r=f.reallocation,keys=r&&typeof r==='object'&&!Array.isArray(r)?Object.keys(r):[];if(!r||keys.some(key=>!['required','batch_id','allocation_id','from_plot_id','to_plot_id'].includes(key))||r.required!==true||!/^BSE-SB-CB-\d{8}-\d{3}$/.test(String(r.batch_id||''))||!String(r.allocation_id||'').trim()||!/^M[1-9]\d*P[1-9]\d*$/.test(String(r.from_plot_id||''))||!/^M[1-9]\d*P[1-9]\d*$/.test(String(r.to_plot_id||''))||String(r.from_plot_id)===String(r.to_plot_id)||plots.length!==1||plots[0]!==String(r.to_plot_id))throw new Error('Kontrak reallocation Transplant TEST tidak sah.');reallocation={required:true,batch_id:String(r.batch_id),allocation_id:String(r.allocation_id),from_plot_id:String(r.from_plot_id),to_plot_id:String(r.to_plot_id)};}
+  const canonical={event_date:f.event_date,event_type:'TRANSPLANT',crop:f.crop,variety:f.variety,plot_ids:plots,event_status:'PROPOSED',verification_status:'PROVISIONAL',original_note:original,reallocation:reallocation,production_write:false};
+  return {fields:f,plots:plots,reallocation:reallocation,canonical:canonical};
 }
 
 function bseTransplantRowsByName_(book,name,headers){const sheet=book.getSheetByName(name);return sheet?bseCropBatchRows_(bseCropBatchSheet_(book,name,headers),headers.length):[];}
 function bseTransplantMatchForBook_(book,proposal){
+  if(proposal&&proposal.reallocation&&proposal.reallocation.required){const expected=proposal.reallocation,match=bseTransplantReallocationForBook_(book,proposal.fields.crop,proposal.plots,expected.from_plot_id);if(match.kind!=='UNIQUE'||match.batch_id!==expected.batch_id||match.allocation_id!==expected.allocation_id||match.from_plot_id!==expected.from_plot_id||match.to_plot_id!==expected.to_plot_id)return {kind:'NONE',reason:'REALLOCATION_STATE_CHANGED'};return {kind:'UNIQUE',batch_id:match.batch_id,source_key:'',allocations:[{allocation_id:match.allocation_id,plot_id:match.to_plot_id,baseline_plot_id:match.from_plot_id}],reallocation:match};}
   return bseTransplantFindMatches_(proposal,bseTransplantRowsByName_(book,'TEST_CROP_BATCH',BSE_CROP_BATCH_HEADERS),bseTransplantRowsByName_(book,'TEST_PLOT_ALLOCATION',BSE_PLOT_ALLOCATION_HEADERS),bseTransplantRowsByName_(book,'TEST_CROP_BATCH_REVIEW',BSE_CROP_BATCH_REVIEW_HEADERS),bseTransplantRowsByName_(book,'TEST_ALLOCATION_STATUS_EVENT',BSE_ALLOCATION_STATUS_EVENT_HEADERS));
 }
 function bseTransplantFindMatches_(proposal,batches,allocations,reviews,statusEvents){
@@ -119,11 +157,27 @@ function bseTransplantNextId_(events,eventDate){
   if(!bseCropBatchDate_(eventDate))throw new Error('Tarikh Transplant tidak sah untuk ID.');const prefix='BSE-SB-TR-'+eventDate.replace(/-/g,'')+'-',used=events.map(row=>String(row[2]||''));let highest=0;
   used.forEach(id=>{const match=id.match(new RegExp('^'+prefix+'(\\d{3})$'));if(match)highest=Math.max(highest,Number(match[1]));});if(highest>=999)throw new Error('Siri Transplant harian telah penuh.');return prefix+String(highest+1).padStart(3,'0');
 }
+function bseTransplantReallocationNextId_(rows,eventDate){
+  if(!bseCropBatchDate_(eventDate))throw new Error('Tarikh Reallocation tidak sah untuk ID.');
+  const prefix='BSE-SB-RA-'+eventDate.replace(/-/g,'')+'-',used=(rows||[]).map(row=>String(row[2]||''));let highest=0;
+  used.forEach(id=>{const match=id.match(new RegExp('^'+prefix+'(\\d{3})$'));if(match)highest=Math.max(highest,Number(match[1]));});
+  if(highest>=999)throw new Error('Siri Reallocation harian telah penuh.');
+  return prefix+String(highest+1).padStart(3,'0');
+}
+function bseTransplantAssertReallocationRows_(rows,sourceKey,payloadHash,reallocation,eventId,batchId){
+  const matches=(rows||[]).filter(row=>String(row[0])===sourceKey);
+  if(matches.length!==1||String(matches[0][3])!==eventId||String(matches[0][4])!==batchId||String(matches[0][5])!==reallocation.allocation_id||String(matches[0][7])!==reallocation.from_plot_id||String(matches[0][8])!==reallocation.to_plot_id||String(matches[0][10])!=='COMPLETED'||String(matches[0][11])!=='VERIFIED_TEST'||String(matches[0][15])!==payloadHash)throw new Error('Audit Reallocation tidak sepadan dengan rekod Transplant TEST.');
+}
 function bseTransplantAssertApprovedRows_(events,statusEvents,sourceKey,payloadHash,plots,eventId,batchId){
   const event=events.filter(row=>String(row[0])===sourceKey),statuses=statusEvents.filter(row=>String(row[0])===sourceKey);
   if(!eventId||!batchId||event.length!==1||statuses.length!==plots.length||String(event[0][2])!==eventId||String(event[0][3])!==batchId||String(event[0][14])!==payloadHash||String(event[0][9])!=='COMPLETED'||String(event[0][10])!=='VERIFIED_TEST'||statuses.some(row=>String(row[3])!==eventId||String(row[4])!==batchId||String(row[7])!=='PLANNED'||String(row[8])!=='ACTIVE'||String(row[11])!==payloadHash)||statuses.map(row=>String(row[6])).join('|')!==plots.join('|'))throw new Error('Audit APPROVED tidak sepadan dengan rekod Transplant TEST.');
 }
 
+function installBseTransplantReallocationSchemaTest(){
+  if(bseRuntimeEnvironmentName_()!=='PILOT_TEST')throw new Error('Reallocation schema hanya dibenarkan dalam PILOT_TEST.');
+  const book=boundTestBook_(),sheet=bseCropBatchSheet_(book,'TEST_PLOT_REALLOCATION_EVENT',BSE_PLOT_REALLOCATION_EVENT_HEADERS);
+  return {sheet:sheet.getName(),headers:BSE_PLOT_REALLOCATION_EVENT_HEADERS.length,production_write:false};
+}
 function runBseTransplantReviewHarnessTests(){
   const note='Pindah anak pokok\nJenis Tanaman: Timun Lokal\nM1P34',candidate={validation:'PASS',production_write:false,candidates:[{target:'Transplant_Event_Log',validation:'PASS',missing:[],fields:{project_id:'BSE_SB',system_year:2026,event_date:'2026-09-12',record_type:'TRANSPLANT_EVENT',verification_status:'PROVISIONAL',original_note:note,event_type:'TRANSPLANT',crop:'Timun Lokal',variety:'',plot_ids:['M1P3','M1P4'],event_status:'PROPOSED'}}]},proposal=bseTransplantProposal_(JSON.stringify(candidate),note),batch=['BSE-TG-1|Crop_Batch_Log','1','BSE-SB-CB-20260910-001','2026-09-10','Timun Lokal','CCB','BATCH_START','PROPOSED','PROVISIONAL','','','','hash'],allocations=[['k','1',batch[2],batch[2]+'-PA-001','2026-09-10','M1P3','PLANNED'],['k','1',batch[2],batch[2]+'-PA-002','2026-09-10','M1P4','PLANNED']],review=['r','k','1','Crop_Batch_Log','hash','APPROVED','','','','','','BSE-SB-CB-20260910-001'];
   const tests=[],pass=(id,fn)=>{try{fn();tests.push({id:id,pass:true});}catch(error){tests.push({id:id,pass:false,error:error.message});}};
@@ -138,4 +192,29 @@ function runBseTransplantReviewHarnessTests(){
   pass('legacy wrapper delegates and core has no UI Session or lock',()=>{const wrapper=bseReviewTelegramTransplantByReference_.toString(),core=bseTransplantReviewCore_.toString();if(!/bseReviewWithLock_/.test(wrapper)||/SpreadsheetApp\.getUi|Session\.|LockService/.test(core))throw new Error('pemisahan wrapper/core tidak selamat');});
   pass('retry approve idempotent shape',()=>{const hash='h',eventId='BSE-SB-TR-20260912-001',events=[['sk','2',eventId,batch[2],'2026-09-12','TRANSPLANT','Timun Lokal','','M1P3|M1P4','COMPLETED','VERIFIED_TEST','','','','h']],statuses=[['sk','2','a',eventId,batch[2],batch[2]+'-PA-001','M1P3','PLANNED','ACTIVE','','','h'],['sk','2','b',eventId,batch[2],batch[2]+'-PA-002','M1P4','PLANNED','ACTIVE','','','h']],before=JSON.stringify({events:events,statuses:statuses});bseTransplantAssertApprovedRows_(events,statuses,'sk',hash,proposal.plots,eventId,batch[2]);if(before!==JSON.stringify({events:events,statuses:statuses}))throw new Error('retry menambah row');});
   console.log('TRANSPLANT_REVIEW_HARNESS: '+JSON.stringify(tests));const failures=tests.filter(test=>!test.pass);if(failures.length)throw new Error('Transplant review harness gagal: '+failures.map(test=>test.id).join(', '));return tests;
+}
+
+function runBseTransplantReallocationHarnessTests(){
+  const batch=['BSE-TG-900|Crop_Batch_Log','900','BSE-SB-CB-20261001-001','2026-10-01','Peria','Hup Nong','BATCH_START','PROPOSED','PROVISIONAL','','','','h'];
+  const allocation=['k','900',batch[2],batch[2]+'-PA-001','2026-10-01','M3P1','PLANNED'];
+  const review=['r','k','900','Crop_Batch_Log','h','APPROVED','','','','','',batch[2]];
+  const baseline=[allocation],before=JSON.stringify(baseline);
+  const realloc=bseTransplantFindReallocation_('Peria',['M3P2'],[batch],baseline,[review],[]);
+  const note='Pindah anak pokok\nJenis Tanaman: Peria\nM3P2\nTarikh Pindah: 14/10/2026';
+  const result={validation:'PASS',production_write:false,candidates:[{target:'Transplant_Event_Log',validation:'PASS',missing:[],fields:{project_id:'BSE_SB',system_year:2026,event_date:'2026-10-14',record_type:'TRANSPLANT_EVENT',verification_status:'PROVISIONAL',original_note:note,event_type:'TRANSPLANT',crop:'Peria',variety:'Hup Nong',plot_ids:['M3P2'],event_status:'PROPOSED',reallocation:{required:true,batch_id:batch[2],allocation_id:allocation[3],from_plot_id:'M3P1',to_plot_id:'M3P2'}}}]};
+  const proposal=bseTransplantProposal_(JSON.stringify(result),note);
+  const status=[['sk','900','s','TR1',batch[2],allocation[3],'M3P2','PLANNED','ACTIVE','2026-10-14T00:00:00.000Z','','ph']];
+  const tests=[
+    {id:'unique explicit crop source can move from planned plot to empty destination',pass:realloc.kind==='UNIQUE'&&realloc.from_plot_id==='M3P1'&&realloc.to_plot_id==='M3P2'&&realloc.allocation_id===allocation[3]},
+    {id:'reallocation proposal preserves immutable baseline and explicit from-to contract',pass:proposal.reallocation&&proposal.reallocation.from_plot_id==='M3P1'&&proposal.plots[0]==='M3P2'&&before===JSON.stringify(baseline)},
+    {id:'occupied destination fails closed',pass:bseTransplantFindReallocation_('Peria',['M3P2'],[batch],[allocation,['k2','900',batch[2],batch[2]+'-PA-002','2026-10-01','M3P2','PLANNED']],[review],[]).reason==='DESTINATION_ALREADY_PLANNED'},
+    {id:'multiple eligible source plots are ambiguous and never guessed',pass:bseTransplantFindReallocation_('Peria',['M3P3'],[batch],[allocation,['k2','900',batch[2],batch[2]+'-PA-002','2026-10-01','M3P4','PLANNED']],[review],[]).kind==='MULTIPLE'},
+    {id:'already active source cannot be reallocated silently',pass:bseTransplantFindReallocation_('Peria',['M3P2'],[batch],baseline,[review],[['sk','900','s','TR0',batch[2],allocation[3],'M3P1','PLANNED','ACTIVE','2026-10-13T00:00:00.000Z']]).kind==='NONE'},
+    {id:'effective active allocation follows destination while baseline source becomes inactive by plot lookup',pass:bseActiveAllocationFindMatchesByPlots_(['M3P2'],[batch],baseline,[review],status).kind==='UNIQUE'&&bseActiveAllocationFindMatchesByPlots_(['M3P1'],[batch],baseline,[review],status).kind==='NONE'},
+    {id:'reallocation event retry assertion is exact and idempotent',pass:(()=>{const row=['BSE-TG-900|Plot_Reallocation_Event_Log','900','BSE-SB-RA-20261014-001','TR1',batch[2],allocation[3],'Peria','M3P1','M3P2','2026-10-14','COMPLETED','VERIFIED_TEST','', '', '', 'ph'];bseTransplantAssertReallocationRows_([row],row[0],'ph',proposal.reallocation,'TR1',batch[2]);return true;})()},
+    {id:'reallocation IDs are deterministic daily sequence',pass:bseTransplantReallocationNextId_([['','','BSE-SB-RA-20261014-001']],'2026-10-14')==='BSE-SB-RA-20261014-002'},
+    {id:'review writer never mutates baseline Plot Allocation rows',pass:!/TEST_PLOT_ALLOCATION.*setValue|allocationSheet.*setValue|allocationOut.*setValue/.test(bseTransplantReviewCore_.toString())},
+    {id:'all new writes remain TEST-only',pass:proposal.canonical.production_write===false&&!/production_write\s*:\s*true/.test(bseTransplantReviewCore_.toString())}
+  ];
+  const failed=tests.filter(t=>!t.pass);if(failed.length)throw new Error('Transplant reallocation harness gagal: '+failed.map(t=>t.id).join(', '));return tests;
 }

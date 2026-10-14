@@ -583,14 +583,24 @@ Keputusan owner selepas PILOT_TEST reporting stabilization:
    Tiada pembangunan dibuat hanya untuk melengkapkan nombor fasa. Ia hanya dibuka
    semula jika ada keperluan operasi BSE yang jelas atau defect/pilot evidence sebenar.
 
-3. **Plot decision change semasa Transplant = KNOWN GAP / separate capability.**
-   Current Transplant hanya boleh mengaktifkan allocation `PLANNED` yang tepat,
-   melalui ledger `PLANNED -> ACTIVE`, tanpa mutate baseline
-   `TEST_PLOT_ALLOCATION`. Jika plot sebenar berubah ketika transplant, sistem
-   semasa mesti berhenti `WAITING_INFO`; ia tidak boleh silently memindahkan
-   allocation. Jika diperlukan oleh pilot, bina `Plot Allocation Change / Reallocation`
-   event yang diaudit sebelum Transplant mengaktifkan plot baharu. Capability ini
-   berasingan daripada Plant Replacement.
+3. **Plot decision change semasa Transplant = REALLOCATION TECHNICAL/RUNTIME PASS; Telegram live proof pending.**
+   Baseline `TEST_PLOT_ALLOCATION` kekal immutable. Jika laporan Transplant menyebut
+   crop yang jelas tetapi destination plot tidak sama dengan plan, sistem mencari
+   source allocation `PLANNED` yang sah dan destination mesti tiada plan/effective
+   allocation. Jika source unik, kad pengesahan memaparkan plan asal, laporan sebenar,
+   dan kesan `from_plot -> to_plot` dengan butang `Benar / Batal` sahaja. Jika satu crop
+   mempunyai lebih daripada satu source plot `PLANNED`, sistem berhenti `WAITING_INFO`
+   dan bertanya `plot asal` secara eksplisit; reply canonical seperti `M1P1` diperlukan,
+   bukan inference/Gemini.
+
+   Selepas `Benar`, write mesti atomik dari perspektif review: append-only
+   `TEST_PLOT_REALLOCATION_EVENT`, satu `TEST_TRANSPLANT_EVENT`, dan satu
+   `TEST_ALLOCATION_STATUS_EVENT` untuk allocation ID yang sama pada destination
+   (`PLANNED -> ACTIVE`). Baseline source row tidak diubah. Effective/current plot
+   untuk `/status plot`, Census, Treatment dan Plant Replacement dibaca daripada
+   latest allocation-status ledger, jadi source plot tidak lagi dianggap ACTIVE dan
+   destination menjadi current plot. `Batal` adalah audit-only dan tidak meminta sebab
+   kedua. Semua path kekal TEST-only dan `production_write:false`.
 
 4. Selepas autonomous Daily Morning Digest LIVE PASS, kerja seterusnya yang diluluskan
    ialah Plant Replacement, kemudian OCR minimum PoC jika masih diperlukan oleh BSE.
