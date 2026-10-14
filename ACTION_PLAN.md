@@ -8,7 +8,7 @@ Plant Replacement/Sulam is now Telegram E2E LIVE VERIFIED, including reporter co
 TEST writer, independent Sheet read-back, exact-reference retrieval, and duplicate/idempotency proof.
 Image Processing (`/image_to_text`, `/image_analysis`) is LIVE VERIFIED with TEST Drive evidence,
 formatted Telegram review/saved summaries, Gemini transient fallback, and no canonical/domain auto-write.
-`/ai` non-canonical Gemini Q&A with agriculture File Search KB is MERGED and LIVE PASS.
+`/ai` AI-01/AI-03 are MERGED and LIVE PASS. AI-02B archive manifests are bound/read back in Drive; AI-04 current SISMARP derived-cache retrieval and AI-06 source-detail rendering are runtime PASS on PR #52 and await one final Telegram E2E visual proof. AI-05 freshness/version manifest is runtime PASS; scheduled GitHub Actions refresh source is ready but autonomous refresh proof is pending until the workflow exists on default branch.
 Final PILOT_TEST technical closeout audit is PASS. Production readiness and final handover remain NOT ACHIEVED because the Friday Weekly Digest still lacks its first autonomous scheduled LIVE proof and no PILOT_REAL/production promotion has been authorized.
 
 ## Locked safety
@@ -33,6 +33,14 @@ Final PILOT_TEST technical closeout audit is PASS. Production readiness and fina
 - `/ai` LIVE proof (2026-10-14): isolated NON_CANONICAL Telegram Q&A merged in PR #50, with Gemini File Search agriculture KB (IRAC MoA v11.5 + DOA pesticide portal snapshot), formatted HTML replies, no canonical BSE read/write, and full regression 44/44 PASS.
 - Final PILOT_TEST closeout audit (2026-10-14): runtime `PILOT_TEST`, spreadsheet/evidence bound, general automation `OFF`, `production_write:false`, `official_bse_write:false`; schema audit 53/53 `CURRENT`; source-key audit `CURRENT` with 179 entries / 0 issue after auditor was corrected to treat terminal `OCR_DISCARDED` history as non-active lifecycle state; read-only auditor harness 8/8 PASS; approval callbacks latest state all processed and no current approval card OPEN; full regression 44/44 PASS; temporary `clasp pull` comparison confirmed 52/52 executable files byte-identical with Apps Script HEAD.
 
+## /ai milestone truth — 2026-10-14
+- AI-01: LIVE PASS — `/ai <question>` -> Gemini -> Telegram, NON_CANONICAL, zero canonical/domain write.
+- AI-02: PASS under reconciled contract — Gemini File Search has 2 active documents (IRAC v11.5 + DOA portal snapshot); `08_KB_REFERENCE/IRAC` and `DOA_SISMARP` contain audit/archive manifests with authority, source URL, version, File Search store/import state and freshness policy. Raw PDF/web binary is not claimed to be stored in Drive.
+- AI-03: LIVE PASS — agriculture/IRAC questions use grounded File Search and expose source labels.
+- AI-04: RUNTIME PASS / TELEGRAM E2E PENDING — current SISMARP retriever reads fresh HTTPS derived cache sourced from the public DOA SISMARP wildcard listing; zero-result queries fail safe, positive control `deltamethrin + peria` returned 6 current matches. Authority remains SISMARP/DOA; cache is transport state only.
+- AI-05: PARTIAL PASS — KB `refreshed_at`/version/freshness manifest and stale detection are live; SISMARP cache has `refreshed_at` + 14-day fail-closed freshness. Weekly GitHub Actions refresh source exists but autonomous scheduled run is NOT VERIFIED until after merge to default branch and one successful run.
+- AI-06: RUNTIME PASS / TELEGRAM E2E PENDING — replies can show `SISMARP CURRENT`, KB source titles, source URLs and zero-match caveat.
+
 ## Recovery tasks
 - REC-001 through REC-009: DONE — source/runtime audit, Owner Registry extraction, tests, and reproducible Script HEAD audit.
 - REC-010 through REC-015: DONE — Telegram reconciliation, controlled retry, confirmation/idempotency proof, and cleanup.
@@ -50,7 +58,7 @@ Final PILOT_TEST technical closeout audit is PASS. Production readiness and fina
 - `PILOT_TEST` only. General Telegram receive/worker polling automation kekal OFF dan manual. Daily Morning Digest 08:01 MYT = AUTONOMOUS LIVE PASS; current trigger UID `5040989954461663232`. Friday Weekly Digest 07:59 MYT = installed/verified, autonomous proof PENDING until first Friday run.
 - Plant Replacement/Sulam = LIVE VERIFIED end-to-end, including exact-reference retrieval and duplicate/idempotency proof.
 - Image Processing `/image_to_text` + `/image_analysis` = LIVE VERIFIED; Drive evidence remains TEST-only and domain records are not auto-written.
-- `/ai` = LIVE PASS / NON_CANONICAL; agriculture KB retrieval is active, while live/current SISMARP retrieval remains a future enhancement rather than a PILOT_TEST closeout blocker.
+- `/ai` = AI-01 LIVE PASS; AI-02 implemented as File Search semantic source + Drive audit/archive manifests (raw PDF/web binary is not claimed stored in Drive); AI-03 LIVE PASS; AI-04 runtime PASS using fresh fail-closed SISMARP derived cache (25,498 rows, 14-day freshness) with direct authority remaining SISMARP/DOA; AI-05 manifest/stale policy PASS and scheduled refresh SOURCE READY / autonomous proof PENDING; AI-06 runtime PASS / Telegram visual proof PENDING.
 - User `913757987` is registered as active TEST owner/admin.
 - No Google Tasks, production writer, production deployment, or official BSE integration is enabled.
 
