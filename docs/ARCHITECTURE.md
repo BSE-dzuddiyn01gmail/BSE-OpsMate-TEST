@@ -43,16 +43,26 @@ Scope lock platform yang diluluskan untuk roadmap ialah:
     + komen Gemini berasingan/non-canonical, PM kepada semua owner/admin/user
     TEST yang aktif mengikut visibility/access boundary;
   - weekly retrieval menggunakan command `/history` yang sama. Bentuk canonical:
-    `/history YYYY-MM`, `/history week last`, dan
-    `/history week YYYY-MM-DD` dengan tarikh mula wajib Jumaat.
-    Bentuk "minggu ke-X bulan" bukan format canonical kerana window
-    Jumaat-Khamis boleh melintasi sempadan bulan;
+    `/history YYYY-MM`, `/history week last`, `/history week N YYYY-MM`, dan
+    `/history week YYYY-MM-DD` dengan tarikh mula wajib Jumaat. `week N YYYY-MM`
+    bermaksud Jumaat ke-N yang jatuh dalam bulan pilihan user hingga Khamis
+    berikutnya; window boleh melintasi sempadan bulan dan perkara itu dipaparkan
+    melalui tarikh mula/akhir sebenar;
 - File Evidence: gambar/dokumen/video -> caption -> kategori dicadang ->
   pengesahan manusia -> Google Drive + metadata + retrieval.
-- **Image processing TEST** menggantikan UX `/ocr` lama. Pengguna attach PHOTO
-  dengan caption `/image_to_text` atau `/image_analysis`. Receiver hanya menyimpan
-  Telegram file identity + Evidence metadata TEST dan queue processing; gambar belum
-  ditulis ke Drive pada tahap ini. Worker menjalankan Gemini di background dan hanya
+- **Image processing TEST** menggantikan UX `/ocr` lama. Pengguna boleh attach PHOTO
+  dengan caption `/image_to_text` atau `/image_analysis`. Jika PHOTO dihantar tanpa
+  caption, receiver membuka inline chooser pada mesej itu sendiri: `Analisis gambar`,
+  `Ekstrak teks`, `Simpan Evidence`, atau `Buang`; user tidak perlu resend gambar atau
+  menaip slash-command dalam caption. Pilihan analysis/text menggunakan semula Telegram
+  `file_id` asal dan intake image-processing sedia ada; pilihan Evidence menggunakan
+  flow Evidence dengan human confirmation. Receiver hanya menyimpan Telegram file
+  identity + state TEST sebelum pilihan/queue processing; gambar belum ditulis ke Drive
+  pada tahap ini. Telegram `answerCallbackQuery` acknowledgement adalah best-effort sahaja:
+  jika polling manual lambat dan callback query sudah expired selepas action berjaya applied,
+  expiry tidak boleh menukar action yang sudah diproses kepada failure atau mencetus duplicate;
+  audit callback boleh direconcile kepada `PROCESSED` berdasarkan terminal chooser state.
+  Worker menjalankan Gemini di background dan hanya
   membuat **1 retry** selepas kegagalan pertama. Jika kedua-dua cubaan gagal, status
   menjadi `PROCESSING_FAILED`, bot menghantar ringkasan error bersih, dan tiada Drive
   atau domain write dibuat.
@@ -215,12 +225,16 @@ merekodkan kontrak implementasi TEST dan bukan sumber ZASS yang kedua.
   owner sedia ada, termasuk retrieval rekod restricted, pendaftaran/role, dan
   `/delete`; user tidak aktif kekal tiada akses.
 - Telegram command registry TEST memaparkan hanya command yang telah
-  diimplementasi: `/start`, `/status`, `/summary`, `/retrieve`, dan `/delete`.
-  `/history` serta `/report` ditambah ke menu serentak dengan implementasinya.
+  diimplementasi: `/start`, `/status`, `/summary`, `/retrieve`, `/image_to_text`,
+  `/image_analysis`, `/ai`, `/history`, `/ec_history`, `/report`, dan `/delete`.
+  Untuk PHOTO tanpa caption, inline chooser ialah UX utama; command image kekal sebagai
+  laluan eksplisit/compatible.
   Semua command tetap menguatkuasakan autorisasi pada runtime; menu bukan bukti
   kuasa akses.
-- `\/history YYYY-MM-DD` dan `\/history YYYY-MM` ialah retrieval PM owner/admin
-  bagi rekod TEST canonical dalam sela masa tepat. Secara default ia mengecualikan
+- `\/history YYYY-MM-DD`, `\/history YYYY-MM`, `\/history week last`,
+  `\/history week N YYYY-MM`, dan `\/history week <Friday YYYY-MM-DD>` ialah retrieval
+  sejarah TEST canonical mengikut access boundary sedia ada. Weekly window ialah
+  Jumaat-Khamis; bentuk N memilih Jumaat ke-N dalam bulan yang diminta. Secara default ia mengecualikan
   `VOIDED_TEST`, mengehadkan respons, menyembunyikan mesej asal/payload penuh,
   dan mengaudit setiap permintaan. Rekod restricted termasuk Claim tersedia
   kepada owner/admin manual sepanjang PoC ini.
@@ -247,7 +261,10 @@ merekodkan kontrak implementasi TEST dan bukan sumber ZASS yang kedua.
   asal dan pembetulan tidak pernah digabungkan sebagai set bacaan yang sama.
   EC yang dihantar dari group ialah `FIELD_OPERATION` standard untuk retrieval
   ahli aktif yang dibenarkan; penghantaran PM kekal `PRIVATE_SUBMISSION` dan
-  tertakluk kepada polisi asal penghantar/owner. Selepas `Benar`, confirmation
+  tertakluk kepada polisi asal penghantar/owner. General `/history` hanya memberi
+  ringkasan silang-domain; `/ec_history` ialah retrieval read-only khusus yang membaca
+  confirmed `TEST_EC_LEACHATE` dan memaparkan bacaan plot/modul penuh bagi hari, bulan,
+  atau weekly window yang sama. Selepas `Benar`, confirmation
   EC mesti dibina daripada read-back `TEST_EC_LEACHATE` canonical, bukan receipt
   generik atau echo candidate. Reporter menerima tarikh, sesi dan setiap scope
   yang disimpan (`x:x`, `AK`, atau numeric) supaya hasil write boleh disemak terus.
@@ -560,10 +577,7 @@ Keputusan owner selepas PILOT_TEST reporting stabilization:
    explicit positive replacement count, reporter/source lineage, review status,
    evidence refs, dan `production_write:false`. Event sulam tidak boleh mengubah
    Plant Census secara automatik; banci kekal authority bagi current observed population.
-   **Implementation status 2026-10-12:** PILOT_TEST technical/runtime PASS; parser
-   deterministic-first, ACTIVE-allocation as-of guard, dedicated idempotent TEST writer,
-   review audit, retrieval/history integration, and schema are implemented. Telegram
-   end-to-end live proof remains PENDING.
+   **Implementation status 2026-10-14:** PILOT_TEST technical/runtime PASS and Telegram E2E LIVE VERIFIED. Parser is deterministic-first with ACTIVE-allocation as-of guard, dedicated idempotent TEST writer, review audit, retrieval/history integration, and schema. Live source `BSE-TG-746192324` produced exactly one `VERIFIED_TEST` event `BSE-SB-PR-f09986463084`; independent Sheet read-back and exact-reference retrieval passed; Plant Census is never mutated automatically.
 
 2. **Baki 2C-2 yang tidak pasti dan seluruh 2C-3 = DEFERRED_BY_LOCKED_SCOPE.**
    Tiada pembangunan dibuat hanya untuk melengkapkan nombor fasa. Ia hanya dibuka
