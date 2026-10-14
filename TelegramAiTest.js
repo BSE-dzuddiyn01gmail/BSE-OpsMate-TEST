@@ -56,7 +56,9 @@ function bseAiSismarpPlan_(question){
   if(!out.crop){m=q.match(/berdaftar\s+(?:untuk|bagi)\s+([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ-]{1,30})/i);if(m)out.crop=m[1];}
   m=q.match(/(?:kawal|mengawal|untuk)\s+([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ -]{1,35}?)\s+pada\s+(?:tanaman\s+)?[A-Za-zÀ-ÿ-]+/i);if(m)out.pest=m[1].trim();
   m=q.match(/(?:perosak|nama perosak)\s*[:\-]?\s*([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ -]{1,35})/i);if(m)out.pest=m[1].trim();
+  if(!out.pest){m=q.match(/(?:kawalan|mengawal|kawal)\s+([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ -]{1,35}?)(?=\s*[:;,?.]|\s+(?:di|pada|untuk|bagi|adakah|apakah|dan)\b|$)/i);if(m)out.pest=m[1].trim();}
   m=q.match(/(?:perawis(?: aktif)?|bahan aktif)\s*[:\-]?\s*([A-Za-z0-9][A-Za-z0-9 .-]{1,40})/i);if(m)out.active_ingredient=m[1].trim();
+  if(/^(?:ini|itu|tersebut|yang)$/i.test(out.active_ingredient))out.active_ingredient='';
   m=q.match(/(?:jenama racun|jenama|produk)\s*[:\-]?\s*([A-Za-z0-9][A-Za-z0-9 .-]{1,40})/i);if(m)out.trade_name=m[1].trim();
   return out;
 }
@@ -86,6 +88,7 @@ function bseAiSismarpCurrent_(question){
 function diagnoseBseAiSismarpTest(){return bseAiSismarpCurrent_('Adakah abamectin berdaftar untuk peria di Malaysia?');}
 function diagnoseBseAiSismarpThripsTest(){return bseAiSismarpCurrent_('Racun apa untuk thrips pada peria?');}
 function diagnoseBseAiSismarpPositiveTest(){return bseAiSismarpCurrent_('Adakah deltamethrin berdaftar untuk peria di Malaysia?');}
+function diagnoseBseAiSismarpNaturalQueryTest(){return bseAiSismarpCurrent_('Deltamethrin untuk tanaman peria bagi kawalan lalat buah: adakah ada padanan dalam SISMARP semasa, apakah kumpulan IRAC bahan aktif ini, dan nyatakan sumber rujukan?');}
 function bseAiIracQuestion_(question){return /\b(?:IRAC|mode of action|MoA|kumpulan\s+IRAC)\b/i.test(String(question||''));}
 function bseAiIracGrounded_(question){
   if(!bseAiIracQuestion_(question))return null;
@@ -304,6 +307,7 @@ function runBseTelegramAiHarnessTests(){
     {id:'File Search is optional and property-bound',pass:/BSE_AI_FILE_SEARCH_STORE_PROPERTY/.test(bseAiGeminiAnswer_.toString())&&/fileSearchStoreNames/.test(bseAiGeminiAnswer_.toString())},
     {id:'Malaysia pesticide authority boundary preserved',pass:/pendaftaran produk dikawal oleh Lembaga Racun Makhluk Perosak\/Jabatan Pertanian/.test(bseTelegramAiSystemPrompt_(true))&&/Jangan kata produk didaftarkan melalui SISMARP/.test(bseTelegramAiSystemPrompt_(true))&&/IRAC.*BUKAN/.test(bseTelegramAiSystemPrompt_(true))},
     {id:'SISMARP planner extracts explicit crop and pest only',pass:bseAiSismarpPlan_('Adakah abamectin berdaftar untuk peria di Malaysia?').crop.toLowerCase()==='peria'&&bseAiSismarpPlan_('racun apa untuk thrips pada peria?').pest.toLowerCase()==='thrips'&&bseAiSismarpPlan_('racun apa untuk thrips pada peria?').crop.toLowerCase()==='peria'},
+    {id:'SISMARP planner handles natural kawalan phrase and ignores active pronoun',pass:(()=>{const p=bseAiSismarpPlan_('Deltamethrin untuk tanaman peria bagi kawalan lalat buah: adakah ada padanan dalam SISMARP semasa, apakah kumpulan IRAC bahan aktif ini, dan nyatakan sumber rujukan?');return p.crop.toLowerCase()==='peria'&&p.pest.toLowerCase()==='lalat buah'&&p.active_ingredient==='';})()},
     {id:'SISMARP current retriever uses HTTPS derived cache and is read-only',pass:/raw\.githubusercontent\.com/.test(BSE_AI_SISMARP_CACHE_URL)&&/CACHE_STALE/.test(bseAiSismarpCurrent_.toString())&&!/appendRow|setValue|setValues/.test(bseAiSismarpCurrent_.toString())},
     {id:'Telegram presentation renders bold headings without visible asterisks',pass:bseTelegramAiToHtml_('**Bahagian 1**\n* item').includes('<b>Bahagian 1</b>')&&!bseTelegramAiToHtml_('**Bahagian 1**\n* item').includes('*')&&bseTelegramAiToHtml_('**Bahagian 1**\n* item').includes('• item')},
     {id:'Telegram AI renders SISMARP current freshness and source details',pass:/SISMARP CURRENT/.test(bseTelegramAiRender_({text:'x',sources:[],source_details:[{title:'DOA',url:'https://doa.gov.my'}],sismarp_current:{available:true,total:1,cache_refreshed_at:'2026-10-14T00:00:00Z',age_days:0,source_url:'http://www.portal.doa.gov.my/sismarp/'}}))&&/Butiran sumber/.test(bseTelegramAiRender_({text:'x',sources:[],source_details:[{title:'DOA',url:'https://doa.gov.my'}]}))},
@@ -320,6 +324,11 @@ function runBseAiCurrentSismarpSmokeTest(){
   const question='Abamectin kumpulan IRAC berapa dan adakah ia berdaftar untuk peria di Malaysia?';
   const current=bseAiSismarpCurrent_(question),irac=bseAiIracGrounded_(question),answer=bseAiGeminiAnswer_(question,current,irac);
   return {current:{available:current&&current.available,total:current&&current.total,query:current&&current.query,cache_refreshed_at:current&&current.cache_refreshed_at,age_days:current&&current.age_days},irac:{available:irac&&irac.available,sources:irac&&irac.sources||[],reason:irac&&irac.reason||''},answer:String(answer.text||'').slice(0,1800),sources:answer.sources,rendered:bseTelegramAiRender_(answer).slice(0,3200),production_write:false};
+}
+function runBseAiNaturalQuerySmokeTest(){
+  const question='Deltamethrin untuk tanaman peria bagi kawalan lalat buah: adakah ada padanan dalam SISMARP semasa, apakah kumpulan IRAC bahan aktif ini, dan nyatakan sumber rujukan?';
+  const current=bseAiSismarpCurrent_(question),irac=bseAiIracGrounded_(question),answer=bseAiGeminiAnswer_(question,current,irac);
+  return {current:{available:current&&current.available,total:current&&current.total,query:current&&current.query,cache_refreshed_at:current&&current.cache_refreshed_at},irac:{available:irac&&irac.available,sources:irac&&irac.sources||[],reason:irac&&irac.reason||''},answer:String(answer.text||'').slice(0,1800),sources:answer.sources,rendered:bseTelegramAiRender_(answer).slice(0,3200),production_write:false};
 }
 function runBseAiKnowledgeBaseSmokeTest(){
   const aq='Abamectin berada dalam kumpulan IRAC berapa? Adakah klasifikasi IRAC sahaja membuktikan bahan itu berdaftar atau disyorkan di Malaysia? Jawab ringkas dan nyatakan batas sumber.',agriculture=bseAiGeminiAnswer_(aq,null,bseAiIracGrounded_(aq));
