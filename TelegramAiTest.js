@@ -33,6 +33,7 @@ function bseTelegramAiSystemPrompt_(hasKb){
     'Boleh beri penerangan, pilihan dan pertimbangan umum, tetapi jangan gambarkan cadangan sebagai approval atau arahan kerja BSE.',
     'Susun jawapan supaya mudah dibaca di Telegram. Jika soalan mempunyai beberapa bahagian, pecahkan jawapan mengikut bahagian dan beri tajuk ringkas bagi setiap bahagian.',
     'Gunakan **Tajuk** hanya untuk tajuk/pembahagian utama. Jangan guna asterisk untuk bullet; guna tanda •. Elakkan markdown table, heading #, code fence, dan hiasan markdown berlebihan.',
+    'Untuk istilah teknikal IRAC, kekalkan nama rasmi/English label daripada sumber grounding (contohnya Pyrethroids, Sodium channel modulators). Jangan cipta atau terjemah sendiri nama kelas/Mode of Action yang tidak disebut dalam grounding.',
     'Jawab dalam Bahasa Melayu yang ringkas dan praktikal kecuali pengguna meminta bahasa lain.'
   ].join('\n');
 }
@@ -126,11 +127,11 @@ function bseAiGeminiAnswer_(question,currentSismarp,iracGrounded){
   if(!models.length)throw new Error('Model Gemini belum dikonfigurasi.');
   if(bseAiIracQuestion_(question)&&!(iracGrounded&&iracGrounded.available))throw new Error('IRAC grounding daripada KB tidak tersedia; klasifikasi tidak dijawab untuk mengelakkan jawapan tanpa sumber.');
   const currentContext=currentSismarp?('\n\nCURRENT_SISMARP_CONTEXT_JSON:\n'+JSON.stringify(currentSismarp)+'\nGunakan konteks SISMARP CURRENT ini sebagai fakta semasa hanya untuk padanan query/filter yang dinyatakan apabila available=true. Jangan tambah produk, tanaman, perosak, nombor pendaftaran atau status yang tiada dalam konteks. Jika total=0, nyatakan tepat bahawa tiada padanan SISMARP semasa ditemui untuk filter tersebut; jangan simpulkan bahan aktif/produk tidak berdaftar di Malaysia secara umum. Jika available=false, nyatakan semakan semasa tidak tersedia/stale dan jangan membuat kesimpulan pendaftaran.'):'';
-  const iracContext=iracGrounded&&iracGrounded.available?('\n\nGROUNDED_IRAC_CONTEXT:\n'+String(iracGrounded.text||'')+'\nGunakan konteks IRAC ini sahaja untuk klasifikasi IRAC/MoA; jangan tambah klasifikasi dari pengetahuan model.'):'';
+  const iracContext=iracGrounded&&iracGrounded.available?('\n\nGROUNDED_IRAC_CONTEXT:\n'+String(iracGrounded.text||'')+'\nGunakan konteks IRAC ini sahaja untuk klasifikasi IRAC/MoA; jangan tambah klasifikasi dari pengetahuan model. Kekalkan group code dan nama teknikal rasmi/English label seperti yang terdapat dalam grounding; jangan reka terjemahan Melayu untuk nama kelas atau Mode of Action.'):'';
   const payload={
     systemInstruction:{parts:[{text:bseTelegramAiSystemPrompt_(!!store)}]},
     contents:[{role:'user',parts:[{text:question+currentContext+iracContext}]}],
-    generationConfig:{maxOutputTokens:1800,temperature:0.25}
+    generationConfig:{maxOutputTokens:1800,temperature:0}
   };
   if(store&&!(iracGrounded&&iracGrounded.available))payload.tools=[{fileSearch:{fileSearchStoreNames:[store]}}];
   let response=null,status=0,modelUsed='';
@@ -329,6 +330,7 @@ function runBseTelegramAiHarnessTests(){
     {id:'IRAC classification is code-gated by grounded File Search',pass:/IRAC grounding daripada KB tidak tersedia/.test(bseAiGeminiAnswer_.toString())&&/HANYA File Search KB/.test(bseAiIracGrounded_.toString())},
     {id:'IRAC grounding narrows combined pesticide question to detected active ingredient',pass:(()=>{const q='Deltamethrin untuk tanaman peria bagi kawalan lalat buah: adakah ada padanan dalam SISMARP semasa, apakah kumpulan IRAC bahan aktif ini, dan nyatakan sumber rujukan?',current={query:{active_ingredient:'deltamethrin'}};return bseAiIracGroundingQuestion_(q,current)==='deltamethrin kumpulan IRAC berapa?';})()},
     {id:'IRAC grounding retries transient or missing File Search result without model-knowledge fallback',pass:/retry<2/.test(bseAiIracGroundedReliable_.toString())&&/IRAC_GROUNDING_MISSING/.test(bseAiIracGroundedReliable_.toString())&&!/generateContent|GEMINI_API_KEY/.test(bseAiIracGroundedReliable_.toString())},
+    {id:'IRAC technical labels stay source-grounded and deterministic',pass:/kekalkan nama rasmi\/English label/.test(bseTelegramAiSystemPrompt_(true))&&/jangan reka terjemahan Melayu/.test(bseAiGeminiAnswer_.toString())&&/temperature:0/.test(bseAiGeminiAnswer_.toString())},
     {id:'no question persistence',pass:!/appendRow|setValue|setValues/.test(bseTelegramAiReceive_.toString()+bseAiGeminiAnswer_.toString()+bseAiSismarpCurrent_.toString()+bseAiIracGrounded_.toString())}
   ];
   const bad=tests.filter(t=>!t.pass);if(bad.length)throw new Error('AI harness gagal: '+bad.map(t=>t.id).join(', '));return tests;
