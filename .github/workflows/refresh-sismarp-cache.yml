@@ -19,12 +19,12 @@ jobs:
           fetch-depth: 0
 
       - name: Refresh public SISMARP cache
-        shell: pwsh
+        shell: powershell
         run: |
           node scripts/refresh_sismarp_cache.mjs --output "$env:RUNNER_TEMP\sismarp-current.json"
 
       - name: Update derived cache branch
-        shell: pwsh
+        shell: powershell
         run: |
           $ErrorActionPreference='Stop'
           git config user.name 'github-actions[bot]'
