@@ -1,40 +1,36 @@
-﻿name: Refresh SISMARP cache
+name: Refresh SISMARP cache
 
 on:
   workflow_dispatch:
-  schedule:
-    # Weekly, Saturday 19:20 UTC = Sunday 03:20 MYT.
-    - cron: '20 19 * * 6'
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  refresh:
-    runs-on: ubuntu-latest
+  connectivity:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
-      - name: Checkout canonical workflow source
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Refresh public SISMARP cache
-        run: python3 scripts/refresh_sismarp_cache.py --output /tmp/sismarp-current.json
-      - name: Update derived cache branch
-        shell: bash
+      - name: Probe SISMARP direct HTTP
+        shell: pwsh
         run: |
-          set -euo pipefail
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git fetch origin sismarp-cache
-          git worktree add /tmp/sismarp-cache origin/sismarp-cache
-          cd /tmp/sismarp-cache
-          git switch -C sismarp-cache origin/sismarp-cache
-          mkdir -p data/sismarp
-          cp /tmp/sismarp-current.json data/sismarp/current.json
-          git add data/sismarp/current.json
-          if git diff --cached --quiet; then
-            echo 'No SISMARP cache change.'
-            exit 0
-          fi
-          git commit -m 'data: refresh SISMARP current cache'
-          git push origin HEAD:sismarp-cache
+          $u='http://www.portal.doa.gov.my/sismarp/welcome/searchtanaman?search=%25'
+          $sw=[Diagnostics.Stopwatch]::StartNew()
+          try {
+            $r=Invoke-WebRequest -Uri $u -UseBasicParsing -TimeoutSec 60 -Headers @{'User-Agent'='OpsMate-BSE-SISMARP-Diagnostic/1.0'}
+            $sw.Stop()
+            Write-Output ('HTTP='+$r.StatusCode)
+            Write-Output ('LEN='+$r.Content.Length)
+            Write-Output ('SEC='+[math]::Round($sw.Elapsed.TotalSeconds,1))
+            Write-Output ('HAS_PERIA='+[bool]($r.Content -match '(?i)peria'))
+            Write-Output ('HAS_DETAIL='+[bool]($r.Content -match '/detail/\d+'))
+            if($r.StatusCode -ne 200 -or $r.Content.Length -lt 1000000 -or $r.Content -notmatch '/detail/\d+') { exit 2 }
+          } catch {
+            $sw.Stop()
+            Write-Output ('ERR='+$_.Exception.Message)
+            Write-Output ('SEC='+[math]::Round($sw.Elapsed.TotalSeconds,1))
+            exit 1
+          }
