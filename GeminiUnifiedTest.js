@@ -686,8 +686,11 @@ function bseUnifiedGuardSeedSowing_(r,source) {
 function bseTransplantPlots_(input){
   const text=String(input||'');
   if(!/\bpindah\s+anak\s+pokok\b/i.test(text))return {ok:false,plots:[],reason:'TRANSPLANT_PHRASE_MISSING'};
+  // Explicit source labels describe where seedlings came from, not transplant
+  // destinations. Exclude only those labelled lines from destination parsing.
+  const destinationText=text.split(/\r?\n/).filter(line=>!/^\s*(?:Plot\s+asal|Dari\s+plot)\s*:/i.test(line)).join('\n');
   const tokens=[];const matcher=/\bM([1-9]\d*)P(\d+)\b/ig;let match;
-  while((match=matcher.exec(text))){
+  while((match=matcher.exec(destinationText))){
     const digits=match[2];
     if(!/^[1-9]\d*$/.test(digits)||digits.length>2)return {ok:false,plots:[],reason:'TRANSPLANT_PLOT_AMBIGUOUS'};
     const numbers=digits.length===2?[digits[0],digits[1]]:[digits];
@@ -725,9 +728,10 @@ function bseTransplantExplicitDateContext_(sourceContext){
     lines.forEach(line=>{
       const labeled=line.match(/^\s*Tarikh\s+Pindah\s*:\s*(.*?)\s*$/i);
       const plain=index>0&&lines.length===1?line.match(/^\s*(\d{1,2}\/\d{1,2}\/\d{4})\s*$/):null;
-      if(!labeled&&!plain)return;
+      const inline=index===0&&lines.length===1?line.match(/^Pindah\s+anak\s+pokok\s+.+?\s+ke\s+M[1-9]\d*P[1-9]\d*\s*,\s*(\d{1,2}\/\d{1,2}\/\d{4})\s*$/i):null;
+      if(!labeled&&!plain&&!inline)return;
       present=true;
-      const raw=(labeled?labeled[1]:plain[1]).trim(),parts=raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+      const raw=(labeled?labeled[1]:plain?plain[1]:inline[1]).trim(),parts=raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
       if(!parts){invalid=true;return;}
       const day=Number(parts[1]),month=Number(parts[2]),year=Number(parts[3]),date=new Date(Date.UTC(year,month-1,day));
       if(year!==2026||date.getUTCFullYear()!==year||date.getUTCMonth()!==month-1||date.getUTCDate()!==day){invalid=true;return;}
@@ -751,7 +755,8 @@ function bseUnifiedGuardTransplant_(r,sourceContext,receivedAt){
   const candidate=transplants[0],fields=candidate&&candidate.fields;
   const hasText=key=>fields&&typeof fields[key]==='string'&&fields[key].trim();
   const eventDate=explicitDate.date;
-  const deterministicOnlyMissing=candidate&&Array.isArray(candidate.missing)&&candidate.missing.every(key=>key==='event_date'||key==='plot_ids'||key==='batch_match');
+  const sourcePlotClarification=candidate&&Array.isArray(candidate.missing)&&candidate.missing.includes('source_plot');
+  const deterministicOnlyMissing=candidate&&Array.isArray(candidate.missing)&&candidate.missing.every(key=>key==='event_date'||key==='plot_ids'||key==='batch_match'||key==='source_plot');
   const valid=candidates.length===1&&transplants.length===1&&candidate&&['PASS','NEED_INFO'].includes(candidate.validation)&&deterministicOnlyMissing&&fields&&
     fields.project_id==='BSE_SB'&&fields.system_year===2026&&fields.record_type==='TRANSPLANT_EVENT'&&fields.verification_status==='PROVISIONAL'&&fields.event_type==='TRANSPLANT'&&fields.event_status==='PROPOSED'&&hasText('crop')&&
     typeof fields.variety==='string'&&parsed.ok&&explicitDate.ok&&eventDate;
@@ -760,7 +765,9 @@ function bseUnifiedGuardTransplant_(r,sourceContext,receivedAt){
     candidates.forEach(c=>{if(!c||!c.fields)return;c.validation='NEED_INFO';c.missing=Array.isArray(c.missing)?c.missing.slice():[];if(!parsed.ok)c.missing.push('plot_id');if(!hasText('crop'))c.missing.push('batch_match');if(!explicitDate.ok||!eventDate)c.missing.push('event_date');c.missing=Array.from(new Set(c.missing));});
     return;
   }
-  fields.event_date=eventDate;fields.plot_ids=parsed.plots;candidates.forEach(c=>{c.validation='PASS';c.missing=[];});r.validation='PASS';
+  fields.event_date=eventDate;fields.plot_ids=parsed.plots;
+  if(sourcePlotClarification){candidate.validation='NEED_INFO';candidate.missing=['source_plot'];r.validation='NEED_INFO';return;}
+  candidates.forEach(c=>{c.validation='PASS';c.missing=[];});r.validation='PASS';
 }
 
 function bsePlantCensusSource_(input){
@@ -851,9 +858,11 @@ function bseUnifiedGuard_(raw,context) {
     // The schema asks Gemini for an array, but the guard derives missing from
     // fields so a malformed omitted list cannot turn complete data into NEED_INFO.
     if(!Array.isArray(c.missing))c.missing=[];
-    // `missing` is derived from actual fields. A model-reported missing value
-    // is stale once a linked reply has supplied that field, so do not inherit it.
-    c.missing=missing;
+    // source_plot is a deterministic control-field used only to disambiguate
+    // transplant reallocation. Preserve it across the generic schema guard;
+    // all other model-reported missing values remain derived from actual fields.
+    const controlMissing=c.target==='Transplant_Event_Log'&&c.missing.includes('source_plot')?['source_plot']:[];
+    c.missing=Array.from(new Set(missing.concat(controlMissing)));
     const date=c.fields.event_date;
     const outOfYear=typeof date==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(date)&&date.slice(0,4)!=='2026';
     if(outOfYear)c.validation='REJECTED';

@@ -583,14 +583,80 @@ Keputusan owner selepas PILOT_TEST reporting stabilization:
    Tiada pembangunan dibuat hanya untuk melengkapkan nombor fasa. Ia hanya dibuka
    semula jika ada keperluan operasi BSE yang jelas atau defect/pilot evidence sebenar.
 
-3. **Plot decision change semasa Transplant = KNOWN GAP / separate capability.**
-   Current Transplant hanya boleh mengaktifkan allocation `PLANNED` yang tepat,
-   melalui ledger `PLANNED -> ACTIVE`, tanpa mutate baseline
-   `TEST_PLOT_ALLOCATION`. Jika plot sebenar berubah ketika transplant, sistem
-   semasa mesti berhenti `WAITING_INFO`; ia tidak boleh silently memindahkan
-   allocation. Jika diperlukan oleh pilot, bina `Plot Allocation Change / Reallocation`
-   event yang diaudit sebelum Transplant mengaktifkan plot baharu. Capability ini
-   berasingan daripada Plant Replacement.
+3. **Plot decision change semasa Transplant = TELEGRAM E2E LIVE VERIFIED (PILOT_TEST).**
+   Baseline `TEST_PLOT_ALLOCATION` kekal immutable. Jika laporan Transplant menyebut
+   crop yang jelas tetapi destination plot tidak sama dengan plan, sistem mencari
+   source allocation `PLANNED` yang sah dan destination mesti tiada plan/effective
+   allocation. Jika source unik, kad pengesahan memaparkan plan asal, laporan sebenar,
+   dan kesan `from_plot -> to_plot` dengan butang `Benar / Batal` sahaja. Jika satu crop
+   mempunyai lebih daripada satu source plot `PLANNED`, sistem berhenti `WAITING_INFO`
+   dan bertanya `plot asal` secara eksplisit; reply canonical seperti `M1P1` diperlukan,
+   bukan inference/Gemini.
+
+   Selepas `Benar`, write mesti atomik dari perspektif review: append-only
+   `TEST_PLOT_REALLOCATION_EVENT`, satu `TEST_TRANSPLANT_EVENT`, dan satu
+   `TEST_ALLOCATION_STATUS_EVENT` untuk allocation ID yang sama pada destination
+   (`PLANNED -> ACTIVE`). Baseline source row tidak diubah. Effective/current plot
+   untuk `/status plot`, Census, Treatment dan Plant Replacement dibaca daripada
+   latest allocation-status ledger, jadi source plot tidak lagi dianggap ACTIVE dan
+   destination menjadi current plot. `Batal` adalah audit-only dan tidak meminta sebab
+   kedua. Semua path kekal TEST-only dan `production_write:false`.
+
+   **Live proof 2026-10-15:** final valid re-proof used root `BSE-TG-746192337`
+   (Timun, destination M1P3). The deterministic ambiguity path exposed actual
+   source options M1P1/M1P2 and Telegram message 258 asked which plot supplied
+   the seedlings for M1P3. Reply-linked child `BSE-TG-746192340` / message 259
+   with canonical source `M1P1` resolved deterministically to M1P1 -> M1P3 and
+   opened approval card message 262. Callback JSON independently proved the live
+   card contained exactly `Benar` and `Batal` and no `Betulkan`. Reporter
+   selected `Batal`; Telegram confirmed `DISCARDED_BY_REPORTER` at
+   15/10/2026 06:26 MYT and callback `746192341` reached `PROCESSED`.
+   Approval UI and child queue both read back `DISCARDED_BY_REPORTER`;
+   `reject_prompt_message_id` remained empty, so no second rejection-reason
+   prompt was created. Independent Sheet read-back confirmed zero matching
+   Reallocation, Transplant and Allocation Status events, while baseline M1P1/M1P2
+   Plot Allocation rows remained unchanged as `PLANNED`.
+
+   The live sequence exposed three defects that were fixed and re-proven before
+   closure: worker finalization lost `source_plot` and downgraded the question to
+   `batch_match` (`e4fbb7d`); the effective approval send path used generic
+   three-button markup instead of the reallocation-specific two-button markup
+   (`15becc6`); and the source-plot question was operationally unclear and did
+   not expose the deterministic candidate plots (`26cd33c`). Final targeted
+   reallocation harness 8/8 PASS, targeted UI harness 6/6 PASS, full regression
+   47/47 PASS, schema 57/57 CURRENT, and source-key audit 191 entries / 0 issue.
+
+   **Benar-path live proof 2026-10-15:** after Batal safety was proven, the same
+   PILOT_TEST lineage was exercised with real TEST confirmation writes. Root
+   `BSE-TG-746192342` used an explicit labelled source (`Plot asal: M1P1`) and
+   destination M1P3. Live testing exposed that the destination parser initially
+   counted the labelled source as a destination; commit `c64f883` excludes only
+   `Plot asal:` / `Dari plot:` lines from destination parsing while preserving
+   them as explicit source evidence. Card 267 then resolved allocation
+   `BSE-SB-CB-20260910-001-PA-001` M1P1 -> M1P3 and reporter `Benar` created
+   reallocation `BSE-SB-RA-20261015-001`, transplant
+   `BSE-SB-TR-20261015-001`, and status `PLANNED -> ACTIVE` at M1P3.
+
+   A second root, `BSE-TG-746192344`, deliberately used natural shorthand:
+   `Pindah anak pokok Timun ke M1P4, 15/10/2026`. Initial runtime correctly
+   failed closed because crop/date shorthand was not yet contracted. Commit
+   `0617ce5` added one strict anchored shorthand grammar for exactly
+   `Pindah anak pokok <crop> ke <plot>, <dd/mm/yyyy>`, without broad heuristic
+   parsing. After regression, the same queued source deterministically identified
+   M1P2 as the only remaining valid source because PA-001 was already ACTIVE at
+   M1P3. Card 273 showed M1P2 -> M1P4 with only `Benar / Batal`; reporter
+   `Benar` created `BSE-SB-RA-20261015-002`,
+   `BSE-SB-TR-20261015-002`, and activated
+   `BSE-SB-CB-20260910-001-PA-002` at M1P4.
+
+   Final independent Sheet read-back shows exactly two Timun reallocation rows
+   (M1P1 -> M1P3 and M1P2 -> M1P4), corresponding completed Transplant rows,
+   and two allocation-status rows at M1P3/M1P4. Original PLOT_ALLOCATION rows
+   remain unchanged as M1P1/M1P2 `PLANNED`; effective state is derived from the
+   status ledger. Final targeted reallocation harness 10/10 PASS, targeted UI
+   harness 6/6 PASS, full regression 47/47 PASS, schema 57/57 CURRENT, source-key
+   audit 205 entries / 0 issue, `production_write:false`, and
+   `official_bse_write:false`.
 
 4. Selepas autonomous Daily Morning Digest LIVE PASS, kerja seterusnya yang diluluskan
    ialah Plant Replacement, kemudian OCR minimum PoC jika masih diperlukan oleh BSE.
