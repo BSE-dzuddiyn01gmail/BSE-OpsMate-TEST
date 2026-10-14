@@ -1,4 +1,4 @@
-﻿name: Refresh SISMARP cache
+name: Refresh SISMARP cache
 
 on:
   workflow_dispatch:
@@ -11,30 +11,44 @@ permissions:
 
 jobs:
   refresh:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Windows, X64, sismarp]
     steps:
       - name: Checkout canonical workflow source
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
       - name: Refresh public SISMARP cache
-        run: python3 scripts/refresh_sismarp_cache.py --output /tmp/sismarp-current.json
-      - name: Update derived cache branch
-        shell: bash
+        shell: pwsh
         run: |
-          set -euo pipefail
+          node scripts/refresh_sismarp_cache.mjs --output "$env:RUNNER_TEMP\sismarp-current.json"
+
+      - name: Update derived cache branch
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git worktree prune
           git fetch origin sismarp-cache
-          git worktree add /tmp/sismarp-cache origin/sismarp-cache
-          cd /tmp/sismarp-cache
+          $wt=Join-Path $env:RUNNER_TEMP 'sismarp-cache-worktree'
+          if(Test-Path $wt){Remove-Item $wt -Recurse -Force}
+          git worktree add $wt origin/sismarp-cache
+          Set-Location $wt
           git switch -C sismarp-cache origin/sismarp-cache
-          mkdir -p data/sismarp
-          cp /tmp/sismarp-current.json data/sismarp/current.json
+          New-Item -ItemType Directory -Force -Path 'data\sismarp' | Out-Null
+          Copy-Item (Join-Path $env:RUNNER_TEMP 'sismarp-current.json') 'data\sismarp\current.json' -Force
           git add data/sismarp/current.json
-          if git diff --cached --quiet; then
-            echo 'No SISMARP cache change.'
+          git diff --cached --quiet
+          if($LASTEXITCODE -eq 0){
+            Write-Output 'No SISMARP cache change.'
+            Set-Location $env:GITHUB_WORKSPACE
+            git worktree remove --force $wt
             exit 0
-          fi
+          }
+          if($LASTEXITCODE -ne 1){throw 'git diff --cached failed'}
           git commit -m 'data: refresh SISMARP current cache'
           git push origin HEAD:sismarp-cache
+          Set-Location $env:GITHUB_WORKSPACE
+          git worktree remove --force $wt
+          git worktree prune
