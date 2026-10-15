@@ -47,7 +47,7 @@ dicapai.
 
 | Trek | Urutan kerja bergantung | Status semasa |
 |---|---|---|
-| A. Domain / pilot entry | 2C-2A -> 2C-2B -> MVP scope freeze -> PILOT_TEST | Domain/review runtime paths, File Evidence, Claim, Observation, Operation, Decision, Input Usage, PM retrieval/history/report, Daily Morning Digest, dan Friday Weekly Digest telah mencapai TEST/PILOT_TEST technical PASS yang berkaitan. Daily 08:01 MYT dan Friday 07:59 MYT schedulers ialah ON/verified. General Telegram receive/worker polling kekal OFF. Next real pilot gate ialah scheduled autonomous-delivery proof, kemudian documented BSE pilot acceptance; production gate kekal berasingan. |
+| A. Domain / pilot entry | 2C-2A -> 2C-2B -> MVP scope freeze -> PILOT_TEST -> PILOT_OPERATION | Domain/review runtime paths, File Evidence, Claim, Observation, Operation, Decision, Input Usage, PM retrieval/history/report, Daily Morning Digest, dan Friday Weekly Digest telah mencapai TEST/PILOT_TEST technical PASS yang berkaitan. Daily 08:01 MYT dan Friday 07:59 MYT autonomous delivery proofs kini PASS. General Telegram receive/worker polling kekal OFF. Next gate ialah LOCKED A-I `PILOT_OPERATION` path; production gate kekal berasingan. |
 | B. Platform | File Evidence architecture -> registration gate -> File Evidence TEST -> PM retrieval -> owner/admin registry + Telegram human review -> text reporting | Registration gate, intake/Drive Evidence, dan PM retrieval telah diimplementasi serta runtime-tested dalam TEST. Google Tasks/Task List telah dikeluarkan daripada MVP/shadow pilot oleh D-027; tiada replacement reminder tersirat. |
 
 Scheduler reporting telah dikunci dan dipasang dalam PILOT_TEST:
@@ -56,15 +56,20 @@ Scheduler reporting telah dikunci dan dipasang dalam PILOT_TEST:
   PM kepada owner/admin/REGISTERED_ACTIVE user mengikut visibility filtering.
 Daily Morning Digest achieved autonomous LIVE PASS on 2026-10-12 with independent audit
 read-back (8/8 records, Telegram message ID 167, trigger rescheduled). Friday Weekly Digest
-remains installation/configuration PASS only until its first autonomous Friday delivery.
+achieved AUTONOMOUS LIVE PASS on 2026-10-15 through an accelerated owner-runtime one-shot
+proof (Telegram message ID 293, audit `SENT`, one send row only); scheduler configuration was
+then restored to Friday 07:59 MYT.
 
 ## Syarat selesai dan production gate
 
 Setiap item hanya boleh ditanda selesai apabila mempunyai commit, ujian relevan,
 dan bukti runtime apabila item itu melibatkan runtime atau integrasi Apps Script.
-Semua perubahan mesti kekal TEST-only sehingga production gate diluluskan.
+Perubahan promotion seterusnya mesti mengikuti `docs/PILOT_OPERATION_EXECUTION_PATH.md`.
+`PILOT_OPERATION` boleh menyimpan data operasi sebenar ke Spreadsheet/Drive PILOT yang
+terasing sambil mengekalkan `production_write:false` dan `official_bse_write:false`.
+Ini bukan production rasmi BSE.
 
-Status production ialah **belum layak**. Sebelum sebarang final handover,
-OpsMate memerlukan pilot kerja sebenar, bukti penerimaan BSE, dan kelulusan
-production gate yang berasingan. Google Task completion tidak pernah menjadi
-kelulusan automatik atau bukti penerimaan pilot.
+Status production ialah **belum layak**. Sebelum sebarang production/final corporate
+handover, OpsMate memerlukan `PILOT_OPERATION` yang diverifikasi, bukti penerimaan BSE,
+dan kelulusan production gate yang berasingan. Google Task completion tidak pernah
+menjadi kelulusan automatik atau bukti penerimaan pilot.

@@ -61,6 +61,13 @@ official_bse_write: false
 production_write: false
 ```
 
+Urutan promotion daripada `PILOT_TEST` kepada `PILOT_OPERATION` dikawal oleh
+[`PILOT_OPERATION_EXECUTION_PATH.md`](PILOT_OPERATION_EXECUTION_PATH.md). Laluan A-I
+dalam dokumen itu ialah execution gate yang LOCKED dan tidak boleh dilangkau secara
+senyap. `PILOT_OPERATION` boleh menyimpan data operasi sebenar pilot ke `PILOT_*` dan
+Drive PILOT yang terasing; dua flag di atas hanya mengekalkan sempadan bahawa OpsMate
+bukan sistem rasmi BSE dan tidak menulis terus ke sistem rasmi BSE.
+
 ## 4. Freeze skop MVP
 
 Sediakan senarai rasmi setiap flow dan kategori dengan status:

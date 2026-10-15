@@ -22,6 +22,27 @@ tiga environment (`TEST`, `PILOT_TEST`, `PILOT_OPERATION`), questionnaire
 penilaian admin/team operasi, dan handover kepada BSE/team IT tanpa penulisan
 atau integrasi terus ke sistem rasmi BSE.
 
+### Naming lock dan execution path `PILOT_OPERATION`
+
+Nama environment operasi rasmi ialah **`PILOT_OPERATION`**. Tiada nama alternatif
+dibenarkan sebagai nama runtime, workbook, Drive folder, property, branch atau deployment baharu.
+
+Urutan promotion yang diluluskan dan LOCKED ialah A-I dalam
+[`PILOT_OPERATION_EXECUTION_PATH.md`](PILOT_OPERATION_EXECUTION_PATH.md):
+closeout truth reconciliation -> implement environment adapter -> authority binding ->
+minimum baseline seed -> transport reconciliation -> controlled real write/retrieve proof ->
+Evidence proof -> general automation proof -> final ordinary-user walkthrough.
+
+Sepanjang `PILOT_OPERATION`, writer OpsMate boleh menyimpan data operasi sebenar pilot
+ke Spreadsheet/Drive PILOT yang terasing, tetapi `production_write:false` dan
+`official_bse_write:false` kekal kerana tiada penulisan atau integrasi terus ke sistem
+rasmi BSE. Production gate kekal keputusan berasingan selepas pilot delivery.
+
+Authority untuk promotion ini ialah GitHub BSE/dzuddiyn01 path dan Google owner
+`dzuddiyn01@gmail.com`; akaun `rdeeen` tidak menjadi owner, authority, credential
+dependency atau fallback bagi `PILOT_OPERATION`. Nama produk/resource kekal **BSE OpsMate**;
+tiada alias produk lama dibenarkan untuk resource atau prompt aktif `PILOT_OPERATION`.
+
 Scope lock platform yang diluluskan untuk roadmap ialah:
 
 - Google Tasks dikeluarkan daripada MVP/shadow pilot melalui ZASS D-027.
