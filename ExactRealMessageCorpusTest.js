@@ -47,6 +47,15 @@ function bseExactCorpusDispatch_(id,fixture){
     return bseExactCorpusResult_(id,fixture,route,result,assertions,warnings);
   }
 
+  if(id==='RM-006'){
+    result=bseChlorineTreatmentParseMessage_(text,at); route=result?'TREATMENT_CHLORINE':'UNSUPPORTED_DETERMINISTIC';
+    const c=result&&result.candidates&&result.candidates[0],f=c&&c.fields||{};
+    assertions.push(bseExactAssert_('chlorine routes to Treatment, not inventory',result&&result.production_write===false&&result.candidates.length===1&&c.target==='Treatment_Event_Log'));
+    assertions.push(bseExactAssert_('legacy chlorine plots and dosage preserved',f.plot_ids&&f.plot_ids.join('|')==='M1P1|M1P2|M4P1|M4P2'&&f.treatment_description==='Chlorine Tablets - 1 botol'));
+    assertions.push(bseExactAssert_('crop remains unresolved until lifecycle allocation context',c&&c.validation==='NEED_INFO'&&c.missing.includes('crop')));
+    return bseExactCorpusResult_(id,fixture,route,result,assertions,warnings);
+  }
+
   if(id==='RM-009'){
     result=bseLeaveParseMessage_(text,at); route=result?'LEAVE':'UNSUPPORTED_DETERMINISTIC';
     assertions.push(bseExactAssert_('blank leave choices not invented',!result||result.validation!=='PASS'||!result.candidates[0].fields.leave_type));
@@ -128,7 +137,6 @@ function bseExactCorpusDispatch_(id,fixture){
   if(id==='RM-015') assertions.push(bseExactAssert_('explicit dripper item and 500 pcs preserved',result&&result.validation==='PASS'&&result.candidates.some(c=>c.fields&&c.fields.item_name==='Dripper'&&Number(c.fields.counted_quantity)===500)));
   if(id==='RM-018') assertions.push(bseExactAssert_('petrol amount explicit',result&&result.validation==='PASS'&&result.candidates.some(c=>Number(c.fields&&c.fields.amount_myr)===50)));
   if(id==='RM-001') assertions.push(bseExactAssert_('asset acquisition recognized or explicit unsupported',!!result||route==='UNSUPPORTED_DETERMINISTIC'));
-  if(id==='RM-006') assertions.push(bseExactAssert_('chlorine route source-driven',!!result||route==='UNSUPPORTED_DETERMINISTIC'));
   assertions.push(bseExactAssert_('production boundary',!result||result.production_write===false));
   if(!result) warnings.push('no deterministic parser recognized this exact fixture');
   return bseExactCorpusResult_(id,fixture,route,result||{validation:'UNSUPPORTED',production_write:false,candidates:[]},assertions,warnings);

@@ -248,7 +248,9 @@ merekodkan kontrak implementasi TEST dan bukan sumber ZASS yang kedua.
   kontrak ZASS D-043: bagi workflow treatment-list BSE yang telah ditetapkan,
   wording sejarah seperti `CADANGAN MERACUN` tidak menentukan state; rekod ialah
   treatment yang sudah dibuat di plot, tertakluk kepada pengesahan penghantar,
-  audit, validation ACTIVE allocation, dan `production_write:false`.
+  audit, validation allocation mengikut lifecycle (PLANNED selepas semai sebelum
+  transplant; ACTIVE selepas transplant, semuanya as-of tarikh rawatan), dan
+  `production_write:false`.
 - EC Leaching ialah target TEST baharu yang berasingan, `EC_Leachate_Log`.
   Tarikh `DD/MM/YYYY` dan sesi `PAGI` atau `PETANG` adalah wajib. `x : x`
   disimpan sebagai `NOT_MEASURED`; `AK` bermaksud `EC_IN_NEXT=0` dengan status
@@ -278,7 +280,7 @@ Butiran pelaksanaan, dependency, dan status roadmap direkodkan dalam
 Telegram private chat TEST
   -> TELEGRAM_TEST_QUEUE
   -> Site A jelas: OUT_OF_SCOPE_TEST, acknowledgement, dan berhenti
-  -> Kolam <nombor>: ASSET_OBSERVATION_UNSUPPORTED_TEST, acknowledgement, dan berhenti
+  -> Kolam <nombor> atau Kolam Site B: ASSET_OBSERVATION_UNSUPPORTED_TEST, acknowledgement, dan berhenti
   -> Gemini unified parser + guard
   -> WAITING_INFO atau NEEDS_HUMAN_REVIEW
   -> keputusan human review yang eksplisit melalui workflow Telegram/TEST
@@ -289,7 +291,7 @@ Telegram private chat TEST
    dibenarkan dan menyimpannya dalam `TELEGRAM_TEST_QUEUE`. Mesej yang menyebut
    `Site A` dengan jelas ditandakan `OUT_OF_SCOPE_TEST`, menerima acknowledgement
    luar skop, dan tidak dihantar ke Gemini atau worker. Jika bukan Site A tetapi
-   menyebut `Kolam <nombor>` dengan jelas, mesej ditandakan
+   menyebut `Kolam <nombor>` atau `Kolam Site B` dengan jelas, mesej ditandakan
    `ASSET_OBSERVATION_UNSUPPORTED_TEST`, menerima acknowledgement pemerhatian
    aset belum disokong, dan juga berhenti sebelum Gemini atau worker. Hanya
    mesej yang mempunyai lampiran PHOTO, DOCUMENT, atau VIDEO boleh dituntut oleh
@@ -356,7 +358,7 @@ memerlukan keputusan ZASS, architecture, regression dan runtime proof baharu.
 | `CORRECTION_ANSWER_RECEIVED` | Sesi pembetulan telah dituntut dan ditutup selepas jawapan disimpan. |
 | `NEEDS_HUMAN_REVIEW` | Hasil tersedia untuk semakan manusia melalui workflow TEST; tiada dependency Google Tasks. |
 | `OUT_OF_SCOPE_TEST` | Mesej jelas Site A; direkod untuk audit tetapi berhenti sebelum Gemini, worker, dan human-review workflow. |
-| `ASSET_OBSERVATION_UNSUPPORTED_TEST` | Mesej jelas Kolam <nombor> di luar workflow aset Fasa 1; direkod untuk audit tetapi berhenti sebelum Gemini, worker, dan human-review workflow. |
+| `ASSET_OBSERVATION_UNSUPPORTED_TEST` | Mesej jelas Kolam <nombor> atau Kolam Site B di luar workflow aset/site-observation semasa; direkod untuk audit tetapi berhenti sebelum Gemini, worker, dan human-review workflow. |
 | `MEASUREMENT_APPROVED_TEST` | Calon Measurement telah diluluskan dan ditulis ke TEST sahaja. |
 | `MEASUREMENT_REJECTED_TEST` | Calon Measurement ditolak; audit sahaja disimpan. |
 | `CROP_BATCH_APPROVED_TEST` | Proposal batch semaian diluluskan dan hanya rekod TEST ditulis. |
@@ -365,7 +367,7 @@ memerlukan keputusan ZASS, architecture, regression dan runtime proof baharu.
 | `TRANSPLANT_REJECTED_TEST` | Proposal pindah anak pokok ditolak; audit TEST sahaja disimpan. |
 | `PLANT_CENSUS_APPROVED_TEST` | Banci pokok bagi allocation efektif ACTIVE diluluskan dan ditulis ke TEST sahaja. |
 | `PLANT_CENSUS_REJECTED_TEST` | Banci pokok ditolak; audit TEST sahaja disimpan. |
-| `TREATMENT_APPROVED_TEST` | Rawatan sebenar bagi allocation efektif ACTIVE diluluskan dan ditulis ke TEST sahaja. |
+| `TREATMENT_APPROVED_TEST` | Rawatan sebenar bagi allocation lifecycle yang sah (PLANNED selepas semai atau ACTIVE selepas transplant, as-of tarikh rawatan) diluluskan dan ditulis ke TEST sahaja. |
 | `TREATMENT_REJECTED_TEST` | Rawatan sebenar ditolak; audit TEST sahaja disimpan. |
 | `OBSERVATION_APPROVED` / `OBSERVATION_REJECTED` | Keputusan workflow Observation TEST sedia ada. |
 | `NEEDS_ATTENTION` | Had retry worker telah dicapai. |
@@ -746,14 +748,17 @@ jawapan angka sahaja boleh melengkapkan bahan itu; jawapan bercanggah kekal
 fail-closed. Unit tidak boleh direka.
 
 `Jenis Tanaman` tidak wajib ditaip dalam laporan Rawatan apabila semua plot yang
-dilaporkan mempunyai tepat satu Crop Batch APPROVED dengan allocation efektif
-`ACTIVE`. Dalam keadaan itu crop diambil daripada rekod batch aktif yang sudah
-menjadi authority; ia bukan inference bebas. Jika padanan ACTIVE tiada atau
-berganda, sistem mesti `WAITING_INFO` dan meminta clarification minimum. Jika
-crop dinyatakan secara eksplisit, matcher kekal memerlukan crop itu sepadan.
-Matcher ACTIVE membaca batch approved, baseline `TEST_PLOT_ALLOCATION`, dan
-status efektif ledger transplant; PLANNED, batch tiada/berganda, crop bercanggah,
-atau plot tidak kanonik tidak boleh menghasilkan write.
+dilaporkan mempunyai tepat satu Crop Batch APPROVED dengan allocation yang sah
+mengikut lifecycle pada `event_date`. Selepas semai dan sebelum transplant,
+baseline allocation `PLANNED` ialah authority untuk rawatan polybag; selepas
+transplant, effective allocation `ACTIVE` daripada status ledger menjadi
+authority. Crop diambil hanya daripada padanan batch unik itu, bukan inference
+bebas. Rawatan sebelum tarikh semai, padanan tiada/berganda, crop bercanggah,
+atau plot tidak kanonik mesti `WAITING_INFO`/fail-closed dan tidak boleh menulis.
+Matcher membaca batch approved, sow/allocation date, baseline
+`TEST_PLOT_ALLOCATION`, event Transplant dan status ledger secara as-of tarikh
+rawatan. Peralihan PLANNED -> ACTIVE tidak membatalkan sejarah rawatan polybag
+yang sah sebelum transplant.
 
 Human confirmation kekal boundary rekod TEST. Menu `Lulus Rawatan ikut rujukan`
 dan `Tolak Rawatan ikut rujukan` menggunakan `ScriptLock`, hash stabil, dan
@@ -764,8 +769,20 @@ Google Tasks, production writer, perubahan baseline allocation, atau ledger
 transplant.
 
 Dedicated closure pada 2026-10-06 membuktikan 13/13 treatment assertions PASS
-(D-043 parser/state/date/dose/no-invention, deterministic router, ACTIVE
-allocation/review safety) dan full I-011 regression 22/22 PASS pada Apps Script
-TEST runtime. Independent Sheet read-back mengesahkan
-`production_write:false`; temporary TEST_ONLY probe kemudian dibuang dan Apps
-Script TEST HEAD dipulihkan kepada source canonical.
+untuk kontrak asal D-043. Real-message proof pada 2026-10-15 kemudian membetulkan
+satu andaian architecture: rawatan polybag boleh berlaku selepas semai sebelum
+transplant, jadi PLANNED tidak boleh ditolak secara automatik. Source
+`BSE-TG-746192346` (`Chlorine Tablets (15/10/26)`, M3P3/M3P4, 2 botol = 2
+tong biru) kini deterministically menghasilkan satu Treatment candidate, resolve
+batch Peria `BSE-SB-CB-20260910-002` melalui allocation PLANNED as-of 15/10,
+dan selepas reporter `Benar` menulis tepat satu
+`BSE-SB-TX-20261015-001` serta dua allocation links. Satu transient wrong-domain
+Input Usage M3P3 yang terhasil sebelum owner correction dikekalkan sebagai
+`VOIDED_TEST`; card M3P4 yang disupersede tidak menghasilkan row kedua.
+Superseded approval cards kini dikecualikan daripada aggregate queue-state supaya
+rekod yang sah boleh mencapai `REPORTER_CONFIRMED`.
+
+Bukti selepas correction: D-043 lifecycle 18/18 PASS, Treatment review 5/5 PASS,
+D-048 aggregate 10/10 PASS, exact-real corpus 21/21 PASS, full I-011 regression
+47/47 PASS, source-key audit 220 entries / 0 issue, schema 57/57 CURRENT,
+`production_write:false`, dan `official_bse_write:false`.
