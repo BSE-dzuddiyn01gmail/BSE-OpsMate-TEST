@@ -175,7 +175,7 @@ function bseTelegramFindActiveWaitingInfo_(rows,chatId,userId){
   return active.length===1?active[0]:null;
 }
 function bseTelegramTestSiteAOutOfScope_(text){return /\bsite\s+a\b/i.test(String(text||''));}
-function bseTelegramTestAssetObservationUnsupported_(text){return /\bkolam\s+\d+\b/i.test(String(text||''));}
+function bseTelegramTestAssetObservationUnsupported_(text){return /\bkolam\s+(?:\d+|site\s+b)\b/i.test(String(text||''));}
 
 // Manual-only cleanup for pre-P1-B2 discovery markers. It never invokes a parser or writer.
 function cleanupBseTelegramSetupMarkers(){

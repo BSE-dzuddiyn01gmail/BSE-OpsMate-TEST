@@ -280,7 +280,7 @@ Butiran pelaksanaan, dependency, dan status roadmap direkodkan dalam
 Telegram private chat TEST
   -> TELEGRAM_TEST_QUEUE
   -> Site A jelas: OUT_OF_SCOPE_TEST, acknowledgement, dan berhenti
-  -> Kolam <nombor>: ASSET_OBSERVATION_UNSUPPORTED_TEST, acknowledgement, dan berhenti
+  -> Kolam <nombor> atau Kolam Site B: ASSET_OBSERVATION_UNSUPPORTED_TEST, acknowledgement, dan berhenti
   -> Gemini unified parser + guard
   -> WAITING_INFO atau NEEDS_HUMAN_REVIEW
   -> keputusan human review yang eksplisit melalui workflow Telegram/TEST
@@ -291,7 +291,7 @@ Telegram private chat TEST
    dibenarkan dan menyimpannya dalam `TELEGRAM_TEST_QUEUE`. Mesej yang menyebut
    `Site A` dengan jelas ditandakan `OUT_OF_SCOPE_TEST`, menerima acknowledgement
    luar skop, dan tidak dihantar ke Gemini atau worker. Jika bukan Site A tetapi
-   menyebut `Kolam <nombor>` dengan jelas, mesej ditandakan
+   menyebut `Kolam <nombor>` atau `Kolam Site B` dengan jelas, mesej ditandakan
    `ASSET_OBSERVATION_UNSUPPORTED_TEST`, menerima acknowledgement pemerhatian
    aset belum disokong, dan juga berhenti sebelum Gemini atau worker. Hanya
    mesej yang mempunyai lampiran PHOTO, DOCUMENT, atau VIDEO boleh dituntut oleh
@@ -358,7 +358,7 @@ memerlukan keputusan ZASS, architecture, regression dan runtime proof baharu.
 | `CORRECTION_ANSWER_RECEIVED` | Sesi pembetulan telah dituntut dan ditutup selepas jawapan disimpan. |
 | `NEEDS_HUMAN_REVIEW` | Hasil tersedia untuk semakan manusia melalui workflow TEST; tiada dependency Google Tasks. |
 | `OUT_OF_SCOPE_TEST` | Mesej jelas Site A; direkod untuk audit tetapi berhenti sebelum Gemini, worker, dan human-review workflow. |
-| `ASSET_OBSERVATION_UNSUPPORTED_TEST` | Mesej jelas Kolam <nombor> di luar workflow aset Fasa 1; direkod untuk audit tetapi berhenti sebelum Gemini, worker, dan human-review workflow. |
+| `ASSET_OBSERVATION_UNSUPPORTED_TEST` | Mesej jelas Kolam <nombor> atau Kolam Site B di luar workflow aset/site-observation semasa; direkod untuk audit tetapi berhenti sebelum Gemini, worker, dan human-review workflow. |
 | `MEASUREMENT_APPROVED_TEST` | Calon Measurement telah diluluskan dan ditulis ke TEST sahaja. |
 | `MEASUREMENT_REJECTED_TEST` | Calon Measurement ditolak; audit sahaja disimpan. |
 | `CROP_BATCH_APPROVED_TEST` | Proposal batch semaian diluluskan dan hanya rekod TEST ditulis. |

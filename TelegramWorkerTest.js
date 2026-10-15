@@ -277,7 +277,10 @@ function runBseTelegramQueueStatusRegressionTests(){
   const passStatus=bseTelegramQueueStatus_(passResult),needInfoStatus=bseTelegramQueueStatus_(needInfoResult);
   const tests=[
     {id:'PASS actionable queues human review and permits task',pass:passStatus==='NEEDS_HUMAN_REVIEW'&&bseTelegramReviewTaskEligible_(passStatus)},
-    {id:'NEED_INFO queues waiting info and blocks task',pass:needInfoStatus==='WAITING_INFO'&&!bseTelegramReviewTaskEligible_(needInfoStatus)&&!!bseTelegramQuestion_(needInfoResult)}
+    {id:'NEED_INFO queues waiting info and blocks task',pass:needInfoStatus==='WAITING_INFO'&&!bseTelegramReviewTaskEligible_(needInfoStatus)&&!!bseTelegramQuestion_(needInfoResult)},
+    {id:'pond Site B is blocked at receiver asset-observation boundary',pass:bseTelegramTestAssetObservationUnsupported_('paras air kolam site B\n- tinggal 2 kaki sahaja, surut teruk')===true},
+    {id:'numbered pond remains blocked and unrelated plot text is not',pass:bseTelegramTestAssetObservationUnsupported_('Status Paras Air Kolam 1')===true&&bseTelegramTestAssetObservationUnsupported_('M3P1 paras air 2 kaki')===false},
+    {id:'Site A remains out-of-scope before pond unsupported boundary',pass:bseTelegramTestSiteAOutOfScope_('paras air kolam site A\n- 12 kaki')===true&&bseTelegramTestAssetObservationUnsupported_('paras air kolam site A\n- 12 kaki')===false}
   ];
   console.log('TELEGRAM_QUEUE_STATUS_REGRESSION: '+JSON.stringify(tests));
   const failures=tests.filter(test=>!test.pass);if(failures.length)throw new Error('Telegram queue status regression gagal: '+failures.map(test=>test.id).join(', '));
