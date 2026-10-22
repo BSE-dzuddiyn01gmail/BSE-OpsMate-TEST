@@ -173,7 +173,7 @@ function bsePlantReplacementConfirmedSummaryFromRows_(reference,rows){
   return [
     'REKOD SULAM / PLANT REPLACEMENT',
     'Rujukan : '+String(reference||''),
-    'Tarikh : '+bseApprovalDisplayDate_(String(row[3]||'')),
+    'Tarikh : '+bseApprovalDisplayDate_(row[3]),
     'Plot : '+String(row[4]||''),
     'Tanaman : '+String(row[8]||''),
     'Bilangan sulam : '+String(row[9]||'')+' pokok',
@@ -217,13 +217,13 @@ function runBsePlantReplacementApprovalHarnessTests(){
     replacement_count:20,replacement_type:'SULAM',reported_by:'Reporter',reported_by_telegram_user_id:'1',source_message_id:'2',evidence_refs:[],
     verification_status:'PROVISIONAL',original_note:'Sulam 20 pokok M3P3',production_write:false
   }}]};
-  const summary=bsePlantReplacementConfirmedSummaryFromRows_('BSE-TG-1',[['key','1','event','2026-10-12','M3P3','M3','batch','alloc','Peria',20,'SULAM','','','','','VERIFIED_TEST',false,'','','','hash']]);
+  const summary=bsePlantReplacementConfirmedSummaryFromRows_('BSE-TG-1',[['key','1','event',new Date('2026-10-12T00:00:00.000+08:00'),'M3P3','M3','batch','alloc','Peria',20,'SULAM','','','','','VERIFIED_TEST',false,'','','','hash']]);
   const core=bsePlantReplacementReviewCore_.toString();
   const tests=[
     {id:'approval domain has dedicated review core',pass:bseApprovalDomain_(result).target==='Plant_Replacement_Event_Log'&&bseApprovalDomain_(result).core===bsePlantReplacementReviewCore_},
     {id:'writer requires active allocation match',pass:/bsePlantReplacementActiveMatchByPlot_/.test(core)&&/kind!=='UNIQUE'/.test(core)},
     {id:'writer is idempotent and TEST-only',pass:/priorReview/.test(core)&&/priorLog/.test(core)&&/production_write:false/.test(core)},
-    {id:'confirmed summary exposes exact replacement facts',pass:/M3P3/.test(summary)&&/Peria/.test(summary)&&/20 pokok/.test(summary)&&/tidak mengubah Plant Census/.test(summary)}
+    {id:'confirmed summary exposes exact replacement facts with formatted date',pass:/12\/10\/2026/.test(summary)&&/M3P3/.test(summary)&&/Peria/.test(summary)&&/20 pokok/.test(summary)&&/tidak mengubah Plant Census/.test(summary)}
   ];
   const failed=tests.filter(t=>!t.pass);if(failed.length)throw new Error('Plant Replacement approval harness gagal: '+failed.map(t=>t.id).join(', '));return tests;
 }
